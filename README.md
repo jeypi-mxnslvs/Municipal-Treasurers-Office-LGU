@@ -1,7 +1,5 @@
 # 🏛️ Municipal Treasurer's Office — LGU Treasury Connect
 
-> An enterprise Real Property Tax Administration Roll (RPTAR) and revenue collection management platform designed for Philippine Local Government Units (LGUs).
-
 [![Vercel Deployment](https://img.shields.io/badge/Deployed_on-Vercel-black?style=flat&logo=vercel)](https://vercel.com)
 [![Database](https://img.shields.io/badge/Database-Supabase_PostgreSQL-3ECF8E?style=flat&logo=supabase)](https://supabase.com)
 [![Framework](https://img.shields.io/badge/Framework-React_19_|_Vite-61DAFB?style=flat&logo=react)](https://react.dev)
