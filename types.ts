@@ -118,6 +118,7 @@ export interface SyncStatusData {
     author: string;
     action: string;
     tdNumber: string;
-  };
+  } | null;
   serverTime: string;
+  activeConnections?: number;
 }

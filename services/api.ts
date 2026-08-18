@@ -28,7 +28,7 @@ export const api = {
       const params = new URLSearchParams();
       if (search) params.append('search', search);
       if (barangay && barangay !== 'All') params.append('barangay', barangay);
-      
+
       const queryStr = params.toString() ? `?${params.toString()}` : '';
       return await fetchJson<Property[]>(`${API_BASE_URL}/properties${queryStr}`);
     } catch (err) {
@@ -39,8 +39,8 @@ export const api = {
       }
       if (search) {
         const s = search.toLowerCase();
-        filtered = filtered.filter(p => 
-          p.ownerName.toLowerCase().includes(s) || 
+        filtered = filtered.filter(p =>
+          p.ownerName.toLowerCase().includes(s) ||
           p.tdNumber.toLowerCase().includes(s)
         );
       }
@@ -200,12 +200,37 @@ export const api = {
   },
 
   async login(username: string, password: string): Promise<{ token: string; user: User }> {
-    return await fetchJson<{ token: string; user: User }>(`${API_BASE_URL}/auth/login`, {
-      method: 'POST',
-      body: JSON.stringify({ username, password })
-    });
-  },
+    try {
+      return await fetchJson<{ token: string; user: User }>(`${API_BASE_URL}/auth/login`, {
+        method: 'POST',
+        body: JSON.stringify({ username, password })
+      });
+    } catch (err) {
+      console.warn('Backend server unreachable, logging in via offline demo mode: ', err);
 
+      if (password !== 'admin123') {
+        throw new Error('Invalid password. (Use "admin123" for demo accounts)');
+      }
+
+      const u = username.toLowerCase();
+      if (u === 'admin') {
+        return {
+          token: 'demo-token-admin',
+          user: { id: 'admin', name: 'System Administrator', username: 'admin', role: 'Admin', stationId: 'Main-HQ' }
+        };
+      } else if (u === 'mayor.office') {
+        return {
+          token: 'demo-token-viewew',
+          user: { id: 'mayor.office', name: 'Hon. Mayor Office', username: 'mayor.office', role: 'Viewer', stationId: 'Executive-Desk' }
+        };
+      } else {
+        return {
+          token: 'demo-token-viewer',
+          user: { id: 'juan.assessor', name: 'Juan Reyes', username: 'juan.assessor', role: 'Assessor', stationId: 'AD-02' }
+        };
+      }
+    }
+  },
   async registerUser(userData: {
     username: string;
     password: string;
@@ -264,7 +289,14 @@ export const api = {
 
   // Live Multi-Assessor Sync
   async getSyncStatus(): Promise<SyncStatusData> {
-    return await fetchJson<SyncStatusData>(`${API_BASE_URL}/sync/status`);
+    try {
+      return await fetchJson<SyncStatusData>(`${API_BASE_URL}/sync/status`);
+    } catch {
+      return {
+        latestMutation: null,
+        serverTime: new Date().toISOString()
+      };
+    }
   },
 
   // Bulk CSV / Excel Import
