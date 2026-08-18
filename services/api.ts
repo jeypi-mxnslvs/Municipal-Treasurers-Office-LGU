@@ -275,7 +275,12 @@ export const api = {
       .eq('username', username.trim().toLowerCase())
       .single();
 
-    if (error || !user || user.password !== password) {
+    if (error) {
+      console.error('Supabase connection error:', error);
+      throw new Error(`Database error: ${error.message}`);
+    }
+
+    if (!user || user.password !== password) {
       throw new Error('Invalid credentials. (Default password is "admin123")');
     }
 
