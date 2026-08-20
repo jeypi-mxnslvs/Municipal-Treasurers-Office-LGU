@@ -14,7 +14,7 @@ const PRESET_ACCOUNTS = [
     name: 'Juan Reyes',
     station: 'Assessor-Desk-02',
     desc: 'Property appraisal, RPTAR masterlist & sequential dues clearance',
-    border: 'border-blue-200 hover:border-blue-400 bg-blue-50/50 hover:bg-blue-50 text-blue-900'
+    // border: 'border-blue-200 hover:border-blue-400 bg-blue-50/50 hover:bg-blue-50 text-blue-900'
   },
   {
     username: 'admin',
@@ -22,7 +22,7 @@ const PRESET_ACCOUNTS = [
     name: 'System Administrator',
     station: 'Main-HQ',
     desc: 'Full system control, masterlist CRUD, staff management & DB backup',
-    border: 'border-purple-200 hover:border-purple-400 bg-purple-50/50 hover:bg-purple-50 text-purple-900'
+    // border: 'border-purple-200 hover:border-purple-400 bg-purple-50/50 hover:bg-purple-50 text-purple-900'
   },
   {
     username: 'mayor.office',
@@ -30,7 +30,7 @@ const PRESET_ACCOUNTS = [
     name: 'Hon. Mayor Office',
     station: 'Executive-Desk',
     desc: 'Read-only executive access to collection KPIs & revenue analytics',
-    border: 'border-amber-200 hover:border-amber-400 bg-amber-50/50 hover:bg-amber-50 text-amber-900'
+    // border: 'border-amber-200 hover:border-amber-400 bg-amber-50/50 hover:bg-amber-50 text-amber-900'
   }
 ];
 
@@ -124,6 +124,8 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
             {/* <p className="text-xs text-slate-500 font-medium">Real Property Tax Administration & Compliance (RA 7160)</p> */}
           </div>
         </div>
+
+        {/* For the meantime I commented this out because it is not applicable yet and I don't think the text is good enough to be included. */}
 
         {/* <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-500">
           <ShieldCheck size={16} className="text-emerald-600" />
@@ -277,7 +279,9 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                   key={preset.username}
                   type="button"
                   onClick={() => handleSelectPreset(preset)}
-                  className={`w-full p-4 rounded-2xl border text-left transition-all flex items-center justify-between group ${preset.border}`}
+                  // Remove preset.border ${preset.border}
+
+                  className={`w-full p-4 rounded-2xl border text-left transition-all flex items-center justify-between group `} // here is the ${preset.border}
                 >
                   <div className="space-y-0.5">
                     <div className="flex items-center gap-2">
