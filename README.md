@@ -15,7 +15,7 @@ Modern Real Property Tax Administration and Collection System designed for the *
 
 ---
 
-## 📌 Overview
+## Overview
 
 **LGU Treasury Connect** streamlines the administration, appraisal, computation, and collection of Real Property Taxes (RPT) in full compliance with the **Philippine Local Government Code of 1991 (Republic Act No. 7160)**.
 
@@ -23,7 +23,7 @@ The system replaces slow, error-prone paper ledgers with an automated, synchroni
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 - **Frontend:** React 19, TypeScript (Strict Typing), Vite
 - **Styling & UI:** Tailwind CSS, Lucide React Icons
@@ -34,7 +34,7 @@ The system replaces slow, error-prone paper ledgers with an automated, synchroni
 
 ---
 
-## ✨ Current Features
+## Current Features
 
 1. **2-Step Terminal Authentication:** Identity lookup with station detection and 1-click test profiles.
 2. **RPTAR Masterlist Management:** Real Property Tax Assessment Roll with instant search and barangay filters.
@@ -50,19 +50,19 @@ The system replaces slow, error-prone paper ledgers with an automated, synchroni
 
 ---
 
-## 👥 Role-Based Access Control (RBAC)
+## Role-Based Access Control (RBAC)
 
 | Role | Station | Default Account | Key Capabilities |
 | :--- | :--- | :--- | :--- |
-| 🧑‍💼 **Assessor** | `Assessor-Desk-02` | `juan.assessor` | RPTAR management, property appraisal, tax calculations, CSV import, and payment clearance. |
-| 🔑 **Admin** | `Main-HQ` | `admin` | Full system control, masterlist CRUD, user staff management (create/delete/reset passwords), and database backup. |
-| 👁️ **Viewer** | `Executive-Desk` | `mayor.office` | Read-only executive access to municipal KPIs, delinquency statistics, and revenue analytics. |
+| **Assessor** | `Assessor-Desk-02` | `juan.assessor` | RPTAR management, property appraisal, tax calculations, CSV import, and payment clearance. |
+| **Admin** | `Main-HQ` | `admin` | Full system control, masterlist CRUD, user staff management (create/delete/reset passwords), and database backup. |
+| **Viewer** | `Executive-Desk` | `mayor.office` | Read-only executive access to municipal KPIs, delinquency statistics, and revenue analytics. |
 
 > *Default test password for all demo accounts: `admin123`*
 
 ---
 
-## 🔐 Authentication & Station Attribution
+## Authentication & Station Attribution
 
 Authentication uses a **2-step government counter terminal workflow**:
 1. **Step 1 (Staff Identification):** Queries Supabase to detect the user's name, role, and physical **Station ID** (`Assessor-Desk-02`, `Main-HQ`, `Executive-Desk`).
@@ -76,7 +76,7 @@ Authentication uses a **2-step government counter terminal workflow**:
 
 ---
 
-## 🧮 Statutory Tax Engine (RA 7160 Compliance)
+## Statutory Tax Engine (RA 7160 Compliance)
 
 The calculation engine in `utils/taxLogic.ts` strictly implements **Book II, Title II of the Local Government Code of 1991**:
 
@@ -91,7 +91,7 @@ Penalty Rate = 2% per month delayed (Capped at 36 months / 72%)
 
 ---
 
-## 📡 Multi-Counter Sync & Station Attribution
+## Multi-Counter Sync & Station Attribution
 
 - **Implementation:** `services/api.ts` (`getSyncStatus()`) and `App.tsx` (background polling).
 - **How It Works:** Every transaction captures the assessor's name and physical terminal ID (`Assessor-Desk-02`, `Main-HQ`). In the background, the app checks the latest mutation timestamp in `rptar_audit_logs`.
@@ -99,7 +99,7 @@ Penalty Rate = 2% per month delayed (Capped at 36 months / 72%)
 
 ---
 
-## 🗄️ Database Schema & Supabase Setup
+## Database Schema & Supabase Setup
 
 The relational PostgreSQL schema in `schema.sql` follows 3NF normalization:
 
@@ -164,7 +164,7 @@ erDiagram
 
 ---
 
-## 📜 Audit Logs & Compliance
+## Audit Logs & Compliance
 
 Audit logging is permanently integrated into the core workflow:
 - **Component:** `components/AuditLogModal.tsx`
@@ -175,7 +175,7 @@ Audit logging is permanently integrated into the core workflow:
 
 ---
 
-## 🏗️ Architecture & Directory Structure
+## Architecture & Directory Structure
 
 ```
 lgu-treasury-connect/
@@ -205,7 +205,7 @@ lgu-treasury-connect/
 
 ---
 
-## ⚡ Performance Optimizations
+## Performance Optimizations
 
 1. **Client-Side Pure Math Evaluation:** `taxLogic.ts` computes compounding penalties across 10+ delinquent years in `<1ms` without sending repeated computation requests to the database.
 2. **Parallel Initial Data Loading:** `App.tsx` loads properties and dashboard statistics concurrently using `Promise.all([api.getProperties(), api.getDashboardStats()])`.
@@ -214,7 +214,7 @@ lgu-treasury-connect/
 
 ---
 
-## ✅ Validation & Quality Checks
+## Validation & Quality Checks
 
 - `npx tsc --noEmit` — **PASS** (Zero TypeScript compilation errors)
 - `npm run build` — **PASS** (Optimized Vite production bundle generated)
@@ -222,7 +222,7 @@ lgu-treasury-connect/
 
 ---
 
-## 🚀 Getting Started Locally
+## Getting Started Locally
 
 ### Prerequisites
 - [Node.js](https://nodejs.org/) (v18 or higher)
@@ -256,7 +256,7 @@ lgu-treasury-connect/
 
 ---
 
-## ⚠️ Known Issues & Future Roadmap
+## Known Issues & Future Roadmap
 
 1. **WebSocket Realtime Upgrade:** Upgrade 7-second polling to **Supabase Realtime WebSocket Channels** to handle 50+ concurrent tellers.
 2. **Offline-First Resilience:** Implement an **IndexedDB / Service Worker layer** to allow transaction queueing during intermittent municipal internet dropouts.
@@ -266,7 +266,7 @@ lgu-treasury-connect/
 
 ---
 
-## 🤖 AI Handoff Rules
+## AI Handoff Rules
 
 For any AI coding assistant collaborating on this project:
 1. **Read `README.md` first before making changes.**
@@ -278,7 +278,7 @@ For any AI coding assistant collaborating on this project:
 
 ---
 
-## 👤 Author
+## Author
 
 **Jan Paul R. Mensalvas**
 - **Email:** janpaulmensalvas17@gmail.com
