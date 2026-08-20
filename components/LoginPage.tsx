@@ -125,10 +125,10 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           </div>
         </div>
 
-        <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-500">
+        {/* <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-500">
           <ShieldCheck size={16} className="text-emerald-600" />
           <span>Active Directory Municipal Domain</span>
-        </div>
+        </div> */}
       </header>
 
       {/* Main Login Content */}
