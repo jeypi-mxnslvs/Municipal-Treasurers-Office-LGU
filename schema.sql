@@ -103,14 +103,15 @@ ON CONFLICT DO NOTHING;
 -- =========================================================
 -- PERMISSIONS (Supabase Public Access)
 -- =========================================================
-GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role, postgres;
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role, postgres;
-GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role, postgres;
+GRANT USAGE ON SCHEMA public TO authenticated, service_role, postgres;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO service_role, postgres;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO service_role, postgres;
+GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public TO service_role, postgres;
 
-ALTER TABLE public.users DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.properties DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.schedule_of_market_values DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.payment_postings DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.rptar_audit_logs DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.properties ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.schedule_of_market_values ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.payment_postings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.rptar_audit_logs ENABLE ROW LEVEL SECURITY;
 
 NOTIFY pgrst, 'reload schema';
