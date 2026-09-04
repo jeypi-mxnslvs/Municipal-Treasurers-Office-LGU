@@ -103,15 +103,41 @@ ON CONFLICT DO NOTHING;
 -- =========================================================
 -- PERMISSIONS (Supabase Public Access)
 -- =========================================================
+<<<<<<< HEAD
 GRANT USAGE ON SCHEMA public TO authenticated, service_role, postgres;
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO service_role, postgres;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO service_role, postgres;
 GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public TO service_role, postgres;
 
+=======
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role, postgres;
+
+-- Revoke all privileges from anon
+REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM anon;
+REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM anon;
+
+-- Grant privileges to authenticated, service_role, and postgres
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO authenticated, service_role, postgres;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO authenticated, service_role, postgres;
+
+-- Enable Row Level Security (RLS)
+>>>>>>> be692b5 (SQL02: add restrictive policies)
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.properties ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.schedule_of_market_values ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.payment_postings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.rptar_audit_logs ENABLE ROW LEVEL SECURITY;
+<<<<<<< HEAD
+=======
+
+-- Add restrictive policies (Deny-by-default for anon, allow for authenticated for now)
+-- Since RLS is enabled, without policies, it defaults to deny for all roles except superuser/bypassrls.
+-- We explicitly add policies for the authenticated role.
+CREATE POLICY "Allow authenticated read users" ON public.users FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Allow authenticated all properties" ON public.properties FOR ALL TO authenticated USING (true);
+CREATE POLICY "Allow authenticated all schedule_of_market_values" ON public.schedule_of_market_values FOR ALL TO authenticated USING (true);
+CREATE POLICY "Allow authenticated all payment_postings" ON public.payment_postings FOR ALL TO authenticated USING (true);
+CREATE POLICY "Allow authenticated all rptar_audit_logs" ON public.rptar_audit_logs FOR ALL TO authenticated USING (true);
+>>>>>>> be692b5 (SQL02: add restrictive policies)
 
 NOTIFY pgrst, 'reload schema';
