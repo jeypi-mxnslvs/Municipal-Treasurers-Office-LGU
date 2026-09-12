@@ -60,9 +60,27 @@ export interface User {
   stationId: string;
 }
 
+export interface AccountableFormBooklet {
+  id: number;
+  bookletId: string;
+  formType: 'AF-51';
+  seriesStart: number;
+  seriesEnd: number;
+  currentSerial: number;
+  assignedToUserId?: number;
+  assignedToUsername?: string;
+  status: 'ACTIVE' | 'EXHAUSTED' | 'REVOKED';
+  createdAt?: string;
+}
+
 export interface OfficialReceipt {
   receiptNo: string;
   date: string;
+  status?: 'ISSUED' | 'VOIDED';
+  voidReason?: string;
+  voidedBy?: string;
+  voidedAt?: string;
+  bookletId?: string;
   property: {
     id: string | number;
     tdNumber: string;
@@ -105,7 +123,7 @@ export interface RptarAuditLog {
   id: number;
   property_id?: number;
   td_number: string;
-  action_type: 'CREATED' | 'UPDATED' | 'VALUATION_REVISED' | 'CLEARED' | 'DUES_CLEARED' | 'DELETED';
+  action_type: 'CREATED' | 'UPDATED' | 'VALUATION_REVISED' | 'CLEARED' | 'DUES_CLEARED' | 'DELETED' | 'RECEIPT_VOIDED';
   assessor_name: string;
   station_id: string;
   details: string;

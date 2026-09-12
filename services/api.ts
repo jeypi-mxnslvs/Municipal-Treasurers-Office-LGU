@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { Property, CalculationResult, OfficialReceipt, DashboardStatsData, User, RptarAuditLog, SyncStatusData, SecurityAuditLog } from '@/types';
+import { Property, CalculationResult, OfficialReceipt, DashboardStatsData, User, RptarAuditLog, SyncStatusData, SecurityAuditLog, AccountableFormBooklet } from '@/types';
 import { calculateTaxLiability as localCalculateTaxLiability } from '@/utils/taxLogic';
 import { createSessionToken } from '@/lib/crypto';
 
@@ -139,67 +139,222 @@ export const api = {
     tenderType: string;
     tenderReference?: string;
     postedBy: string;
+    stationId?: string;
+    userId?: number;
   }): Promise<OfficialReceipt> {
     const totalPaid = payload.paidRecords.reduce((sum, r) => sum + (r.totalDue || 0), 0);
-    const receiptNo = `AF51-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+    const basicTax = payload.paidRecords.reduce((sum, r) => sum + (r.basicTax || (r.assessedValue || 0) * 0.01), 0);
+    const sefTax = payload.paidRecords.reduce((sum, r) => sum + (r.sefTax || (r.assessedValue || 0) * 0.01), 0);
+    const penalty = payload.paidRecords.reduce((sum, r) => sum + (r.penalty || 0), 0);
+    const discount = payload.paidRecords.reduce((sum, r) => sum + (r.discount || 0), 0);
 
-    // 1. Advance last paid year in properties
-    if (payload.paidRecords.length > 0) {
-      const highestYear = Math.max(...payload.paidRecords.map(r => r.year || 0));
-      await supabase
-        .from('properties')
-        .update({ last_paid_year: highestYear, updated_at: new Date().toISOString() })
-        .eq('id', payload.propertyId);
+    let receiptNo = '';
+    let status: 'ISSUED' | 'VOIDED' = 'ISSUED';
+    let bookletId: string | undefined;
+
+    // 1. Attempt Atomic PostgreSQL Stored Procedure (process_rpt_payment)
+    try {
+      const { data: rpcPosting, error: rpcError } = await supabase.rpc('process_rpt_payment', {
+        p_property_id: Number(payload.propertyId),
+        p_paid_records: payload.paidRecords,
+        p_total_paid: totalPaid,
+        p_tender_type: payload.tenderType || 'CASH',
+        p_tender_reference: payload.tenderReference || null,
+        p_posted_by: payload.postedBy,
+        p_station_id: payload.stationId || 'Main-HQ',
+        p_user_id: payload.userId || null
+      });
+
+      if (!rpcError && rpcPosting) {
+        receiptNo = rpcPosting.receipt_no;
+        status = rpcPosting.status || 'ISSUED';
+        bookletId = rpcPosting.booklet_id;
+      }
+    } catch {
+      // Fallback below
     }
 
-    // 2. Save payment record
-    await supabase.from('payment_postings').insert({
-      receipt_no: receiptNo,
-      property_id: payload.propertyId,
-      paid_records: payload.paidRecords,
-      total_paid: totalPaid,
-      tender_type: payload.tenderType,
-      tender_reference: payload.tenderReference,
-      posted_by: payload.postedBy
-    });
+    // 2. Sequential fallback if RPC is not registered
+    if (!receiptNo) {
+      const activeBooklet = await this.getActiveBooklet(payload.postedBy);
+      let serialNumber = 4500001;
+
+      if (activeBooklet) {
+        serialNumber = activeBooklet.currentSerial;
+        bookletId = activeBooklet.bookletId;
+        const nextSerial = activeBooklet.currentSerial + 1;
+        const isExhausted = nextSerial > activeBooklet.seriesEnd;
+
+        await supabase
+          .from('accountable_forms')
+          .update({
+            current_serial: isExhausted ? activeBooklet.seriesEnd : nextSerial,
+            status: isExhausted ? 'EXHAUSTED' : 'ACTIVE'
+          })
+          .eq('id', activeBooklet.id);
+      }
+
+      receiptNo = `AF51-${String(serialNumber).padStart(7, '0')}`;
+
+      // Advance property last paid year
+      if (payload.paidRecords.length > 0) {
+        const highestYear = Math.max(...payload.paidRecords.map(r => r.year || 0));
+        await supabase
+          .from('properties')
+          .update({ last_paid_year: highestYear, updated_at: new Date().toISOString() })
+          .eq('id', payload.propertyId);
+      }
+
+      // Save payment record
+      await supabase.from('payment_postings').insert({
+        receipt_no: receiptNo,
+        property_id: payload.propertyId,
+        paid_records: payload.paidRecords,
+        total_paid: totalPaid,
+        tender_type: payload.tenderType,
+        tender_reference: payload.tenderReference,
+        status: 'ISSUED',
+        posted_by: payload.postedBy,
+        booklet_id: bookletId
+      });
+    }
 
     const { data: prop } = await supabase.from('properties').select('*').eq('id', payload.propertyId).single();
-
-    // 3. Log audit
-    await supabase.from('rptar_audit_logs').insert({
-      property_id: typeof payload.propertyId === 'number' ? payload.propertyId : undefined,
-      td_number: prop?.td_number || 'N/A',
-      action_type: 'CLEARED',
-      assessor_name: payload.postedBy,
-      station_id: 'Assessor-Desk-02',
-      details: `Issued Official Receipt ${receiptNo} for PHP ${totalPaid.toLocaleString()}`
-    });
 
     return {
       receiptNo,
       date: new Date().toISOString(),
+      status,
+      bookletId,
       property: {
         id: prop ? String(prop.id) : String(payload.propertyId),
         tdNumber: prop?.td_number || 'TD-PROT-001',
+        pin: prop?.pin,
         ownerName: prop?.owner_name || 'Taxpayer',
-        address: prop?.address || 'Local LGU',
+        address: prop?.address || 'Santa Rosa, Nueva Ecija',
         barangay: prop?.barangay || 'Poblacion',
-        assessedValue: Number(prop?.assessed_value) || 100000,
+        assessedValue: Number(prop?.assessed_value) || 0,
         propertyClass: prop?.property_class || 'Residential'
       },
       itemizedRecords: payload.paidRecords,
       summary: {
-        basicTax: totalPaid * 0.5,
-        sefTax: totalPaid * 0.5,
-        baseTaxTotal: totalPaid,
-        penalty: 0,
-        discount: 0,
+        basicTax,
+        sefTax,
+        baseTaxTotal: basicTax + sefTax,
+        penalty,
+        discount,
         totalPaid
       },
-      tenderType: (payload.tenderType as any) || 'CASH',
+      tenderType: (payload.tenderType as 'CASH' | 'CHECK' | 'ONLINE') || 'CASH',
       tenderReference: payload.tenderReference,
       postedBy: payload.postedBy
     };
+  },
+
+  async voidReceipt(payload: {
+    receiptNo: string;
+    reason: string;
+    authorizedBy: string;
+    stationId?: string;
+  }): Promise<{ message: string; receiptNo: string }> {
+    try {
+      const { data, error } = await supabase.rpc('void_official_receipt', {
+        p_receipt_no: payload.receiptNo,
+        p_reason: payload.reason,
+        p_authorized_by: payload.authorizedBy,
+        p_station_id: payload.stationId || 'Main-HQ'
+      });
+      if (!error && data) {
+        return { message: 'Official Receipt successfully voided', receiptNo: payload.receiptNo };
+      }
+    } catch {
+      // Fallback
+    }
+
+    // Direct fallback
+    const { data: posting, error: fetchErr } = await supabase
+      .from('payment_postings')
+      .select('*')
+      .eq('receipt_no', payload.receiptNo)
+      .single();
+
+    if (fetchErr || !posting) throw new Error('Receipt not found');
+
+    if (posting.previous_last_paid_year !== null && posting.previous_last_paid_year !== undefined) {
+      await supabase
+        .from('properties')
+        .update({ last_paid_year: posting.previous_last_paid_year, updated_at: new Date().toISOString() })
+        .eq('id', posting.property_id);
+    }
+
+    await supabase
+      .from('payment_postings')
+      .update({
+        status: 'VOIDED',
+        void_reason: payload.reason,
+        voided_by: payload.authorizedBy,
+        voided_at: new Date().toISOString()
+      })
+      .eq('receipt_no', payload.receiptNo);
+
+    await supabase.from('rptar_audit_logs').insert({
+      property_id: posting.property_id,
+      td_number: 'N/A',
+      action_type: 'RECEIPT_VOIDED',
+      assessor_name: payload.authorizedBy,
+      station_id: payload.stationId || 'Main-HQ',
+      details: `COA VOID: Official Receipt ${payload.receiptNo} VOIDED by ${payload.authorizedBy}. Reason: ${payload.reason}`
+    });
+
+    return { message: 'Official Receipt successfully voided', receiptNo: payload.receiptNo };
+  },
+
+  async getActiveBooklet(username?: string): Promise<AccountableFormBooklet | null> {
+    let query = supabase.from('accountable_forms').select('*').eq('status', 'ACTIVE');
+    if (username) {
+      query = query.or(`assigned_to_username.ilike.${username},assigned_to_username.is.null`);
+    }
+    const { data } = await query.order('id', { ascending: true }).limit(1).maybeSingle();
+    if (!data) return null;
+    return {
+      id: data.id,
+      bookletId: data.booklet_id,
+      formType: data.form_type,
+      seriesStart: data.series_start,
+      seriesEnd: data.series_end,
+      currentSerial: data.current_serial,
+      assignedToUserId: data.assigned_to_user_id,
+      assignedToUsername: data.assigned_to_username,
+      status: data.status,
+      createdAt: data.created_at
+    };
+  },
+
+  async getBooklets(): Promise<AccountableFormBooklet[]> {
+    const { data } = await supabase.from('accountable_forms').select('*').order('id', { ascending: true });
+    return (data || []).map(b => ({
+      id: b.id,
+      bookletId: b.booklet_id,
+      formType: b.form_type,
+      seriesStart: b.series_start,
+      seriesEnd: b.series_end,
+      currentSerial: b.current_serial,
+      assignedToUserId: b.assigned_to_user_id,
+      assignedToUsername: b.assigned_to_username,
+      status: b.status,
+      createdAt: b.created_at
+    }));
+  },
+
+  async assignBooklet(bookletId: string, username: string, userId?: number): Promise<void> {
+    const { error } = await supabase
+      .from('accountable_forms')
+      .update({
+        assigned_to_username: username,
+        assigned_to_user_id: userId || null
+      })
+      .eq('booklet_id', bookletId);
+    if (error) throw error;
   },
 
   // 3. Dashboard Statistics

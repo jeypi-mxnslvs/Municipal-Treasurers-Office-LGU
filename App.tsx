@@ -6,7 +6,7 @@ import { LoginPage, UserManagementModal, PasswordConfirmationModal } from '@/fea
 import { DashboardStats } from '@/features/dashboard';
 import { DashboardTable, PropertyCard, RptarModal, BulkImportModal } from '@/features/properties';
 import { DelinquencyTable } from '@/features/assessment';
-import { OfficialReceiptModal } from '@/features/collections';
+import { OfficialReceiptModal, BookletManagerModal } from '@/features/collections';
 import { AuditLogModal } from '@/features/audit';
 import { Printer, ArrowLeft, CheckCircle2, ShieldCheck, CheckCircle, RefreshCw, Bell } from 'lucide-react';
 import { verifySessionToken, DEFAULT_SESSION_TIMEOUT_MS } from './lib/crypto';
@@ -28,6 +28,7 @@ const App: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalInitialData, setModalInitialData] = useState<Property | null>(null);
   const [isUserManagementModalOpen, setIsUserManagementModalOpen] = useState(false);
+  const [isBookletModalOpen, setIsBookletModalOpen] = useState(false);
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [auditTargetProperty, setAuditTargetProperty] = useState<Property | null>(null);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
@@ -178,8 +179,10 @@ const App: React.FC = () => {
       const clearanceSlip = await api.postPayment({
         propertyId: selectedProperty.id,
         paidRecords: selectedRecords,
-        tenderType: 'CLEARED',
-        postedBy: `${currentUser.name} (${currentUser.role} • ${currentUser.stationId})`
+        tenderType: 'CASH',
+        postedBy: `${currentUser.name} (${currentUser.role} • ${currentUser.stationId})`,
+        stationId: currentUser.stationId,
+        userId: typeof currentUser.id === 'number' ? currentUser.id : parseInt(String(currentUser.id || 0), 10)
       });
 
       setIssuedReceipt(clearanceSlip);
@@ -266,6 +269,7 @@ const App: React.FC = () => {
         user={currentUser} 
         onLogout={handleLogout}
         onOpenUserManagement={() => setIsUserManagementModalOpen(true)}
+        onOpenBooklets={() => setIsBookletModalOpen(true)}
       />
 
       {/* Live Sync Toast Notification */}
@@ -419,11 +423,22 @@ const App: React.FC = () => {
       <OfficialReceiptModal 
         isOpen={isReceiptModalOpen}
         receipt={issuedReceipt}
+        currentUser={currentUser}
+        onReceiptVoided={async () => {
+          await loadData();
+        }}
         onClose={() => {
           setIsReceiptModalOpen(false);
           setIssuedReceipt(null);
           setView('dashboard');
         }}
+      />
+
+      {/* AF-51 Booklet Register Modal */}
+      <BookletManagerModal
+        isOpen={isBookletModalOpen}
+        onClose={() => setIsBookletModalOpen(false)}
+        currentUser={currentUser}
       />
 
       {/* Admin User Management Modal */}

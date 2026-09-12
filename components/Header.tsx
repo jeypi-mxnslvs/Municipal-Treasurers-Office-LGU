@@ -1,5 +1,5 @@
 import React from 'react';
-import { Building2, UserCircle, LogOut, Users } from 'lucide-react';
+import { Building2, UserCircle, LogOut, Users, BookOpen } from 'lucide-react';
 import { User } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -8,12 +8,14 @@ interface HeaderProps {
   user: User;
   onLogout: () => void;
   onOpenUserManagement: () => void;
+  onOpenBooklets?: () => void;
 }
 
 const Header: React.FC<HeaderProps> = ({
   user,
   onLogout,
   onOpenUserManagement,
+  onOpenBooklets,
 }) => {
   const getRoleBadgeVariant = (role: string) => {
     switch (role) {
@@ -62,6 +64,21 @@ const Header: React.FC<HeaderProps> = ({
             >
               <Users size={14} />
               <span className="hidden md:inline">Register Staff</span>
+            </Button>
+          )}
+
+          {/* AF-51 Booklet Register Button */}
+          {user.role !== 'Viewer' && onOpenBooklets && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onOpenBooklets}
+              className="bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border-emerald-500/40 text-xs font-bold gap-1.5"
+              title="View Accountable Form 51 Serial Custody Register"
+            >
+              <BookOpen size={14} />
+              <span className="hidden md:inline">AF-51 Register</span>
             </Button>
           )}
 
