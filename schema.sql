@@ -71,14 +71,48 @@ CREATE TABLE IF NOT EXISTS rptar_audit_logs (
     timestamp TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
 
+-- 6. SECURITY AUDIT LOGS (Immutable Authentication & Security Events)
+CREATE TABLE IF NOT EXISTS security_audit_logs (
+    id SERIAL PRIMARY KEY,
+    event_type TEXT NOT NULL, -- 'LOGIN_SUCCESS', 'LOGIN_FAILURE', 'USER_CREATED', 'ROLE_CHANGED', 'PASSWORD_RESET', 'USER_DELETED', 'ACCESS_DENIED'
+    username TEXT NOT NULL,
+    user_id INT,
+    station_id TEXT,
+    ip_address TEXT,
+    details TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+
+-- =========================================================
+-- TRIGGERS & PROCEDURAL AUTOMATION
+-- =========================================================
+
+-- Trigger for Automatic Bcrypt Hashing on Insert or Password Update
+CREATE OR REPLACE FUNCTION trg_hash_user_password()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.password_hash IS NOT NULL AND NEW.password_hash NOT LIKE '$2%' THEN
+        NEW.password_hash := crypt(NEW.password_hash, gen_salt('bf', 10));
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_users_hash_password ON users;
+CREATE TRIGGER trg_users_hash_password
+BEFORE INSERT OR UPDATE ON users
+FOR EACH ROW
+EXECUTE FUNCTION trg_hash_user_password();
+
 -- =========================================================
 -- STORED PROCEDURES & RPCs
 -- =========================================================
 
--- Authenticate user securely using Bcrypt crypt() comparison
+-- Authenticate user securely using Bcrypt crypt() comparison with audit logging
 CREATE OR REPLACE FUNCTION authenticate_user(
     p_username TEXT,
-    p_password TEXT
+    p_password TEXT,
+    p_station_id TEXT DEFAULT 'Workstation'
 )
 RETURNS TABLE (
     id INT,
@@ -90,12 +124,25 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
+DECLARE
+    v_user users%ROWTYPE;
 BEGIN
-    RETURN QUERY
-    SELECT u.id, u.username, u.full_name, u.role, u.station_id
-    FROM users u
-    WHERE lower(u.username) = lower(trim(p_username))
-      AND u.password_hash = crypt(p_password, u.password_hash);
+    SELECT * INTO v_user
+    FROM users
+    WHERE lower(users.username) = lower(trim(p_username));
+
+    IF v_user.id IS NOT NULL AND v_user.password_hash = crypt(p_password, v_user.password_hash) THEN
+        -- Audit successful authentication
+        INSERT INTO security_audit_logs (event_type, username, user_id, station_id, details)
+        VALUES ('LOGIN_SUCCESS', v_user.username, v_user.id, COALESCE(p_station_id, v_user.station_id), 'Successful authentication');
+
+        RETURN QUERY
+        SELECT v_user.id, v_user.username, v_user.full_name, v_user.role, v_user.station_id;
+    ELSE
+        -- Audit failed authentication attempt
+        INSERT INTO security_audit_logs (event_type, username, user_id, station_id, details)
+        VALUES ('LOGIN_FAILURE', lower(trim(p_username)), v_user.id, p_station_id, 'Failed authentication: invalid credentials');
+    END IF;
 END;
 $$;
 
@@ -145,7 +192,7 @@ REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM anon;
 -- Grant standard permissions to authenticated, service_role, and postgres
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO authenticated, service_role, postgres;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO authenticated, service_role, postgres;
-GRANT EXECUTE ON FUNCTION authenticate_user(TEXT, TEXT) TO anon, authenticated, service_role, postgres;
+GRANT EXECUTE ON FUNCTION authenticate_user(TEXT, TEXT, TEXT) TO anon, authenticated, service_role, postgres;
 
 -- Enable Row Level Security (RLS) on all tables
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
@@ -153,6 +200,7 @@ ALTER TABLE public.properties ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.schedule_of_market_values ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.payment_postings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.rptar_audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.security_audit_logs ENABLE ROW LEVEL SECURITY;
 
 -- Restrictive policies
 CREATE POLICY "Allow authenticated read users" ON public.users FOR SELECT TO authenticated USING (true);
@@ -163,5 +211,7 @@ CREATE POLICY "Allow authenticated all sfmv" ON public.schedule_of_market_values
 CREATE POLICY "Allow public select payments" ON public.payment_postings FOR SELECT TO anon, authenticated USING (true);
 CREATE POLICY "Allow authenticated all payments" ON public.payment_postings FOR ALL TO authenticated USING (true);
 CREATE POLICY "Allow authenticated all audit_logs" ON public.rptar_audit_logs FOR ALL TO authenticated USING (true);
+CREATE POLICY "Allow anon and auth insert security logs" ON public.security_audit_logs FOR INSERT TO anon, authenticated WITH CHECK (true);
+CREATE POLICY "Allow authenticated read security logs" ON public.security_audit_logs FOR SELECT TO authenticated USING (true);
 
 NOTIFY pgrst, 'reload schema';
