@@ -1,1 +1,1 @@
-export { default as AuditLogModal } from "@/components/AuditLogModal";
+export { default as AuditLogModal } from './AuditLogModal';

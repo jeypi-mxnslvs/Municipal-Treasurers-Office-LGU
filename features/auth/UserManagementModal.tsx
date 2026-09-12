@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { User } from '../types';
-import { api } from '../services/api';
+import { User } from '@/types';
+import { api } from '@/services/api';
 import {
   Dialog,
   DialogContent,

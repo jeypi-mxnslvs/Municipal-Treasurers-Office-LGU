@@ -1,5 +1,5 @@
 import React from 'react';
-import { OfficialReceipt } from '../types';
+import { OfficialReceipt } from '@/types';
 import {
   Dialog,
   DialogContent,

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Property } from '../types';
+import { Property } from '@/types';
 import { MapPin, User, FileText, TrendingUp, CalendarCheck, History } from 'lucide-react';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';

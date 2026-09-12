@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { User } from '../types';
-import { api } from '../services/api';
+import { User } from '@/types';
+import { api } from '@/services/api';
 import { Building2, ShieldAlert, ArrowRight, UserCircle2, ArrowLeft, Lock } from 'lucide-react';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Badge } from './ui/badge';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 
 interface LoginPageProps {
   onLoginSuccess: (user: User) => void;

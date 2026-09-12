@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Property, User } from '../types';
-import { BARANGAYS } from '../constants';
-import { calculateTaxLiability } from '../utils/taxLogic';
+import { Property, User } from '@/types';
+import { BARANGAYS } from '@/constants';
+import { calculateTaxLiability } from '@/utils/taxLogic';
 import {
   Table,
   TableHeader,

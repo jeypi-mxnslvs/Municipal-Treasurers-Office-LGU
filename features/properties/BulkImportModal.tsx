@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
-import { Property, User } from '../types';
-import { BARANGAYS, PROPERTY_CLASSES } from '../constants';
-import { api } from '../services/api';
+import { Property, User } from '@/types';
+import { BARANGAYS, PROPERTY_CLASSES } from '@/constants';
+import { api } from '@/services/api';
 import {
   Dialog,
   DialogContent,
