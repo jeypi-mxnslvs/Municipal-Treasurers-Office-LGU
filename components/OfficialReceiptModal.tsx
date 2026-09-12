@@ -1,6 +1,16 @@
 import React from 'react';
 import { OfficialReceipt } from '../types';
-import { Printer, X, CheckCircle2, Building } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Printer, CheckCircle2, Building } from 'lucide-react';
 
 interface ClearanceModalProps {
   isOpen?: boolean;
@@ -23,38 +33,42 @@ const OfficialReceiptModal: React.FC<ClearanceModalProps> = ({ isOpen = true, re
   const discountTotal = receipt.summary?.discount || 0;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in-up">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full overflow-hidden border border-slate-300 flex flex-col max-h-[95vh]">
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-3xl max-h-[95vh] p-0 flex flex-col overflow-hidden gap-0 border-slate-300 shadow-2xl print:max-w-none print:max-h-none print:border-none print:shadow-none print:bg-white print:p-0 print:m-0">
         {/* Modal Top Actions (Hidden in Print) */}
-        <div className="bg-slate-900 text-white px-6 py-3.5 flex items-center justify-between no-print border-b border-slate-800">
+        <DialogHeader className="bg-slate-900 text-white px-6 py-3.5 flex flex-row items-center justify-between no-print border-b border-slate-800 shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="p-1 bg-emerald-600 rounded-lg">
+            <div className="p-1.5 bg-emerald-600 rounded-lg shrink-0">
               <CheckCircle2 className="h-4 w-4 text-white" />
             </div>
-            <span className="font-bold text-sm tracking-tight">Real Property Tax Clearance Issued</span>
+            <div>
+              <DialogTitle className="font-bold text-sm tracking-tight text-white">
+                Real Property Tax Clearance Issued
+              </DialogTitle>
+              <DialogDescription className="text-[11px] text-slate-400">
+                Official Accountable Form No. 51 Tax Ledger Slip
+              </DialogDescription>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            <button
+          <div className="flex items-center gap-2 mr-6">
+            <Button
+              type="button"
               onClick={handlePrint}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-sm transition-all active:scale-95"
+              size="sm"
+              className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-sm gap-1.5"
             >
               <Printer className="h-4 w-4" />
-              Print Excel Clearance Slip
-            </button>
-            <button
-              onClick={onClose}
-              className="text-slate-400 hover:text-white p-1.5 rounded-xl hover:bg-slate-800 transition-colors"
-              title="Close modal and return to dashboard"
-            >
-              <X className="h-5 w-5" />
-            </button>
+              Print Clearance Slip
+            </Button>
           </div>
-        </div>
+        </DialogHeader>
 
         {/* Excel / Spreadsheet-Style Printable Clearance Slip */}
-        <div className="p-6 overflow-y-auto bg-slate-50/50">
-          <div id="printable-receipt" className="p-6 bg-white text-slate-900 font-sans border-2 border-slate-800 shadow-sm print:border print:m-0 print:p-4">
-
+        <div className="p-6 overflow-y-auto bg-slate-50/50 flex-1 print:p-0 print:bg-white">
+          <div
+            id="printable-receipt"
+            className="p-6 bg-white text-slate-900 font-sans border-2 border-slate-800 shadow-sm print:border print:m-0 print:p-4"
+          >
             {/* Spreadsheet Header Block */}
             <div className="border border-slate-800 bg-slate-100 p-3 text-center mb-0">
               <div className="flex items-center justify-center gap-2 mb-0.5">
@@ -75,46 +89,78 @@ const OfficialReceiptModal: React.FC<ClearanceModalProps> = ({ isOpen = true, re
             <div className="border-x border-b border-slate-800 text-xs">
               <div className="grid grid-cols-2 divide-x divide-slate-800 border-b border-slate-800 bg-white">
                 <div className="p-2 flex justify-between">
-                  <span className="font-bold text-slate-600 uppercase text-[10px]">Clearance Ref No:</span>
-                  <span className="font-mono font-black text-blue-900 text-xs">{receipt.receiptNo}</span>
+                  <span className="font-bold text-slate-600 uppercase text-[10px]">
+                    Clearance Ref No:
+                  </span>
+                  <span className="font-mono font-black text-blue-900 text-xs">
+                    {receipt.receiptNo}
+                  </span>
                 </div>
                 <div className="p-2 flex justify-between">
-                  <span className="font-bold text-slate-600 uppercase text-[10px]">Date & Time Issued:</span>
-                  <span className="font-mono font-semibold text-slate-800 text-[11px]">{new Date(receipt.date).toLocaleString('en-PH')}</span>
+                  <span className="font-bold text-slate-600 uppercase text-[10px]">
+                    Date & Time Issued:
+                  </span>
+                  <span className="font-mono font-semibold text-slate-800 text-[11px]">
+                    {new Date(receipt.date).toLocaleString('en-PH')}
+                  </span>
                 </div>
               </div>
 
               {/* Property Details Matrix */}
               <div className="grid grid-cols-2 divide-x divide-slate-800 border-b border-slate-800">
                 <div className="p-2 flex justify-between bg-white">
-                  <span className="font-bold text-slate-600 uppercase text-[10px]">Declared Owner:</span>
-                  <span className="font-black uppercase text-slate-900">{receipt.property.ownerName}</span>
+                  <span className="font-bold text-slate-600 uppercase text-[10px]">
+                    Declared Owner:
+                  </span>
+                  <span className="font-black uppercase text-slate-900">
+                    {receipt.property.ownerName}
+                  </span>
                 </div>
                 <div className="p-2 flex justify-between bg-white">
-                  <span className="font-bold text-slate-600 uppercase text-[10px]">Tax Declaration (TD):</span>
-                  <span className="font-mono font-bold text-slate-900">{receipt.property.tdNumber}</span>
+                  <span className="font-bold text-slate-600 uppercase text-[10px]">
+                    Tax Declaration (TD):
+                  </span>
+                  <span className="font-mono font-bold text-slate-900">
+                    {receipt.property.tdNumber}
+                  </span>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 divide-x divide-slate-800 border-b border-slate-800">
                 <div className="p-2 flex justify-between bg-white">
-                  <span className="font-bold text-slate-600 uppercase text-[10px]">Property Location:</span>
-                  <span className="font-semibold text-slate-800 truncate ml-2">{receipt.property.address}, Brgy. {receipt.property.barangay}</span>
+                  <span className="font-bold text-slate-600 uppercase text-[10px]">
+                    Property Location:
+                  </span>
+                  <span className="font-semibold text-slate-800 truncate ml-2">
+                    {receipt.property.address}, Brgy. {receipt.property.barangay}
+                  </span>
                 </div>
                 <div className="p-2 flex justify-between bg-white">
-                  <span className="font-bold text-slate-600 uppercase text-[10px]">Cadastral PIN:</span>
-                  <span className="font-mono font-medium text-slate-700">{receipt.property.pin || '024-05-001-00-000'}</span>
+                  <span className="font-bold text-slate-600 uppercase text-[10px]">
+                    Cadastral PIN:
+                  </span>
+                  <span className="font-mono font-medium text-slate-700">
+                    {receipt.property.pin || '024-05-001-00-000'}
+                  </span>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 divide-x divide-slate-800">
                 <div className="p-2 flex justify-between bg-white">
-                  <span className="font-bold text-slate-600 uppercase text-[10px]">Classification:</span>
-                  <span className="font-bold text-slate-800">{receipt.property.propertyClass}</span>
+                  <span className="font-bold text-slate-600 uppercase text-[10px]">
+                    Classification:
+                  </span>
+                  <span className="font-bold text-slate-800">
+                    {receipt.property.propertyClass}
+                  </span>
                 </div>
                 <div className="p-2 flex justify-between bg-white">
-                  <span className="font-bold text-slate-600 uppercase text-[10px]">Taxable Assessed Value:</span>
-                  <span className="font-mono font-black text-slate-900">₱{receipt.property.assessedValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  <span className="font-bold text-slate-600 uppercase text-[10px]">
+                    Taxable Assessed Value:
+                  </span>
+                  <span className="font-mono font-black text-slate-900">
+                    ₱{receipt.property.assessedValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </span>
                 </div>
               </div>
             </div>
@@ -193,9 +239,9 @@ const OfficialReceiptModal: React.FC<ClearanceModalProps> = ({ isOpen = true, re
             <div className="mt-3 p-2.5 border border-slate-800 bg-slate-50 text-[11px] text-slate-800">
               <div className="flex justify-between items-center">
                 <span className="font-bold text-slate-700 uppercase">Compliance Verification:</span>
-                <span className="px-2 py-0.2 font-extrabold text-[10px] rounded uppercase">
+                <Badge variant="success" className="font-extrabold text-[10px] rounded uppercase">
                   STATUS: OFFICIALLY CLEARED (RA 7160)
-                </span>
+                </Badge>
               </div>
               <p className="mt-1 text-[10px] text-slate-600 leading-snug">
                 This document certifies that statutory Real Property Tax liabilities and Special Education Fund (SEF) levies for the periods listed above have been audited and officially updated as <strong>CLEARED</strong> in the municipal tax ledger.
@@ -225,16 +271,17 @@ const OfficialReceiptModal: React.FC<ClearanceModalProps> = ({ isOpen = true, re
         </div>
 
         {/* Modal Bottom Actions (Hidden in Print) */}
-        <div className="bg-slate-100 px-6 py-3 border-t border-slate-300 flex justify-end gap-2.5 no-print">
-          <button
+        <DialogFooter className="bg-slate-100 px-6 py-3 border-t border-slate-300 flex justify-end gap-2.5 no-print shrink-0">
+          <Button
+            type="button"
             onClick={onClose}
-            className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-sm transition-all active:scale-95"
+            className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-sm"
           >
             Done & Back to Masterlist
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 };
 

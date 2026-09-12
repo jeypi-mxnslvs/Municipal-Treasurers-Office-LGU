@@ -1,7 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { Property } from '../types';
 import { BARANGAYS, PROPERTY_CLASSES } from '../constants';
-import { X, Database, UserPlus, Info } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Database, UserPlus, Info } from 'lucide-react';
 
 interface RptarModalProps {
   isOpen: boolean;
@@ -23,7 +34,7 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
     marketValue: 300000,
     assessedValue: 60000,
     lastPaidYear: 2025,
-    isShellRecord: false
+    isShellRecord: false,
   });
 
   const [isExisting, setIsExisting] = useState(false);
@@ -47,7 +58,7 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
         marketValue: 300000,
         assessedValue: 60000,
         lastPaidYear: 2025,
-        isShellRecord: false
+        isShellRecord: false,
       });
       setIsExisting(false);
       setIsShell(false);
@@ -60,48 +71,69 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
     setFormData(prev => ({
       ...prev,
       marketValue: mVal,
-      assessedValue: Math.round(mVal * defaultLevel)
+      assessedValue: Math.round(mVal * defaultLevel),
     }));
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in-up">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[92vh] border border-slate-200">
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[92vh] p-0 flex flex-col overflow-hidden gap-0">
         {/* Modal Header */}
-        <div className="bg-slate-900 px-6 py-4 flex justify-between items-center text-white">
+        <DialogHeader className="bg-slate-900 px-6 py-4 text-white border-b border-slate-800 shrink-0">
           <div className="flex items-center gap-3">
-            {isExisting ? <Database className="text-blue-400" size={22} /> : <UserPlus className="text-emerald-400" size={22} />}
+            <div className="p-2 bg-slate-800 rounded-lg shrink-0">
+              {isExisting ? (
+                <Database className="text-blue-400" size={20} />
+              ) : (
+                <UserPlus className="text-emerald-400" size={20} />
+              )}
+            </div>
             <div>
-              <h2 className="font-bold text-base leading-tight">
+              <DialogTitle className="font-bold text-base leading-tight text-white">
                 {isExisting ? 'Update Property Record (RPTAR)' : 'Encode New Real Property'}
-              </h2>
-              <p className="text-xs text-slate-400">Assessor Appraisal & Valuation Entry</p>
+              </DialogTitle>
+              <DialogDescription className="text-xs text-slate-400 mt-0.5">
+                Assessor Appraisal & Valuation Entry
+              </DialogDescription>
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors">
-            <X size={20} />
-          </button>
-        </div>
+        </DialogHeader>
 
         {/* Status Banner */}
         {isExisting && (
-          <div className={`px-6 py-2.5 flex items-center gap-2 text-xs font-bold uppercase tracking-wider ${isShell ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'}`}>
-            <Info size={14} />
-            {isShell ? 'Provisional Shell Record — Set Full Appraised Valuation' : 'Existing Masterlist Record'}
+          <div
+            className={`px-6 py-2.5 flex items-center justify-between border-b ${
+              isShell
+                ? 'bg-amber-50 text-amber-900 border-amber-200'
+                : 'bg-blue-50 text-blue-900 border-blue-200'
+            }`}
+          >
+            <div className="flex items-center gap-2 text-xs font-semibold">
+              <Info size={14} className={isShell ? 'text-amber-600' : 'text-blue-600'} />
+              <span>
+                {isShell
+                  ? 'Provisional Shell Record — Set Full Appraised Valuation'
+                  : 'Existing Masterlist Record'}
+              </span>
+            </div>
+            <Badge variant={isShell ? 'warning' : 'secondary'} className="text-[10px]">
+              {isShell ? 'SHELL RECORD' : 'VERIFIED'}
+            </Badge>
           </div>
         )}
 
-        <div className="p-6 overflow-y-auto space-y-4 text-xs">
+        {/* Modal Body */}
+        <div className="p-6 overflow-y-auto space-y-4 text-xs flex-1">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* TD Number */}
             <div>
-              <label className="block font-bold text-slate-600 uppercase mb-1">Tax Declaration (TD) No. *</label>
-              <input 
-                type="text" 
-                className="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-mono font-semibold text-slate-800"
-                value={formData.tdNumber}
+              <label className="block font-bold text-slate-700 uppercase mb-1">
+                Tax Declaration (TD) No. *
+              </label>
+              <Input
+                type="text"
+                className="bg-slate-50 font-mono font-semibold"
+                value={formData.tdNumber || ''}
                 onChange={(e) => setFormData({ ...formData, tdNumber: e.target.value })}
                 placeholder="TD-99-001-0000"
                 required
@@ -110,10 +142,12 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
 
             {/* Cadastral PIN */}
             <div>
-              <label className="block font-bold text-slate-600 uppercase mb-1">Cadastral PIN Number</label>
-              <input 
-                type="text" 
-                className="w-full px-3.5 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-mono text-slate-800"
+              <label className="block font-bold text-slate-700 uppercase mb-1">
+                Cadastral PIN Number
+              </label>
+              <Input
+                type="text"
+                className="font-mono"
                 value={formData.pin || ''}
                 onChange={(e) => setFormData({ ...formData, pin: e.target.value })}
                 placeholder="024-05-001-01-001"
@@ -122,11 +156,13 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
 
             {/* Owner Name */}
             <div className="md:col-span-2">
-              <label className="block font-bold text-slate-600 uppercase mb-1">Declared Property Owner *</label>
-              <input 
-                type="text" 
-                className="w-full px-3.5 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-semibold uppercase text-slate-800"
-                value={formData.ownerName}
+              <label className="block font-bold text-slate-700 uppercase mb-1">
+                Declared Property Owner *
+              </label>
+              <Input
+                type="text"
+                className="font-semibold uppercase"
+                value={formData.ownerName || ''}
                 onChange={(e) => setFormData({ ...formData, ownerName: e.target.value })}
                 placeholder="JUAN DELA CRUZ"
                 required
@@ -135,11 +171,12 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
 
             {/* Address */}
             <div className="md:col-span-2">
-              <label className="block font-bold text-slate-600 uppercase mb-1">Property Location / Street Address *</label>
-              <input 
-                type="text" 
-                className="w-full px-3.5 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-slate-800"
-                value={formData.address}
+              <label className="block font-bold text-slate-700 uppercase mb-1">
+                Property Location / Street Address *
+              </label>
+              <Input
+                type="text"
+                value={formData.address || ''}
                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                 placeholder="Lot 1 Blk 2, Rizal St."
                 required
@@ -148,38 +185,46 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
 
             {/* Barangay */}
             <div>
-              <label className="block font-bold text-slate-600 uppercase mb-1">Barangay</label>
+              <label className="block font-bold text-slate-700 uppercase mb-1">Barangay</label>
               <select
-                className="w-full px-3.5 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium"
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring font-medium"
                 value={formData.barangay}
                 onChange={(e) => setFormData({ ...formData, barangay: e.target.value })}
               >
-                {BARANGAYS.map(brgy => (
-                  <option key={brgy} value={brgy}>{brgy}</option>
+                {BARANGAYS.map((brgy) => (
+                  <option key={brgy} value={brgy}>
+                    {brgy}
+                  </option>
                 ))}
               </select>
             </div>
 
             {/* Property Class */}
             <div>
-              <label className="block font-bold text-slate-600 uppercase mb-1">Classification *</label>
+              <label className="block font-bold text-slate-700 uppercase mb-1">
+                Classification *
+              </label>
               <select
-                className="w-full px-3.5 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium"
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring font-medium"
                 value={formData.propertyClass}
-                onChange={(e) => setFormData({ ...formData, propertyClass: e.target.value as any })}
+                onChange={(e) => setFormData({ ...formData, propertyClass: e.target.value })}
               >
-                {PROPERTY_CLASSES.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
+                {PROPERTY_CLASSES.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
                 ))}
               </select>
             </div>
 
             {/* Lot Area */}
             <div>
-              <label className="block font-bold text-slate-600 uppercase mb-1">Lot Area (sq. meters)</label>
-              <input 
-                type="number" 
-                className="w-full px-3.5 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-mono"
+              <label className="block font-bold text-slate-700 uppercase mb-1">
+                Lot Area (sq. meters)
+              </label>
+              <Input
+                type="number"
+                className="font-mono"
                 value={formData.lotAreaSqm || 100}
                 onChange={(e) => setFormData({ ...formData, lotAreaSqm: Number(e.target.value) })}
               />
@@ -187,10 +232,12 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
 
             {/* Previous TD */}
             <div>
-              <label className="block font-bold text-slate-600 uppercase mb-1">Previous ARP/TD Reference</label>
-              <input 
-                type="text" 
-                className="w-full px-3.5 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-mono text-slate-800"
+              <label className="block font-bold text-slate-700 uppercase mb-1">
+                Previous ARP/TD Reference
+              </label>
+              <Input
+                type="text"
+                className="font-mono"
                 value={formData.previousTdNumber || ''}
                 onChange={(e) => setFormData({ ...formData, previousTdNumber: e.target.value })}
                 placeholder="Optional"
@@ -199,10 +246,12 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
 
             {/* Direct Market Value */}
             <div>
-              <label className="block font-bold text-slate-600 uppercase mb-1">Direct Market Value (₱) *</label>
-              <input 
-                type="number" 
-                className="w-full px-3.5 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-mono text-slate-800"
+              <label className="block font-bold text-slate-700 uppercase mb-1">
+                Direct Market Value (₱) *
+              </label>
+              <Input
+                type="number"
+                className="font-mono"
                 value={formData.marketValue || 0}
                 onChange={(e) => handleMarketValueChange(Number(e.target.value))}
                 required
@@ -211,22 +260,32 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
 
             {/* Direct Assessed Value */}
             <div>
-              <label className="block font-bold text-slate-600 uppercase mb-1">Taxable Assessed Value (₱) *</label>
-              <input 
-                type="number" 
-                className="w-full px-3.5 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold text-slate-900 font-mono text-sm bg-blue-50/50"
+              <label className="block font-bold text-slate-700 uppercase mb-1">
+                Taxable Assessed Value (₱) *
+              </label>
+              <Input
+                type="number"
+                className="font-bold text-slate-900 font-mono text-sm bg-blue-50/50"
                 value={formData.assessedValue || 0}
-                onChange={(e) => setFormData({ ...formData, assessedValue: Number(e.target.value), isShellRecord: false })}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    assessedValue: Number(e.target.value),
+                    isShellRecord: false,
+                  })
+                }
                 required
               />
             </div>
 
             {/* Last Year Paid */}
             <div className="md:col-span-2">
-              <label className="block font-bold text-slate-600 uppercase mb-1">Last Year Paid (for Historical Tracking)</label>
-              <input 
-                type="number" 
-                className="w-full px-3.5 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-mono"
+              <label className="block font-bold text-slate-700 uppercase mb-1">
+                Last Year Paid (for Historical Tracking)
+              </label>
+              <Input
+                type="number"
+                className="font-mono"
                 value={formData.lastPaidYear || 2025}
                 onChange={(e) => setFormData({ ...formData, lastPaidYear: Number(e.target.value) })}
               />
@@ -235,22 +294,27 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
         </div>
 
         {/* Footer Actions */}
-        <div className="bg-slate-50 px-6 py-3.5 flex justify-end gap-2.5 border-t border-slate-200">
-          <button 
+        <DialogFooter className="bg-slate-50 px-6 py-3.5 flex justify-end gap-2.5 border-t border-slate-200 shrink-0">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
             onClick={onClose}
-            className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-xl transition-colors"
+            className="rounded-xl text-xs font-semibold"
           >
             Cancel
-          </button>
-          <button 
+          </Button>
+          <Button
+            type="button"
+            size="sm"
             onClick={() => onSave(formData)}
-            className="px-6 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 rounded-xl shadow-sm transition-all active:scale-95"
+            className="rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 shadow-sm text-white"
           >
             {isExisting ? 'Commit RPTAR Updates' : 'Save Property Record'}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 };
 

@@ -1,18 +1,29 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { TaxYearRecord, TaxSummary } from '../types';
 import { AlertCircle, CheckCircle2, Tag, Calendar, CheckSquare, Layers, Sparkles } from 'lucide-react';
+import { Button } from './ui/button';
+import { Badge } from './ui/badge';
+import { Card, CardContent } from './ui/card';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from './ui/table';
 
 interface DelinquencyTableProps {
   records: TaxYearRecord[];
   summary?: TaxSummary;
-  grandTotal: number;
+  grandTotal?: number;
   onSelectionChange?: (selected: TaxYearRecord[], subtotal: number) => void;
 }
 
 const DelinquencyTable: React.FC<DelinquencyTableProps> = ({ 
   records, 
-  summary, 
-  grandTotal,
+  summary: _summary, 
+  grandTotal: _grandTotal,
   onSelectionChange 
 }) => {
   // Store selected index range (from index 0 up to selectedMaxIndex inclusive)
@@ -24,29 +35,43 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
   }, [records]);
 
   // Compute selected subset
-  const selectedRecords = records.slice(0, selectedMaxIndex + 1);
-  const selectedSubtotal = selectedRecords.reduce((sum, r) => sum + (r.totalDue || 0), 0);
+  const selectedRecords = React.useMemo(
+    () => records.slice(0, selectedMaxIndex + 1),
+    [records, selectedMaxIndex]
+  );
+  const selectedSubtotal = React.useMemo(
+    () => selectedRecords.reduce((sum, r) => sum + (r.totalDue || 0), 0),
+    [selectedRecords]
+  );
   const selectedBasicTax = selectedRecords.reduce((sum, r) => sum + (r.basicTax || (r.baseTax / 2) || 0), 0);
   const selectedSefTax = selectedRecords.reduce((sum, r) => sum + (r.sefTax || (r.baseTax / 2) || 0), 0);
   const selectedPenalties = selectedRecords.reduce((sum, r) => sum + (r.penaltyAmount || 0), 0);
   const selectedDiscounts = selectedRecords.reduce((sum, r) => sum + (r.discountAmount || 0), 0);
 
+  // Stable callback ref to avoid effect recreation loops
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  useEffect(() => {
+    onSelectionChangeRef.current = onSelectionChange;
+  }, [onSelectionChange]);
+
   // Notify parent component of selection updates
   useEffect(() => {
-    if (onSelectionChange) {
-      onSelectionChange(selectedRecords, selectedSubtotal);
+    if (onSelectionChangeRef.current) {
+      onSelectionChangeRef.current(selectedRecords, selectedSubtotal);
     }
-  }, [selectedMaxIndex, records]);
+  }, [selectedRecords, selectedSubtotal]);
 
   if (records.length === 0) {
     return (
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-12 text-center">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-emerald-100 mb-4">
-          <CheckCircle2 size={32} className="text-emerald-600" />
-        </div>
-        <h3 className="text-lg font-bold text-slate-800">Account Fully Cleared</h3>
-        <p className="text-slate-500 text-sm mt-1">This property is paid up to date with zero delinquent liabilities.</p>
-      </div>
+      <Card className="border-slate-200 shadow-sm">
+        <CardContent className="p-12 text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-emerald-100 mb-4">
+            <CheckCircle2 size={32} className="text-emerald-600" />
+          </div>
+          <h3 className="text-lg font-bold text-slate-800">Account Fully Cleared</h3>
+          <p className="text-slate-500 text-sm mt-1">This property is paid up to date with zero delinquent liabilities.</p>
+        </CardContent>
+      </Card>
     );
   }
 
@@ -58,7 +83,6 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
   const handleSelectOneYear = () => {
     if (records.length === 0) return;
     const firstYear = records[0].year;
-    // Find last index of the same year
     let maxIdx = 0;
     for (let i = 0; i < records.length; i++) {
       if (records[i].year === firstYear) {
@@ -79,19 +103,19 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-full animate-fade-in-up">
+    <Card className="border-slate-200 shadow-sm overflow-hidden flex flex-col h-full animate-fade-in-up">
       {/* Header & Sequential Scope Selector */}
-      <div className="p-4 border-b border-slate-200 bg-slate-50 space-y-3">
+      <div className="p-4 border-b border-slate-200 bg-slate-50/80 space-y-3">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
           <div className="flex items-center gap-2">
-            <AlertCircle size={18} className="text-blue-600" />
+            <AlertCircle size={18} className="text-emerald-600" />
             <h3 className="text-slate-800 font-bold text-sm">
               Sequential Statement of Account (RA 7160 Arrears-First)
             </h3>
           </div>
-          <span className="px-2.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full flex items-center gap-1">
+          <Badge variant="secondary" className="gap-1 bg-emerald-50 text-emerald-700 border-emerald-200 font-semibold">
             <Calendar size={12} /> {records.length} Total Periods Owed
-          </span>
+          </Badge>
         </div>
 
         {/* 1-Click Scope Buttons */}
@@ -99,107 +123,109 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
           <span className="font-bold text-slate-500 uppercase tracking-wide text-[10px] mr-1">
             Payment Scope:
           </span>
-          <button
+          <Button
             type="button"
+            variant={selectedMaxIndex === 0 ? "default" : "outline"}
+            size="sm"
             onClick={handleSelectOneQuarter}
-            className={`px-3 py-1.5 rounded-xl font-bold border transition-all flex items-center gap-1 ${
-              selectedMaxIndex === 0 
-                ? 'bg-blue-600 text-white border-blue-600 shadow-xs' 
-                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-            }`}
+            className="h-8 gap-1.5 rounded-lg text-xs"
           >
             <CheckSquare size={13} />
             Pay Next 1 Quarter
-          </button>
+          </Button>
 
-          <button
+          <Button
             type="button"
-            onClick={handleSelectOneYear}
-            className={`px-3 py-1.5 rounded-xl font-bold border transition-all flex items-center gap-1 ${
+            variant={
               selectedMaxIndex > 0 && selectedMaxIndex < records.length - 1 && records[selectedMaxIndex].year === records[0].year
-                ? 'bg-blue-600 text-white border-blue-600 shadow-xs' 
-                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-            }`}
+                ? "default"
+                : "outline"
+            }
+            size="sm"
+            onClick={handleSelectOneYear}
+            className="h-8 gap-1.5 rounded-lg text-xs"
           >
             <Layers size={13} />
             Pay 1 Full Year ({records[0].year})
-          </button>
+          </Button>
 
-          <button
+          <Button
             type="button"
+            variant={selectedMaxIndex === records.length - 1 ? "default" : "outline"}
+            size="sm"
             onClick={handleSelectAll}
-            className={`px-3 py-1.5 rounded-xl font-bold border transition-all flex items-center gap-1 ${
-              selectedMaxIndex === records.length - 1
-                ? 'bg-blue-600 text-white border-blue-600 shadow-xs' 
-                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-            }`}
+            className="h-8 gap-1.5 rounded-lg text-xs"
           >
             <Sparkles size={13} />
             Pay All Dues (Full Settlement)
-          </button>
+          </Button>
         </div>
       </div>
       
       {/* Itemized Table */}
       <div className="overflow-x-auto flex-grow">
-        <table className="min-w-full divide-y divide-slate-200 text-xs">
-          <thead className="bg-slate-100/75">
-            <tr>
-              <th scope="col" className="px-3 py-2.5 text-center font-bold text-slate-500 uppercase tracking-wider w-12">Select</th>
-              <th scope="col" className="px-4 py-2.5 text-left font-bold text-slate-500 uppercase tracking-wider">Tax Period</th>
-              <th scope="col" className="px-4 py-2.5 text-left font-bold text-slate-500 uppercase tracking-wider">Status</th>
-              <th scope="col" className="px-4 py-2.5 text-right font-bold text-slate-500 uppercase tracking-wider">Basic (1%)</th>
-              <th scope="col" className="px-4 py-2.5 text-right font-bold text-slate-500 uppercase tracking-wider">SEF (1%)</th>
-              <th scope="col" className="px-4 py-2.5 text-right font-bold text-slate-500 uppercase tracking-wider">
+        <Table className="text-xs">
+          <TableHeader className="bg-slate-100/75">
+            <TableRow>
+              <TableHead className="w-12 text-center font-bold text-slate-600 uppercase tracking-wider">Select</TableHead>
+              <TableHead className="font-bold text-slate-600 uppercase tracking-wider">Tax Period</TableHead>
+              <TableHead className="font-bold text-slate-600 uppercase tracking-wider">Status</TableHead>
+              <TableHead className="text-right font-bold text-slate-600 uppercase tracking-wider">Basic (1%)</TableHead>
+              <TableHead className="text-right font-bold text-slate-600 uppercase tracking-wider">SEF (1%)</TableHead>
+              <TableHead className="text-right font-bold text-slate-600 uppercase tracking-wider">
                 Penalty <span className="text-slate-400 font-normal">(Rate)</span>
-              </th>
-              <th scope="col" className="px-4 py-2.5 text-right font-bold text-slate-500 uppercase tracking-wider">Discount</th>
-              <th scope="col" className="px-4 py-2.5 text-right font-bold text-slate-500 uppercase tracking-wider">Subtotal Due</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-slate-100">
+              </TableHead>
+              <TableHead className="text-right font-bold text-slate-600 uppercase tracking-wider">Discount</TableHead>
+              <TableHead className="text-right font-bold text-slate-600 uppercase tracking-wider">Subtotal Due</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody className="divide-y divide-slate-100">
             {records.map((record, idx) => {
               const isSelected = idx <= selectedMaxIndex;
               const isDelinquent = record.status === 'Delinquent';
               const hasDiscount = Boolean(record.discountAmount && record.discountAmount > 0);
 
               return (
-                <tr 
+                <TableRow 
                   key={idx} 
                   onClick={() => handleCheckboxClick(idx)}
                   className={`transition-colors cursor-pointer ${
-                    isSelected ? 'bg-blue-50/50 hover:bg-blue-50/80 font-medium' : 'opacity-40 hover:opacity-75 bg-slate-50/30'
+                    isSelected ? 'bg-emerald-50/40 hover:bg-emerald-50/60 font-medium' : 'opacity-40 hover:opacity-75 bg-slate-50/20'
                   }`}
                 >
-                  <td className="px-3 py-3 text-center">
+                  <TableCell className="text-center">
                     <input
                       type="checkbox"
                       checked={isSelected}
                       onChange={() => handleCheckboxClick(idx)}
-                      className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600"
                     />
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap font-bold text-slate-900 font-mono">
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap font-bold text-slate-900 font-mono">
                     {record.year} {record.quarter ? `• Q${record.quarter}` : ''}
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold ${
-                      isDelinquent 
-                        ? 'bg-rose-100 text-rose-700 border border-rose-200' 
-                        : record.status === 'Current'
-                        ? 'bg-blue-100 text-blue-700 border border-blue-200'
-                        : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
-                    }`}>
-                      {record.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-slate-600 text-right font-mono">
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    {isDelinquent ? (
+                      <Badge variant="destructive" className="text-[11px] font-semibold bg-rose-100 text-rose-700 border-rose-200">
+                        {record.status}
+                      </Badge>
+                    ) : record.status === 'Current' ? (
+                      <Badge variant="default" className="text-[11px] font-semibold bg-blue-100 text-blue-700 border-blue-200">
+                        {record.status}
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary" className="text-[11px] font-semibold bg-emerald-100 text-emerald-700 border-emerald-200">
+                        {record.status}
+                      </Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-slate-600 text-right font-mono">
                     ₱{(record.basicTax || (record.baseTax / 2)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-slate-600 text-right font-mono">
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-slate-600 text-right font-mono">
                     ₱{(record.sefTax || (record.baseTax / 2)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-right font-mono">
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-right font-mono">
                     {record.penaltyAmount > 0 ? (
                       <div className="flex flex-col items-end">
                         <span className="text-rose-600 font-semibold">
@@ -212,8 +238,8 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
                     ) : (
                       <span className="text-slate-400">₱0.00</span>
                     )}
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-right font-mono">
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-right font-mono">
                     {hasDiscount ? (
                       <div className="flex flex-col items-end">
                         <span className="text-emerald-600 font-semibold flex items-center gap-0.5">
@@ -226,15 +252,15 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
                     ) : (
                       <span className="text-slate-400">—</span>
                     )}
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-slate-900 font-bold text-right font-mono text-sm">
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-slate-900 font-bold text-right font-mono text-sm">
                     ₱{record.totalDue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               );
             })}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
 
       {/* Selected Scope Dynamic Summary Footer */}
@@ -282,7 +308,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
           </div>
         </div>
       </div>
-    </div>
+    </Card>
   );
 };
 

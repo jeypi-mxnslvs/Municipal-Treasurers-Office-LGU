@@ -2,7 +2,34 @@ import React, { useState, useRef } from 'react';
 import { Property, User } from '../types';
 import { BARANGAYS, PROPERTY_CLASSES } from '../constants';
 import { api } from '../services/api';
-import { Upload, Download, FileSpreadsheet, CheckCircle2, AlertTriangle, XCircle, X, ArrowRight, RefreshCw, FileText } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from '@/components/ui/table';
+import {
+  Upload,
+  Download,
+  FileSpreadsheet,
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
+  ArrowRight,
+  RefreshCw,
+} from 'lucide-react';
 
 interface BulkImportModalProps {
   isOpen: boolean;
@@ -35,23 +62,19 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
   onClose,
   onImportComplete,
   properties,
-  currentUser
+  currentUser,
 }) => {
   const [tab, setTab] = useState<'import' | 'export'>('import');
-  const [fileContent, setFileContent] = useState<string>('');
   const [parsedRows, setParsedRows] = useState<ParsedRow[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [importResult, setImportResult] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  if (!isOpen) return null;
-
   // Handle CSV Parsing
   const handleParseCsv = (rawText: string) => {
-    setFileContent(rawText);
     setImportResult(null);
 
-    const lines = rawText.split(/\r?\n/).filter(line => line.trim() !== '');
+    const lines = rawText.split(/\r?\n/).filter((line) => line.trim() !== '');
     if (lines.length <= 1) {
       setParsedRows([]);
       return;
@@ -65,7 +88,7 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
       const line = lines[i];
       // Basic CSV splitter (handles commas inside quotes)
       const cols = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || line.split(',');
-      const cleanCols = cols.map(c => c.replace(/^"|"$/g, '').trim());
+      const cleanCols = cols.map((c) => c.replace(/^"|"$/g, '').trim());
 
       const tdNumber = cleanCols[0] || '';
       const previousTdNumber = cleanCols[1] || '';
@@ -89,7 +112,7 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
       } else if (seenTds.has(tdNumber)) {
         isValid = false;
         error = 'Duplicate TD in CSV';
-      } else if (properties.some(p => p.tdNumber === tdNumber)) {
+      } else if (properties.some((p) => p.tdNumber === tdNumber)) {
         isValid = false;
         error = 'TD already exists in database';
       } else {
@@ -103,13 +126,15 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
       }
 
       // Normalize Barangay
-      const matchedBrgy = BARANGAYS.find(b => b.toLowerCase() === barangay.toLowerCase());
+      const matchedBrgy = BARANGAYS.find((b) => b.toLowerCase() === barangay.toLowerCase());
       if (matchedBrgy) {
         barangay = matchedBrgy;
       }
 
       // Normalize Class
-      const matchedClass = PROPERTY_CLASSES.find(c => c.toLowerCase() === propertyClass.toLowerCase());
+      const matchedClass = PROPERTY_CLASSES.find(
+        (c) => c.toLowerCase() === propertyClass.toLowerCase()
+      );
       if (matchedClass) {
         propertyClass = matchedClass;
       }
@@ -131,7 +156,7 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
         lastPaidYear,
         isValid,
         isShell,
-        error
+        error,
       });
     }
 
@@ -151,13 +176,14 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
   };
 
   const handleDownloadTemplate = () => {
-    const header = 'TD_Number,Previous_TD,PIN,Owner_Name,Address,Barangay,Property_Class,Lot_Area_Sqm,Market_Value,Assessed_Value,Last_Paid_Year\n';
+    const header =
+      'TD_Number,Previous_TD,PIN,Owner_Name,Address,Barangay,Property_Class,Lot_Area_Sqm,Market_Value,Assessed_Value,Last_Paid_Year\n';
     const sampleRows = [
       'TD-SR-2026-001,TD-92-001,024-05-001-01-001,JUAN DELA CRUZ,"Lot 4 Blk 2, Rizal St.",Rizal (Poblacion),Dwell House,250,500000,100000,2023',
       'TD-SR-2026-002,TD-88-004,024-05-002-02-015,MARIA SANTOS,"Sitio Central, Aguinaldo",Aguinaldo,Agricultural,2500,800000,320000,2025',
       'TD-SR-2026-003,,024-05-006-03-099,SANTA ROSA MILLING CORP,"National Highway, San Isidro",San Isidro,Industrial,1200,3500000,1750000,2024',
       'TD-SR-2026-004,,024-05-008-01-042,AGRI DIESEL POWER INC,"Purok 3, La Fuente",La Fuente,Machinery,100,600000,300000,2025',
-      'TD-SR-2026-005,TD-91-005,024-05-010-04-008,PEDRO PENDUKO,"Lot 10, Berang",Berang,Residential,180,200000,40000,2022'
+      'TD-SR-2026-005,TD-91-005,024-05-010-04-008,PEDRO PENDUKO,"Lot 10, Berang",Berang,Residential,180,200000,40000,2022',
     ].join('\n');
 
     const blob = new Blob([header + sampleRows], { type: 'text/csv;charset=utf-8;' });
@@ -170,10 +196,13 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
   };
 
   const handleExportMasterlist = () => {
-    const header = 'TD_Number,Previous_TD,PIN,Owner_Name,Address,Barangay,Property_Class,Lot_Area_Sqm,Market_Value,Assessed_Value,Last_Paid_Year,Status,Outstanding_Debt\n';
-    const rows = properties.map(p => {
-      return `"${p.tdNumber}","${p.previousTdNumber || ''}","${p.pin || ''}","${p.ownerName}","${p.address}","${p.barangay}","${p.propertyClass}",${p.lotAreaSqm || 100},${p.marketValue || 0},${p.assessedValue},${p.lastPaidYear},"${p.status || 'CLEARED'}",${p.totalDebt || 0}`;
-    }).join('\n');
+    const header =
+      'TD_Number,Previous_TD,PIN,Owner_Name,Address,Barangay,Property_Class,Lot_Area_Sqm,Market_Value,Assessed_Value,Last_Paid_Year,Status,Outstanding_Debt\n';
+    const rows = properties
+      .map((p) => {
+        return `"${p.tdNumber}","${p.previousTdNumber || ''}","${p.pin || ''}","${p.ownerName}","${p.address}","${p.barangay}","${p.propertyClass}",${p.lotAreaSqm || 100},${p.marketValue || 0},${p.assessedValue},${p.lastPaidYear},"${p.status || 'CLEARED'}",${p.totalDebt || 0}`;
+      })
+      .join('\n');
 
     const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -185,12 +214,12 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
   };
 
   const handleCommitImport = async () => {
-    const validToImport = parsedRows.filter(r => r.isValid);
+    const validToImport = parsedRows.filter((r) => r.isValid);
     if (validToImport.length === 0) return;
 
     setIsProcessing(true);
     try {
-      const payload = validToImport.map(r => ({
+      const payload = validToImport.map((r) => ({
         tdNumber: r.tdNumber,
         previousTdNumber: r.previousTdNumber,
         pin: r.pin,
@@ -201,13 +230,12 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
         lotAreaSqm: r.lotAreaSqm,
         marketValue: r.marketValue,
         assessedValue: r.assessedValue,
-        lastPaidYear: r.lastPaidYear
+        lastPaidYear: r.lastPaidYear,
       }));
 
       const res = await api.bulkImportProperties(payload, currentUser.name, currentUser.stationId);
       setImportResult(`✅ Successfully imported ${res.insertedCount} properties!`);
       setParsedRows([]);
-      setFileContent('');
       onImportComplete();
     } catch (err) {
       alert(`Import failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
@@ -216,48 +244,51 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
     }
   };
 
-  const validCount = parsedRows.filter(r => r.isValid).length;
-  const shellCount = parsedRows.filter(r => r.isValid && r.isShell).length;
-  const errorCount = parsedRows.filter(r => !r.isValid).length;
+  const validCount = parsedRows.filter((r) => r.isValid).length;
+  const shellCount = parsedRows.filter((r) => r.isValid && r.isShell).length;
+  const errorCount = parsedRows.filter((r) => !r.isValid).length;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in-up">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full overflow-hidden border border-slate-200 flex flex-col max-h-[90vh]">
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-4xl max-h-[90vh] p-0 flex flex-col overflow-hidden gap-0 border-slate-200 shadow-2xl">
         {/* Modal Header */}
-        <div className="bg-slate-900 px-6 py-4 flex items-center justify-between text-white border-b border-slate-800">
+        <DialogHeader className="bg-slate-900 px-6 py-4 text-white border-b border-slate-800 shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="p-1.5 bg-blue-600 rounded-lg">
+            <div className="p-2 bg-blue-600 rounded-lg shrink-0">
               <FileSpreadsheet size={18} className="text-white" />
             </div>
             <div>
-              <h2 className="font-bold text-base leading-tight">
+              <DialogTitle className="font-bold text-base leading-tight text-white">
                 Santa Rosa RPTAR — Bulk Masterlist Engine
-              </h2>
-              <p className="text-xs text-slate-400">
+              </DialogTitle>
+              <DialogDescription className="text-xs text-slate-400 mt-0.5">
                 Batch Import Legacy Spreadsheets & Export Official Municipal Masterlist
-              </p>
+              </DialogDescription>
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg">
-            <X size={18} />
-          </button>
-        </div>
+        </DialogHeader>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-slate-200 bg-slate-50 px-6 pt-3 text-xs font-bold gap-6">
+        <div className="flex border-b border-slate-200 bg-slate-50 px-6 pt-3 text-xs font-bold gap-6 shrink-0">
           <button
+            type="button"
             onClick={() => setTab('import')}
             className={`pb-3 flex items-center gap-2 border-b-2 transition-colors ${
-              tab === 'import' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'
+              tab === 'import'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
             <Upload size={14} />
             Bulk CSV / Excel Import
           </button>
           <button
+            type="button"
             onClick={() => setTab('export')}
             className={`pb-3 flex items-center gap-2 border-b-2 transition-colors ${
-              tab === 'export' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'
+              tab === 'export'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
             <Download size={14} />
@@ -266,7 +297,7 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 overflow-y-auto space-y-5 text-xs flex-grow">
+        <div className="p-6 overflow-y-auto space-y-5 text-xs flex-1">
           {tab === 'import' ? (
             <div className="space-y-4">
               {/* Actions row */}
@@ -278,20 +309,25 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
                     onClick={handleDownloadTemplate}
-                    className="px-3 py-1.5 bg-white hover:bg-slate-100 text-blue-700 font-semibold rounded-lg border border-blue-300 flex items-center gap-1.5 shadow-xs transition-colors"
+                    className="border-blue-300 text-blue-700 hover:bg-slate-100 font-semibold gap-1.5"
                   >
                     <Download size={13} />
                     Download CSV Template
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
                     onClick={() => fileInputRef.current?.click()}
-                    className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg flex items-center gap-1.5 shadow-xs transition-colors"
+                    className="bg-blue-600 hover:bg-blue-500 text-white font-bold gap-1.5"
                   >
                     <Upload size={13} />
                     Select CSV File
-                  </button>
+                  </Button>
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -342,53 +378,61 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
 
                   {/* Preview Table */}
                   <div className="border border-slate-200 rounded-xl overflow-hidden max-h-60 overflow-y-auto">
-                    <table className="min-w-full divide-y divide-slate-200">
-                      <thead className="bg-slate-100 text-[10px] uppercase font-bold text-slate-600 sticky top-0">
-                        <tr>
-                          <th className="px-3 py-2 text-left">Line</th>
-                          <th className="px-3 py-2 text-left">TD Number</th>
-                          <th className="px-3 py-2 text-left">Owner Name</th>
-                          <th className="px-3 py-2 text-left">Barangay & Class</th>
-                          <th className="px-3 py-2 text-right">Assessed Val</th>
-                          <th className="px-3 py-2 text-left">Diagnostic Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 bg-white">
+                    <Table>
+                      <TableHeader className="bg-slate-100 text-[10px] uppercase font-bold sticky top-0">
+                        <TableRow>
+                          <TableHead className="w-16">Line</TableHead>
+                          <TableHead>TD Number</TableHead>
+                          <TableHead>Owner Name</TableHead>
+                          <TableHead>Barangay & Class</TableHead>
+                          <TableHead className="text-right">Assessed Val</TableHead>
+                          <TableHead>Diagnostic Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
                         {parsedRows.map((row) => (
-                          <tr key={row.line} className={row.isValid ? 'hover:bg-blue-50/30' : 'bg-rose-50/50'}>
-                            <td className="px-3 py-2 font-mono text-slate-500">{row.line}</td>
-                            <td className="px-3 py-2 font-mono font-bold text-slate-800">{row.tdNumber || 'N/A'}</td>
-                            <td className="px-3 py-2 font-semibold text-slate-800 uppercase">{row.ownerName || 'N/A'}</td>
-                            <td className="px-3 py-2 text-slate-600">
+                          <TableRow
+                            key={row.line}
+                            className={row.isValid ? 'hover:bg-blue-50/30' : 'bg-rose-50/50'}
+                          >
+                            <TableCell className="font-mono text-slate-500">{row.line}</TableCell>
+                            <TableCell className="font-mono font-bold text-slate-800">
+                              {row.tdNumber || 'N/A'}
+                            </TableCell>
+                            <TableCell className="font-semibold text-slate-800 uppercase">
+                              {row.ownerName || 'N/A'}
+                            </TableCell>
+                            <TableCell className="text-slate-600">
                               {row.barangay} • <span className="font-bold">{row.propertyClass}</span>
-                            </td>
-                            <td className="px-3 py-2 text-right font-mono font-bold text-slate-800">
+                            </TableCell>
+                            <TableCell className="text-right font-mono font-bold text-slate-800">
                               ₱{row.assessedValue.toLocaleString()}
-                            </td>
-                            <td className="px-3 py-2">
+                            </TableCell>
+                            <TableCell>
                               {row.isValid ? (
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                  row.isShell ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
-                                }`}>
+                                <Badge
+                                  variant={row.isShell ? 'warning' : 'success'}
+                                  className="text-[10px] font-bold"
+                                >
                                   {row.isShell ? 'Shell Record' : 'Valid'}
-                                </span>
+                                </Badge>
                               ) : (
-                                <span className="px-2 py-0.5 bg-rose-100 text-rose-800 rounded text-[10px] font-bold">
+                                <Badge variant="destructive" className="text-[10px] font-bold">
                                   {row.error}
-                                </span>
+                                </Badge>
                               )}
-                            </td>
-                          </tr>
+                            </TableCell>
+                          </TableRow>
                         ))}
-                      </tbody>
-                    </table>
+                      </TableBody>
+                    </Table>
                   </div>
                 </div>
               )}
             </div>
           ) : (
             /* Export Tab */
-            <div className="space-y-4 text-center py-6">
+            <div className="space-y-4 text-center py-8">
               <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-2 border border-blue-200">
                 <FileSpreadsheet size={32} />
               </div>
@@ -399,33 +443,39 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
                 </p>
               </div>
 
-              <div className="pt-2">
-                <button
+              <div className="pt-3">
+                <Button
+                  type="button"
                   onClick={handleExportMasterlist}
-                  className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl shadow-md transition-all flex items-center gap-2 mx-auto active:scale-95 text-xs"
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold gap-2 mx-auto"
                 >
                   <Download size={16} />
                   Download Masterlist Spreadsheet (.csv)
-                </button>
+                </Button>
               </div>
             </div>
           )}
         </div>
 
         {/* Modal Footer */}
-        <div className="bg-slate-50 px-6 py-3 border-t border-slate-200 flex justify-between items-center">
-          <button
+        <DialogFooter className="bg-slate-50 px-6 py-3 border-t border-slate-200 flex flex-row justify-between items-center shrink-0">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
             onClick={onClose}
-            className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold rounded-xl text-xs transition-colors"
+            className="rounded-xl text-xs font-semibold"
           >
             Close
-          </button>
+          </Button>
 
           {tab === 'import' && parsedRows.length > 0 && validCount > 0 && (
-            <button
+            <Button
+              type="button"
+              size="sm"
               onClick={handleCommitImport}
               disabled={isProcessing}
-              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-md transition-all disabled:opacity-50"
+              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs gap-2"
             >
               {isProcessing ? (
                 <>
@@ -438,11 +488,11 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
                   <ArrowRight size={14} />
                 </>
               )}
-            </button>
+            </Button>
           )}
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 };
 

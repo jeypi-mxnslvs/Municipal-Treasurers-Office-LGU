@@ -12,7 +12,7 @@ import OfficialReceiptModal from './components/OfficialReceiptModal';
 import UserManagementModal from './components/UserManagementModal';
 import AuditLogModal from './components/AuditLogModal';
 import BulkImportModal from './components/BulkImportModal';
-import { Printer, ArrowLeft, CheckCircle2, ShieldCheck, CheckCircle, Sparkles, RefreshCw, Bell } from 'lucide-react';
+import { Printer, ArrowLeft, CheckCircle2, ShieldCheck, CheckCircle, RefreshCw, Bell } from 'lucide-react';
 
 const App: React.FC = () => {
   // Authentication State
@@ -24,7 +24,7 @@ const App: React.FC = () => {
   const [view, setView] = useState<'dashboard' | 'posting'>('dashboard');
   const [properties, setProperties] = useState<Property[]>([]);
   const [stats, setStats] = useState<DashboardStatsData | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [, setIsLoading] = useState(false);
 
   // Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -100,7 +100,7 @@ const App: React.FC = () => {
 
           lastMutationTimeRef.current = timestamp;
         }
-      } catch (err) {
+      } catch {
         // Ignore polling errors
       }
     }, 7000);
