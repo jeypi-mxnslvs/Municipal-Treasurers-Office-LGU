@@ -160,48 +160,51 @@ Complete the current foundational sprint so that `main` is clean, all UI compone
 
 ---
 
-## Phase 3: Data Layer Optimization & Realtime Sync
+## Phase 3: Data Layer Optimization, Assessor Import Center & Municipal Tax Policy
 
 ### Branch: `feature/data-layer-tanstack`
 **Priority**: High (P1)  
-**Dependencies**: Phase 0 (`v1.0.0-baseline`)
+**Dependencies**: Phase 0 (`v1.0.0-baseline`), Phase 1, Phase 2
 
 ### Problem Statement
-1. **`App.tsx` God Object**: ~500 lines managing all global state, modals, filters, and records.
-2. **7-Second Polling Loop**: Uses a naive `setInterval` polling loop calling `api.getSyncStatus()` and triggering full-table refetches.
-3. **Full Table Scans**: Fetches all properties into client memory at once. Will choke browser performance once the full Santa Rosa parcel database (5,000–25,000 records) is loaded.
+1. **`App.tsx` Monolith**: Global state, modals, filters, and records lack query caching and structured server sync.
+2. **7-Second Polling Loop**: Inefficient continuous polling creates unnecessary database queries.
+3. **Full Table Scans**: Fetches all properties into client memory at once without server-side pagination.
+4. **Fragile CSV Import**: Lacks smart upsert by `td_number`, overwrites or rejects existing parcel uploads, and lacks staging preview by barangay across Santa Rosa's 33 barangays.
+5. **Rigid Tax Discounts**: Discounts are hardcoded rather than driven by municipal tax-policy settings, and authorized assessors cannot perform audited manual adjustments.
 
 ### Implementation Plan
-1. **TanStack Query Setup**:
-   - Install `@tanstack/react-query` and `@tanstack/react-query-devtools`.
-   - Create query hooks:
-     - `useProperties(filters, pagination)`
-     - `usePropertyAssessment(id)`
-     - `useDashboardStats()`
-     - `useAuditLogs(filters)`
-2. **Supabase Realtime WebSockets**:
-   - Replace 7-second polling loop with real-time database change listener:
-     ```typescript
-     supabase
-       .channel('schema-db-changes')
-       .on('postgres_changes', { event: '*', schema: 'public', table: 'properties' }, () => {
-         queryClient.invalidateQueries({ queryKey: ['properties'] });
-         queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
-       })
-       .subscribe();
-     ```
-3. **Server-Side Pagination & Search**:
-   - Update `services/api.ts` to support limit/offset pagination:
-     ```typescript
-     query = query.range((page - 1) * pageSize, page * pageSize - 1);
-     ```
-   - Add debounce to search inputs (300ms) to prevent excessive DB queries.
+1. **Assessor Import Center & Smart Barangay Upsert**:
+   - Dedicated workspace view with upload history, batch review, and diff preview.
+   - Master key: `td_number`. Smart upsert updates existing properties, inserts new parcels, and preserves unmentioned records.
+   - Financial history protection: Ingestion **never** alters `last_paid_year` or payment history.
+   - Explicit row states: `VALID_NEW`, `VALID_UPDATE`, `UNCHANGED`, `DUPLICATE_IN_FILE`, `INVALID_TD`, `INVALID_BARANGAY`, `INVALID_PROPERTY_CLASS`, `INVALID_NUMERIC_VALUE`, `CONFLICTING_RECORD`.
+   - Idempotent execution: Repeated uploads of identical CSV rows produce 0 spurious database writes.
+   - Santa Rosa 33-Barangay template generator with authentic parcel samples.
+2. **Municipal Tax-Policy Discounts & Assessor Overrides**:
+   - Database-backed `municipal_tax_settings`:
+     - `early_payment_discount_rate = 20%` (Jan 1 – Mar 31).
+     - `regular_prompt_discount_rate = 10%` (Apr 1 – Dec 31).
+     - `delinquent_discount_rate = 0%` (strictly non-discountable).
+     - **Note**: The 10% rate is a **payment-date-based discount policy**, NOT a quarterly discount.
+   - UI displays system-calculated defaults alongside authorized editable inputs for `Basic Tax`, `SEF Tax`, and `Discount Rate`.
+   - Dynamic derived calculation of `Discount Amount` and `Net Amount Due`.
+   - Field-level audit trail in `rptar_audit_logs` tracking old/new values, differences, user identity, and mandatory adjustment reasons.
+   - Payment snapshot: Posted payments lock in final applied values immutably.
+3. **TanStack Query Setup & Realtime WebSockets**:
+   - Install `@tanstack/react-query` and create query hooks (`useProperties`, `usePropertyAssessment`, `useDashboardStats`).
+   - Replace 7-second polling loop with Supabase Realtime WebSocket listeners.
+4. **Server-Side Pagination & Search**:
+   - Paginated endpoints (limit/offset) and debounced search (300ms) to support 25,000+ Santa Rosa parcels effortlessly.
 
 ### Acceptance Criteria
-- [ ] Polling `setInterval` completely removed.
-- [ ] Multi-teller updates propagate instantaneously via WebSockets.
-- [ ] `DashboardTable` loads paginated batches (e.g., 25/50/100 records per page).
-- [ ] Total bundle size and re-render count reduced significantly.
+- [ ] January–March payments apply 20% default discount; April–December payments apply 10% default discount; delinquent years apply 0%.
+- [ ] Authorized Assessors can edit Basic Tax, SEF Tax, or Discount Rate, instantly recalculating the Net Amount Due.
+- [ ] Every manual field change creates an individual field-level audit entry in `rptar_audit_logs`.
+- [ ] Posted payment snapshots final applied values and resists retroactive modification from subsequent policy changes.
+- [ ] Smart upsert matches on `td_number`, accurately classifying rows into valid states, without altering financial payment history.
+- [ ] Idempotent CSV re-upload creates zero unnecessary updates.
+- [ ] Polling `setInterval` completely removed in favor of Supabase Realtime WebSockets.
 
 ---
 

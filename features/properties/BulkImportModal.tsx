@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { Property, User } from '@/types';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { Property, User, CsvImportRowState, CsvImportBatch } from '@/types';
 import { BARANGAYS, PROPERTY_CLASSES } from '@/constants';
 import { api } from '@/services/api';
 import {
@@ -25,10 +25,12 @@ import {
   Download,
   FileSpreadsheet,
   CheckCircle2,
-  AlertTriangle,
-  XCircle,
   ArrowRight,
   RefreshCw,
+  FolderClock,
+  Filter,
+  ShieldCheck,
+  FileText,
 } from 'lucide-react';
 
 interface BulkImportModalProps {
@@ -37,6 +39,13 @@ interface BulkImportModalProps {
   onImportComplete: () => void;
   properties: Property[];
   currentUser: User;
+}
+
+interface RowDiff {
+  field: string;
+  label: string;
+  oldVal: string;
+  newVal: string;
 }
 
 interface ParsedRow {
@@ -52,8 +61,10 @@ interface ParsedRow {
   marketValue: number;
   assessedValue: number;
   lastPaidYear: number;
-  isValid: boolean;
+  state: CsvImportRowState;
   isShell: boolean;
+  existingProperty?: Property;
+  diffs: RowDiff[];
   error?: string;
 }
 
@@ -64,15 +75,52 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
   properties,
   currentUser,
 }) => {
-  const [tab, setTab] = useState<'import' | 'export'>('import');
+  const [tab, setTab] = useState<'import' | 'history' | 'export'>('import');
   const [parsedRows, setParsedRows] = useState<ParsedRow[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [importResult, setImportResult] = useState<string | null>(null);
+  const [importResult, setImportResult] = useState<{
+    inserted: number;
+    updated: number;
+    unchanged: number;
+    batchId?: number;
+  } | null>(null);
+  const [uploadedFileName, setUploadedFileName] = useState<string>('');
+  const [selectedBarangayFilter, setSelectedBarangayFilter] = useState<string>('All');
+  const [stateFilter, setStateFilter] = useState<string>('ALL');
+  const [importBatches, setImportBatches] = useState<CsvImportBatch[]>([]);
+  const [isLoadingBatches, setIsLoadingBatches] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Handle CSV Parsing
-  const handleParseCsv = (rawText: string) => {
+  // Load batch history whenever modal opens or history tab is selected
+  const loadBatchHistory = async () => {
+    setIsLoadingBatches(true);
+    try {
+      const batches = await api.getImportBatches();
+      setImportBatches(batches);
+    } catch (err) {
+      console.error('Failed to load import batches:', err);
+    } finally {
+      setIsLoadingBatches(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      loadBatchHistory();
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (tab === 'history') {
+      loadBatchHistory();
+    }
+  }, [tab]);
+
+  // Parse CSV with "Last Import Wins" Smart Upsert & Row Classification
+  const handleParseCsv = (rawText: string, fileName = 'Import.csv') => {
     setImportResult(null);
+    setUploadedFileName(fileName);
 
     const lines = rawText.split(/\r?\n/).filter((line) => line.trim() !== '');
     if (lines.length <= 1) {
@@ -80,13 +128,26 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
       return;
     }
 
-    const rows: ParsedRow[] = [];
-    const seenTds = new Set<string>();
+    // Step 1: Pre-scan to find last line index for each TD Number ("Last Import Wins" rule)
+    const rawParsed: Array<{
+      line: number;
+      tdNumber: string;
+      previousTdNumber: string;
+      pin: string;
+      ownerName: string;
+      address: string;
+      rawBarangay: string;
+      rawPropertyClass: string;
+      lotAreaSqm: number;
+      marketValue: number;
+      assessedValue: number;
+      lastPaidYear: number;
+    }> = [];
 
-    // Skip header line (index 0)
+    const lastSeenIndexByTd = new Map<string, number>();
+
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i];
-      // Basic CSV splitter (handles commas inside quotes)
       const cols = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || line.split(',');
       const cleanCols = cols.map((c) => c.replace(/^"|"$/g, '').trim());
 
@@ -95,67 +156,179 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
       const pin = cleanCols[2] || '';
       const ownerName = cleanCols[3] || '';
       const address = cleanCols[4] || 'Santa Rosa, Nueva Ecija';
-      let barangay = cleanCols[5] || BARANGAYS[0];
-      let propertyClass = cleanCols[6] || 'Residential';
+      const rawBarangay = cleanCols[5] || '';
+      const rawPropertyClass = cleanCols[6] || '';
       const lotAreaSqm = parseFloat(cleanCols[7]) || 100;
       const marketValue = parseFloat(cleanCols[8]) || 0;
       const assessedValue = parseFloat(cleanCols[9]) || 0;
-      const lastPaidYear = parseInt(cleanCols[10]) || 2025;
+      const lastPaidYear = parseInt(cleanCols[10], 10) || 2025;
 
-      let isValid = true;
-      let error = '';
-
-      // Validate TD
-      if (!tdNumber) {
-        isValid = false;
-        error = 'Missing TD Number';
-      } else if (seenTds.has(tdNumber)) {
-        isValid = false;
-        error = 'Duplicate TD in CSV';
-      } else if (properties.some((p) => p.tdNumber === tdNumber)) {
-        isValid = false;
-        error = 'TD already exists in database';
-      } else {
-        seenTds.add(tdNumber);
-      }
-
-      // Validate Owner
-      if (isValid && !ownerName) {
-        isValid = false;
-        error = 'Missing Owner Name';
-      }
-
-      // Normalize Barangay
-      const matchedBrgy = BARANGAYS.find((b) => b.toLowerCase() === barangay.toLowerCase());
-      if (matchedBrgy) {
-        barangay = matchedBrgy;
-      }
-
-      // Normalize Class
-      const matchedClass = PROPERTY_CLASSES.find(
-        (c) => c.toLowerCase() === propertyClass.toLowerCase()
-      );
-      if (matchedClass) {
-        propertyClass = matchedClass;
-      }
-
-      const isShell = assessedValue === 0;
-
-      rows.push({
+      const record = {
         line: i + 1,
         tdNumber,
         previousTdNumber,
         pin,
         ownerName,
         address,
-        barangay,
-        propertyClass,
+        rawBarangay,
+        rawPropertyClass,
         lotAreaSqm,
         marketValue,
         assessedValue,
         lastPaidYear,
-        isValid,
+      };
+
+      rawParsed.push(record);
+      if (tdNumber) {
+        lastSeenIndexByTd.set(tdNumber.toUpperCase(), i + 1);
+      }
+    }
+
+    // Step 2: Classify each row with strict validation and smart upsert logic
+    const rows: ParsedRow[] = [];
+
+    for (const r of rawParsed) {
+      const upperTd = r.tdNumber.toUpperCase();
+      let state: CsvImportRowState = 'VALID_NEW';
+      let error = '';
+      const diffs: RowDiff[] = [];
+
+      // TD validation
+      if (!r.tdNumber) {
+        state = 'INVALID_TD';
+        error = 'Missing TD Number';
+      }
+
+      // Barangay validation against Santa Rosa 33 Barangays
+      let barangay = r.rawBarangay || BARANGAYS[0];
+      const matchedBrgy = BARANGAYS.find((b) => b.toLowerCase() === r.rawBarangay.toLowerCase());
+      if (matchedBrgy) {
+        barangay = matchedBrgy;
+      } else if (r.rawBarangay && !matchedBrgy) {
+        state = 'INVALID_BARANGAY';
+        error = `Unrecognized Barangay: "${r.rawBarangay}" (Must be one of Santa Rosa's 33)`;
+      }
+
+      // Property Class validation
+      let propertyClass = r.rawPropertyClass || 'Residential';
+      const matchedClass = PROPERTY_CLASSES.find(
+        (c) => c.toLowerCase() === r.rawPropertyClass.toLowerCase()
+      );
+      if (matchedClass) {
+        propertyClass = matchedClass;
+      } else if (r.rawPropertyClass && !matchedClass) {
+        state = 'INVALID_PROPERTY_CLASS';
+        error = `Unrecognized Property Class: "${r.rawPropertyClass}"`;
+      }
+
+      // Numeric validation
+      if (isNaN(r.assessedValue) || r.assessedValue < 0) {
+        state = 'INVALID_NUMERIC_VALUE';
+        error = 'Assessed Value must be a valid non-negative number';
+      }
+
+      // "Last Import Wins" duplicate resolution within same CSV file
+      if (!error && upperTd) {
+        const lastLine = lastSeenIndexByTd.get(upperTd);
+        if (lastLine !== undefined && lastLine !== r.line) {
+          state = 'DUPLICATE_IN_FILE';
+          error = `Superseded by line ${lastLine} ("Last Import Wins")`;
+        }
+      }
+
+      // Match against existing database properties for Smart Upsert
+      let existingProperty: Property | undefined;
+      if (!error && state !== 'DUPLICATE_IN_FILE' && upperTd) {
+        existingProperty = properties.find((p) => p.tdNumber.toUpperCase() === upperTd);
+
+        if (existingProperty) {
+          // Compare fields to detect diffs
+          if (existingProperty.ownerName.trim().toUpperCase() !== r.ownerName.trim().toUpperCase()) {
+            diffs.push({
+              field: 'ownerName',
+              label: 'Owner',
+              oldVal: existingProperty.ownerName,
+              newVal: r.ownerName,
+            });
+          }
+          if (existingProperty.address.trim() !== r.address.trim()) {
+            diffs.push({
+              field: 'address',
+              label: 'Address',
+              oldVal: existingProperty.address,
+              newVal: r.address,
+            });
+          }
+          if (existingProperty.barangay !== barangay) {
+            diffs.push({
+              field: 'barangay',
+              label: 'Barangay',
+              oldVal: existingProperty.barangay,
+              newVal: barangay,
+            });
+          }
+          if (existingProperty.propertyClass !== propertyClass) {
+            diffs.push({
+              field: 'propertyClass',
+              label: 'Class',
+              oldVal: existingProperty.propertyClass,
+              newVal: propertyClass,
+            });
+          }
+          if (Math.abs(existingProperty.assessedValue - r.assessedValue) > 0.01) {
+            diffs.push({
+              field: 'assessedValue',
+              label: 'Assessed Value',
+              oldVal: `₱${existingProperty.assessedValue.toLocaleString()}`,
+              newVal: `₱${r.assessedValue.toLocaleString()}`,
+            });
+          }
+          if (Math.abs(existingProperty.marketValue - r.marketValue) > 0.01) {
+            diffs.push({
+              field: 'marketValue',
+              label: 'Market Value',
+              oldVal: `₱${existingProperty.marketValue.toLocaleString()}`,
+              newVal: `₱${r.marketValue.toLocaleString()}`,
+            });
+          }
+          if (Math.abs((existingProperty.lotAreaSqm || 0) - r.lotAreaSqm) > 0.01) {
+            diffs.push({
+              field: 'lotAreaSqm',
+              label: 'Lot Area',
+              oldVal: `${existingProperty.lotAreaSqm || 0} sqm`,
+              newVal: `${r.lotAreaSqm} sqm`,
+            });
+          }
+
+          if (diffs.length > 0) {
+            state = 'VALID_UPDATE';
+          } else {
+            state = 'UNCHANGED';
+          }
+        } else {
+          state = 'VALID_NEW';
+        }
+      }
+
+      const isShell = r.assessedValue === 0;
+
+      rows.push({
+        line: r.line,
+        tdNumber: r.tdNumber,
+        previousTdNumber: r.previousTdNumber,
+        pin: r.pin,
+        ownerName: r.ownerName,
+        address: r.address,
+        barangay,
+        propertyClass,
+        lotAreaSqm: r.lotAreaSqm,
+        marketValue: r.marketValue,
+        assessedValue: r.assessedValue,
+        lastPaidYear: r.lastPaidYear,
+        state,
         isShell,
+        existingProperty,
+        diffs,
         error,
       });
     }
@@ -170,27 +343,30 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
     const reader = new FileReader();
     reader.onload = (event) => {
       const text = event.target?.result as string;
-      handleParseCsv(text);
+      handleParseCsv(text, file.name);
     };
     reader.readAsText(file);
   };
 
-  const handleDownloadTemplate = () => {
+  // Download official Santa Rosa 33-Barangay template
+  const handleDownloadTemplate = (filterBarangay = 'All') => {
     const header =
       'TD_Number,Previous_TD,PIN,Owner_Name,Address,Barangay,Property_Class,Lot_Area_Sqm,Market_Value,Assessed_Value,Last_Paid_Year\n';
+
+    const targetBrgy = filterBarangay !== 'All' ? filterBarangay : 'Rizal (Poblacion)';
     const sampleRows = [
-      'TD-SR-2026-001,TD-92-001,024-05-001-01-001,JUAN DELA CRUZ,"Lot 4 Blk 2, Rizal St.",Rizal (Poblacion),Dwell House,250,500000,100000,2023',
-      'TD-SR-2026-002,TD-88-004,024-05-002-02-015,MARIA SANTOS,"Sitio Central, Aguinaldo",Aguinaldo,Agricultural,2500,800000,320000,2025',
-      'TD-SR-2026-003,,024-05-006-03-099,SANTA ROSA MILLING CORP,"National Highway, San Isidro",San Isidro,Industrial,1200,3500000,1750000,2024',
-      'TD-SR-2026-004,,024-05-008-01-042,AGRI DIESEL POWER INC,"Purok 3, La Fuente",La Fuente,Machinery,100,600000,300000,2025',
-      'TD-SR-2026-005,TD-91-005,024-05-010-04-008,PEDRO PENDUKO,"Lot 10, Berang",Berang,Residential,180,200000,40000,2022',
+      `TD-SR-2026-001,TD-92-001,024-05-001-01-001,JUAN DELA CRUZ,"Lot 4 Blk 2, Rizal St.",${targetBrgy},Dwell House,250,500000,100000,2023`,
+      `TD-SR-2026-002,TD-88-004,024-05-002-02-015,MARIA SANTOS,"Sitio Central",${filterBarangay !== 'All' ? targetBrgy : 'Aguinaldo'},Agricultural,2500,800000,320000,2025`,
+      `TD-SR-2026-003,,024-05-006-03-099,SANTA ROSA MILLING CORP,"National Highway",${filterBarangay !== 'All' ? targetBrgy : 'San Isidro'},Industrial,1200,3500000,1750000,2024`,
+      `TD-SR-2026-004,,024-05-008-01-042,AGRI DIESEL POWER INC,"Purok 3",${filterBarangay !== 'All' ? targetBrgy : 'La Fuente'},Machinery,100,600000,300000,2025`,
+      `TD-SR-2026-005,TD-91-005,024-05-010-04-008,PEDRO PENDUKO,"Lot 10",${filterBarangay !== 'All' ? targetBrgy : 'Berang'},Residential,180,200000,40000,2022`,
     ].join('\n');
 
     const blob = new Blob([header + sampleRows], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'Santa_Rosa_RPTAR_Import_Template.csv';
+    link.download = `Santa_Rosa_${filterBarangay !== 'All' ? filterBarangay.replace(/\s+/g, '_') : '33_Barangay'}_RPTAR_Template.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -214,12 +390,15 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
   };
 
   const handleCommitImport = async () => {
-    const validToImport = parsedRows.filter((r) => r.isValid);
-    if (validToImport.length === 0) return;
+    // Process actionable rows (New, Update, or Unchanged)
+    const actionableRows = parsedRows.filter(
+      (r) => r.state === 'VALID_NEW' || r.state === 'VALID_UPDATE' || r.state === 'UNCHANGED'
+    );
+    if (actionableRows.length === 0) return;
 
     setIsProcessing(true);
     try {
-      const payload = validToImport.map((r) => ({
+      const payload = actionableRows.map((r) => ({
         tdNumber: r.tdNumber,
         previousTdNumber: r.previousTdNumber,
         pin: r.pin,
@@ -231,12 +410,34 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
         marketValue: r.marketValue,
         assessedValue: r.assessedValue,
         lastPaidYear: r.lastPaidYear,
+        isShellRecord: r.isShell,
       }));
 
-      const res = await api.bulkImportProperties(payload, currentUser.name, currentUser.stationId);
-      setImportResult(`✅ Successfully imported ${res.insertedCount} properties!`);
+      const detectedBarangay =
+        selectedBarangayFilter !== 'All'
+          ? selectedBarangayFilter
+          : actionableRows[0]?.barangay || 'Multiple';
+
+      const res = await api.bulkImportProperties(
+        payload,
+        currentUser.name,
+        currentUser.stationId,
+        {
+          filename: uploadedFileName || `Santa_Rosa_Import_${new Date().toISOString().split('T')[0]}.csv`,
+          barangay: detectedBarangay,
+        }
+      );
+
+      setImportResult({
+        inserted: res.insertedCount,
+        updated: res.updatedCount,
+        unchanged: res.unchangedCount,
+        batchId: res.batchId,
+      });
+
       setParsedRows([]);
       onImportComplete();
+      await loadBatchHistory();
     } catch (err) {
       alert(`Import failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
@@ -244,26 +445,57 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
     }
   };
 
-  const validCount = parsedRows.filter((r) => r.isValid).length;
-  const shellCount = parsedRows.filter((r) => r.isValid && r.isShell).length;
-  const errorCount = parsedRows.filter((r) => !r.isValid).length;
+  // Filtered rows for the staging table
+  const filteredRows = useMemo(() => {
+    return parsedRows.filter((row) => {
+      const matchesBrgy =
+        selectedBarangayFilter === 'All' || row.barangay === selectedBarangayFilter;
+      const matchesState =
+        stateFilter === 'ALL' ||
+        (stateFilter === 'ACTIONABLE' &&
+          (row.state === 'VALID_NEW' || row.state === 'VALID_UPDATE' || row.state === 'UNCHANGED')) ||
+        row.state === stateFilter;
+      return matchesBrgy && matchesState;
+    });
+  }, [parsedRows, selectedBarangayFilter, stateFilter]);
+
+  // Counts
+  const newCount = parsedRows.filter((r) => r.state === 'VALID_NEW').length;
+  const updateCount = parsedRows.filter((r) => r.state === 'VALID_UPDATE').length;
+  const unchangedCount = parsedRows.filter((r) => r.state === 'UNCHANGED').length;
+  const duplicateCount = parsedRows.filter((r) => r.state === 'DUPLICATE_IN_FILE').length;
+  const errorCount = parsedRows.filter(
+    (r) =>
+      r.state === 'INVALID_TD' ||
+      r.state === 'INVALID_BARANGAY' ||
+      r.state === 'INVALID_PROPERTY_CLASS' ||
+      r.state === 'INVALID_NUMERIC_VALUE' ||
+      r.state === 'CONFLICTING_RECORD'
+  ).length;
+
+  const totalActionable = newCount + updateCount + unchangedCount;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-4xl max-h-[90vh] p-0 flex flex-col overflow-hidden gap-0 border-slate-200 shadow-2xl">
+      <DialogContent className="max-w-5xl max-h-[92vh] p-0 flex flex-col overflow-hidden gap-0 border-slate-200 shadow-2xl">
         {/* Modal Header */}
         <DialogHeader className="bg-slate-900 px-6 py-4 text-white border-b border-slate-800 shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-blue-600 rounded-lg shrink-0">
-              <FileSpreadsheet size={18} className="text-white" />
-            </div>
-            <div>
-              <DialogTitle className="font-bold text-base leading-tight text-white">
-                Santa Rosa RPTAR — Bulk Masterlist Engine
-              </DialogTitle>
-              <DialogDescription className="text-xs text-slate-400 mt-0.5">
-                Batch Import Legacy Spreadsheets & Export Official Municipal Masterlist
-              </DialogDescription>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-emerald-600 rounded-xl shrink-0 shadow-inner">
+                <FileSpreadsheet size={20} className="text-white" />
+              </div>
+              <div>
+                <DialogTitle className="font-extrabold text-base leading-tight text-white flex items-center gap-2">
+                  <span>Santa Rosa Assessor Import Center</span>
+                  <Badge variant="outline" className="text-[10px] px-2 py-0.5 border-emerald-500/40 text-emerald-300 bg-emerald-500/10 font-mono">
+                    33 Barangays • Smart Upsert
+                  </Badge>
+                </DialogTitle>
+                <DialogDescription className="text-xs text-slate-400 mt-0.5">
+                  Automated "Last Import Wins" Reconciliation, Assessment Staging & Ingestion Audit
+                </DialogDescription>
+              </div>
             </div>
           </div>
         </DialogHeader>
@@ -275,55 +507,106 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
             onClick={() => setTab('import')}
             className={`pb-3 flex items-center gap-2 border-b-2 transition-colors ${
               tab === 'import'
-                ? 'border-blue-600 text-blue-600'
+                ? 'border-emerald-600 text-emerald-700'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
             <Upload size={14} />
-            Bulk CSV / Excel Import
+            Smart CSV Staging & Upsert
+            {parsedRows.length > 0 && (
+              <span className="ml-1 px-1.5 py-0.2 bg-emerald-100 text-emerald-800 rounded-full text-[10px] font-mono font-bold">
+                {parsedRows.length}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('history')}
+            className={`pb-3 flex items-center gap-2 border-b-2 transition-colors ${
+              tab === 'history'
+                ? 'border-emerald-600 text-emerald-700'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <FolderClock size={14} />
+            Ingestion History & Folder
+            {importBatches.length > 0 && (
+              <span className="ml-1 px-1.5 py-0.2 bg-slate-200 text-slate-700 rounded-full text-[10px] font-mono font-bold">
+                {importBatches.length}
+              </span>
+            )}
           </button>
           <button
             type="button"
             onClick={() => setTab('export')}
             className={`pb-3 flex items-center gap-2 border-b-2 transition-colors ${
               tab === 'export'
-                ? 'border-blue-600 text-blue-600'
+                ? 'border-emerald-600 text-emerald-700'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
             <Download size={14} />
-            Export Masterlist (.csv / .xlsx)
+            Export RPTAR Masterlist
           </button>
         </div>
 
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto space-y-5 text-xs flex-1">
-          {tab === 'import' ? (
+          {tab === 'import' && (
             <div className="space-y-4">
-              {/* Actions row */}
-              <div className="flex flex-wrap items-center justify-between gap-3 bg-blue-50/60 p-4 rounded-xl border border-blue-200">
+              {/* Financial Protection Notice Banner */}
+              <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-xl flex items-start gap-3 text-emerald-900">
+                <ShieldCheck size={18} className="text-emerald-600 shrink-0 mt-0.5" />
+                <div className="text-[11px] leading-relaxed">
+                  <span className="font-bold text-emerald-950">Statutory Financial History Protection: </span>
+                  Bulk CSV uploads update parcel assessments and valuations. Historical cashier payments and property{' '}
+                  <code className="bg-emerald-100/80 px-1 py-0.5 rounded font-mono font-bold text-emerald-800">
+                    last_paid_year
+                  </code>{' '}
+                  are strictly immutable and preserved against overwrite.
+                </div>
+              </div>
+
+              {/* Upload & Barangay Filtering Control */}
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
                 <div className="space-y-1">
-                  <p className="font-bold text-blue-900">Upload Legacy Spreadsheet (.csv)</p>
-                  <p className="text-slate-600 text-[11px]">
-                    Validated against <strong>33 Santa Rosa Barangays</strong> & <strong>5 Classifications</strong> (Agricultural, Dwell House, Industrial, Machinery, Residential).
+                  <p className="font-bold text-slate-900 text-sm">Upload Barangay Assessment CSV</p>
+                  <p className="text-slate-500 text-[11px]">
+                    Supports all <strong>33 Santa Rosa Barangays</strong>. Successive uploads for the same barangay automatically resolve conflicts via <em>"Last Import Wins"</em>.
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleDownloadTemplate}
-                    className="border-blue-300 text-blue-700 hover:bg-slate-100 font-semibold gap-1.5"
-                  >
-                    <Download size={13} />
-                    Download CSV Template
-                  </Button>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Template download with Barangay selector */}
+                  <div className="flex items-center border border-slate-300 rounded-lg overflow-hidden bg-white">
+                    <select
+                      value={selectedBarangayFilter}
+                      onChange={(e) => setSelectedBarangayFilter(e.target.value)}
+                      className="text-xs bg-transparent px-2.5 py-1.5 text-slate-700 font-medium focus:outline-none cursor-pointer"
+                      title="Filter by Santa Rosa Barangay"
+                    >
+                      <option value="All">All 33 Barangays</option>
+                      {BARANGAYS.map((b) => (
+                        <option key={b} value={b}>
+                          {b}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadTemplate(selectedBarangayFilter)}
+                      className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold border-l border-slate-300 flex items-center gap-1 text-[11px] transition-colors"
+                      title="Download Santa Rosa CSV Template"
+                    >
+                      <Download size={12} />
+                      Template
+                    </button>
+                  </div>
+
                   <Button
                     type="button"
                     size="sm"
                     onClick={() => fileInputRef.current?.click()}
-                    className="bg-blue-600 hover:bg-blue-500 text-white font-bold gap-1.5"
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold gap-1.5 shadow-sm"
                   >
                     <Upload size={13} />
                     Select CSV File
@@ -340,86 +623,209 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
 
               {/* Import Result Alert */}
               {importResult && (
-                <div className="p-3 bg-emerald-50 border border-emerald-300 text-emerald-800 rounded-xl font-semibold flex items-center gap-2">
-                  <CheckCircle2 size={16} className="text-emerald-600" />
-                  {importResult}
+                <div className="p-4 bg-emerald-50 border border-emerald-300 text-emerald-900 rounded-xl font-medium flex items-center gap-3 shadow-sm">
+                  <CheckCircle2 size={20} className="text-emerald-600 shrink-0" />
+                  <div className="text-xs space-y-0.5">
+                    <p className="font-bold text-emerald-950">
+                      Batch Ingestion Successfully Completed!
+                    </p>
+                    <p className="text-emerald-800">
+                      {importResult.inserted} New Parcels inserted • {importResult.updated} Existing Parcels updated • {importResult.unchanged} Unchanged records preserved
+                      {importResult.batchId ? ` (Batch Ref #${importResult.batchId})` : ''}.
+                    </p>
+                  </div>
                 </div>
               )}
 
               {/* Diagnostic Review Matrix */}
               {parsedRows.length > 0 && (
                 <div className="space-y-3">
-                  {/* KPI Badges */}
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-xl flex items-center justify-between">
-                      <div>
-                        <p className="text-[10px] font-bold uppercase text-emerald-800">Ready to Import</p>
-                        <p className="text-lg font-black text-emerald-900 font-mono">{validCount}</p>
-                      </div>
-                      <CheckCircle2 size={20} className="text-emerald-600" />
+                  {/* KPI Summary Grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+                    <div className="bg-emerald-50 border border-emerald-200 p-2.5 rounded-xl">
+                      <p className="text-[10px] font-bold uppercase text-emerald-800">New Parcels</p>
+                      <p className="text-base font-black text-emerald-950 font-mono mt-0.5">{newCount}</p>
                     </div>
 
-                    <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl flex items-center justify-between">
-                      <div>
-                        <p className="text-[10px] font-bold uppercase text-amber-800">Provisional Shells</p>
-                        <p className="text-lg font-black text-amber-900 font-mono">{shellCount}</p>
-                      </div>
-                      <AlertTriangle size={20} className="text-amber-600" />
+                    <div className="bg-blue-50 border border-blue-200 p-2.5 rounded-xl">
+                      <p className="text-[10px] font-bold uppercase text-blue-800">Updates (Diffs)</p>
+                      <p className="text-base font-black text-blue-950 font-mono mt-0.5">{updateCount}</p>
                     </div>
 
-                    <div className="bg-rose-50 border border-rose-200 p-3 rounded-xl flex items-center justify-between">
-                      <div>
-                        <p className="text-[10px] font-bold uppercase text-rose-800">Errors (Skipped)</p>
-                        <p className="text-lg font-black text-rose-900 font-mono">{errorCount}</p>
-                      </div>
-                      <XCircle size={20} className="text-rose-600" />
+                    <div className="bg-slate-100 border border-slate-200 p-2.5 rounded-xl">
+                      <p className="text-[10px] font-bold uppercase text-slate-600">Unchanged</p>
+                      <p className="text-base font-black text-slate-800 font-mono mt-0.5">{unchangedCount}</p>
+                    </div>
+
+                    <div className="bg-amber-50 border border-amber-200 p-2.5 rounded-xl">
+                      <p className="text-[10px] font-bold uppercase text-amber-800">Superseded</p>
+                      <p className="text-base font-black text-amber-950 font-mono mt-0.5">{duplicateCount}</p>
+                    </div>
+
+                    <div className="bg-rose-50 border border-rose-200 p-2.5 rounded-xl">
+                      <p className="text-[10px] font-bold uppercase text-rose-800">Errors (Skipped)</p>
+                      <p className="text-base font-black text-rose-950 font-mono mt-0.5">{errorCount}</p>
                     </div>
                   </div>
 
-                  {/* Preview Table */}
-                  <div className="border border-slate-200 rounded-xl overflow-hidden max-h-60 overflow-y-auto">
+                  {/* Staging Filter Controls */}
+                  <div className="flex items-center justify-between gap-3 text-xs bg-slate-50 px-3 py-2 rounded-lg border border-slate-200">
+                    <div className="flex items-center gap-2">
+                      <Filter size={13} className="text-slate-400" />
+                      <span className="font-bold text-slate-700">Filter View:</span>
+                      <div className="flex gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setStateFilter('ALL')}
+                          className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                            stateFilter === 'ALL'
+                              ? 'bg-slate-800 text-white'
+                              : 'bg-white text-slate-600 hover:bg-slate-200'
+                          }`}
+                        >
+                          All ({parsedRows.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStateFilter('VALID_UPDATE')}
+                          className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                            stateFilter === 'VALID_UPDATE'
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-white text-blue-700 hover:bg-blue-50'
+                          }`}
+                        >
+                          Updates ({updateCount})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStateFilter('VALID_NEW')}
+                          className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                            stateFilter === 'VALID_NEW'
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-white text-emerald-700 hover:bg-emerald-50'
+                          }`}
+                        >
+                          New ({newCount})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStateFilter('DUPLICATE_IN_FILE')}
+                          className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                            stateFilter === 'DUPLICATE_IN_FILE'
+                              ? 'bg-amber-600 text-white'
+                              : 'bg-white text-amber-700 hover:bg-amber-50'
+                          }`}
+                        >
+                          Superseded ({duplicateCount})
+                        </button>
+                        {errorCount > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setStateFilter('INVALID_TD')}
+                            className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                              stateFilter.startsWith('INVALID')
+                                ? 'bg-rose-600 text-white'
+                                : 'bg-white text-rose-700 hover:bg-rose-50'
+                            }`}
+                          >
+                            Errors ({errorCount})
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <span className="text-[11px] text-slate-500 font-mono">
+                      Showing {filteredRows.length} of {parsedRows.length} rows
+                    </span>
+                  </div>
+
+                  {/* Staging Matrix Table */}
+                  <div className="border border-slate-200 rounded-xl overflow-hidden max-h-72 overflow-y-auto bg-white shadow-inner">
                     <Table>
-                      <TableHeader className="bg-slate-100 text-[10px] uppercase font-bold sticky top-0">
+                      <TableHeader className="bg-slate-100 text-[10px] uppercase font-bold sticky top-0 z-10">
                         <TableRow>
-                          <TableHead className="w-16">Line</TableHead>
+                          <TableHead className="w-14">Line</TableHead>
                           <TableHead>TD Number</TableHead>
                           <TableHead>Owner Name</TableHead>
                           <TableHead>Barangay & Class</TableHead>
                           <TableHead className="text-right">Assessed Val</TableHead>
-                          <TableHead>Diagnostic Status</TableHead>
+                          <TableHead>Reconciliation State</TableHead>
+                          <TableHead>Assessment Diffs</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {parsedRows.map((row) => (
+                        {filteredRows.map((row) => (
                           <TableRow
                             key={row.line}
-                            className={row.isValid ? 'hover:bg-blue-50/30' : 'bg-rose-50/50'}
+                            className={`transition-colors ${
+                              row.state === 'VALID_NEW'
+                                ? 'hover:bg-emerald-50/40 bg-emerald-50/10'
+                                : row.state === 'VALID_UPDATE'
+                                ? 'hover:bg-blue-50/40 bg-blue-50/15 font-medium'
+                                : row.state === 'UNCHANGED'
+                                ? 'text-slate-600 hover:bg-slate-50'
+                                : row.state === 'DUPLICATE_IN_FILE'
+                                ? 'opacity-60 bg-amber-50/30'
+                                : 'bg-rose-50/40'
+                            }`}
                           >
-                            <TableCell className="font-mono text-slate-500">{row.line}</TableCell>
-                            <TableCell className="font-mono font-bold text-slate-800">
+                            <TableCell className="font-mono text-slate-400 text-[11px]">
+                              {row.line}
+                            </TableCell>
+                            <TableCell className="font-mono font-bold text-slate-900">
                               {row.tdNumber || 'N/A'}
                             </TableCell>
                             <TableCell className="font-semibold text-slate-800 uppercase">
                               {row.ownerName || 'N/A'}
                             </TableCell>
                             <TableCell className="text-slate-600">
-                              {row.barangay} • <span className="font-bold">{row.propertyClass}</span>
+                              <span className="font-medium text-slate-800">{row.barangay}</span>
+                              <span className="text-slate-400"> • </span>
+                              <span className="text-slate-600">{row.propertyClass}</span>
                             </TableCell>
-                            <TableCell className="text-right font-mono font-bold text-slate-800">
-                              ₱{row.assessedValue.toLocaleString()}
+                            <TableCell className="text-right font-mono font-bold text-slate-900">
+                              ₱{row.assessedValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </TableCell>
                             <TableCell>
-                              {row.isValid ? (
-                                <Badge
-                                  variant={row.isShell ? 'warning' : 'success'}
-                                  className="text-[10px] font-bold"
-                                >
-                                  {row.isShell ? 'Shell Record' : 'Valid'}
+                              {row.state === 'VALID_NEW' && (
+                                <Badge className="text-[9px] bg-emerald-100 text-emerald-800 border-emerald-300 font-bold">
+                                  New Parcel
                                 </Badge>
+                              )}
+                              {row.state === 'VALID_UPDATE' && (
+                                <Badge className="text-[9px] bg-blue-100 text-blue-800 border-blue-300 font-bold">
+                                  Update ({row.diffs.length} {row.diffs.length === 1 ? 'diff' : 'diffs'})
+                                </Badge>
+                              )}
+                              {row.state === 'UNCHANGED' && (
+                                <Badge variant="outline" className="text-[9px] text-slate-500 font-medium">
+                                  Unchanged
+                                </Badge>
+                              )}
+                              {row.state === 'DUPLICATE_IN_FILE' && (
+                                <Badge className="text-[9px] bg-amber-100 text-amber-800 border-amber-300 font-bold">
+                                  Superseded
+                                </Badge>
+                              )}
+                              {row.state.startsWith('INVALID') && (
+                                <Badge variant="destructive" className="text-[9px] font-bold">
+                                  {row.error || 'Invalid'}
+                                </Badge>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-[11px]">
+                              {row.diffs.length > 0 ? (
+                                <div className="space-y-0.5">
+                                  {row.diffs.map((d, didx) => (
+                                    <div key={didx} className="text-[10px] text-slate-600">
+                                      <span className="font-bold text-slate-700">{d.label}: </span>
+                                      <span className="line-through text-slate-400 mr-1">{d.oldVal}</span>
+                                      <span className="text-blue-700 font-bold">→ {d.newVal}</span>
+                                    </div>
+                                  ))}
+                                </div>
                               ) : (
-                                <Badge variant="destructive" className="text-[10px] font-bold">
-                                  {row.error}
-                                </Badge>
+                                <span className="text-slate-400 text-[10px]">—</span>
                               )}
                             </TableCell>
                           </TableRow>
@@ -430,16 +836,110 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
                 </div>
               )}
             </div>
-          ) : (
-            /* Export Tab */
+          )}
+
+          {tab === 'history' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm">Assessor Ingestion Folder & Batch Logs</h3>
+                  <p className="text-slate-500 text-xs mt-0.5">
+                    Historical record of CSV spreadsheets uploaded to Santa Rosa RPTAR masterlist.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={loadBatchHistory}
+                  disabled={isLoadingBatches}
+                  className="text-xs font-semibold gap-1.5"
+                >
+                  <RefreshCw size={12} className={isLoadingBatches ? 'animate-spin' : ''} />
+                  Refresh History
+                </Button>
+              </div>
+
+              {isLoadingBatches ? (
+                <div className="p-12 text-center text-slate-400 font-medium">
+                  <RefreshCw className="animate-spin inline-block mb-2 text-slate-400" size={24} />
+                  <p>Loading historical ingestion batches...</p>
+                </div>
+              ) : importBatches.length === 0 ? (
+                <div className="border border-dashed border-slate-300 rounded-xl p-12 text-center space-y-2">
+                  <FolderClock size={36} className="text-slate-300 mx-auto" />
+                  <p className="font-bold text-slate-700">No Import Batches Recorded Yet</p>
+                  <p className="text-slate-500 text-xs max-w-sm mx-auto">
+                    When you commit a CSV import in the Staging tab, its batch record and row metrics will be cataloged here.
+                  </p>
+                </div>
+              ) : (
+                <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm">
+                  <Table>
+                    <TableHeader className="bg-slate-100 text-[10px] uppercase font-bold">
+                      <TableRow>
+                        <TableHead>Batch ID</TableHead>
+                        <TableHead>Filename</TableHead>
+                        <TableHead>Barangay</TableHead>
+                        <TableHead className="text-center">Total Rows</TableHead>
+                        <TableHead className="text-center">New Inserted</TableHead>
+                        <TableHead className="text-center">Updated</TableHead>
+                        <TableHead className="text-center">Unchanged</TableHead>
+                        <TableHead>Assessor</TableHead>
+                        <TableHead>Imported Date</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {importBatches.map((b) => (
+                        <TableRow key={b.id || b.batchName} className="hover:bg-slate-50">
+                          <TableCell className="font-mono font-bold text-slate-900">
+                            #{b.id || b.batchName}
+                          </TableCell>
+                          <TableCell className="font-mono text-slate-700 text-xs">
+                            <div className="flex items-center gap-1.5">
+                              <FileText size={13} className="text-blue-600 shrink-0" />
+                              <span className="truncate max-w-[180px]" title={b.filename}>{b.filename}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="font-medium text-slate-800">
+                            {b.barangay}
+                          </TableCell>
+                          <TableCell className="text-center font-mono font-bold">
+                            {b.totalRows}
+                          </TableCell>
+                          <TableCell className="text-center font-mono font-bold text-emerald-700">
+                            +{b.insertedRows}
+                          </TableCell>
+                          <TableCell className="text-center font-mono font-bold text-blue-700">
+                            {b.updatedRows}
+                          </TableCell>
+                          <TableCell className="text-center font-mono text-slate-500">
+                            {b.unchangedRows}
+                          </TableCell>
+                          <TableCell className="text-slate-700 text-xs">
+                            {b.importedBy}
+                          </TableCell>
+                          <TableCell className="text-slate-500 font-mono text-[11px] whitespace-nowrap">
+                            {b.createdAt ? new Date(b.createdAt).toLocaleString() : 'N/A'}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab === 'export' && (
             <div className="space-y-4 text-center py-8">
-              <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-2 border border-blue-200">
+              <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-2 border border-emerald-200 shadow-sm">
                 <FileSpreadsheet size={32} />
               </div>
               <div className="max-w-md mx-auto space-y-1">
                 <h3 className="font-bold text-slate-900 text-sm">Export Santa Rosa RPTAR Masterlist</h3>
                 <p className="text-slate-500 text-xs">
-                  Generate a complete spreadsheet of all <strong>{properties.length} properties</strong>, taxable valuations, compliance statuses, and active delinquent debts.
+                  Generate a complete municipal spreadsheet of all <strong>{properties.length} active parcels</strong>, assessed valuations, last paid years, and delinquent liabilities.
                 </p>
               </div>
 
@@ -447,10 +947,10 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
                 <Button
                   type="button"
                   onClick={handleExportMasterlist}
-                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold gap-2 mx-auto"
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold gap-2 mx-auto shadow-sm"
                 >
                   <Download size={16} />
-                  Download Masterlist Spreadsheet (.csv)
+                  Download Complete Masterlist (.csv)
                 </Button>
               </div>
             </div>
@@ -458,7 +958,7 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <DialogFooter className="bg-slate-50 px-6 py-3 border-t border-slate-200 flex flex-row justify-between items-center shrink-0">
+        <DialogFooter className="bg-slate-50 px-6 py-3.5 border-t border-slate-200 flex flex-row justify-between items-center shrink-0">
           <Button
             type="button"
             variant="outline"
@@ -469,22 +969,22 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
             Close
           </Button>
 
-          {tab === 'import' && parsedRows.length > 0 && validCount > 0 && (
+          {tab === 'import' && parsedRows.length > 0 && totalActionable > 0 && (
             <Button
               type="button"
               size="sm"
               onClick={handleCommitImport}
               disabled={isProcessing}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs gap-2"
+              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs gap-2 shadow-sm"
             >
               {isProcessing ? (
                 <>
                   <RefreshCw className="animate-spin" size={14} />
-                  Importing & Generating Quarters...
+                  Executing Smart Upsert Reconciliation...
                 </>
               ) : (
                 <>
-                  Commit & Import {validCount} Records
+                  Commit & Upsert {totalActionable} Records
                   <ArrowRight size={14} />
                 </>
               )}

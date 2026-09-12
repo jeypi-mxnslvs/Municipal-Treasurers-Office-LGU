@@ -1,82 +1,181 @@
-import { Property, TaxYearRecord, CalculationResult } from '../types';
+import { Property, TaxYearRecord, CalculationResult, MunicipalTaxSettings, TaxSummary } from '../types';
 import { 
   CURRENT_YEAR, 
-  BASE_TAX_RATE, 
   PENALTY_RATE_PER_MONTH, 
   MAX_PENALTY_MONTHS 
 } from '../constants';
 
+export interface TaxCalculationOptions {
+  paymentDate?: Date;
+  settings?: Partial<MunicipalTaxSettings>;
+  overrides?: Record<number, {
+    basicTax?: number;
+    sefTax?: number;
+    discountRate?: number;
+    reason?: string;
+  }>;
+}
+
 /**
- * Calculates the delinquency and tax due for a property based on its last paid year.
- * Implements the "Arrears First" rule logic.
+ * Pure RA 7160 Tax Engine with Municipal Payment-Date Discount Policies
+ * Implements Santa Rosa LGU Treasury Rules:
+ * - Jan 1 - Mar 31: 20% early payment discount (default)
+ * - Apr 1 - Dec 31: 10% regular prompt discount (payment-date-based policy)
+ * - Delinquent prior years: strictly 0% discount
+ * - Authorized Assessor manual overrides for Basic Tax, SEF Tax, and Discount Rate
+ * - Dynamic derived calculation of Discount Amount and Net Due
  */
-export const calculateTaxLiability = (property: Property): CalculationResult => {
+export const calculateTaxLiability = (
+  property: Property,
+  options?: TaxCalculationOptions
+): CalculationResult => {
   const records: TaxYearRecord[] = [];
   let grandTotal = 0;
-  
-  // We calculate from the year AFTER the last paid year, up to the CURRENT YEAR.
+  let totalBasicTax = 0;
+  let totalSefTax = 0;
+  let totalBaseTax = 0;
+  let totalPenalty = 0;
+  let totalDiscount = 0;
+
+  const paymentDate = options?.paymentDate || new Date();
+  const paymentMonth = paymentDate.getMonth() + 1; // 1 (Jan) to 12 (Dec)
+
+  // Configurable Municipal Tax Policy settings (defaults to Santa Rosa standards)
+  const earlyDiscountRate = options?.settings?.earlyPaymentDiscountRate ?? 0.20;
+  const earlyStartMonth = options?.settings?.earlyPaymentStartMonth ?? 1;
+  const earlyEndMonth = options?.settings?.earlyPaymentEndMonth ?? 3;
+  const regularPromptRate = options?.settings?.regularPromptDiscountRate ?? 0.10;
+  const delinquentRate = options?.settings?.delinquentDiscountRate ?? 0.00;
+
+  // Calculate from year after lastPaidYear up to CURRENT_YEAR
   const startYear = property.lastPaidYear + 1;
   const endYear = CURRENT_YEAR;
 
-  // If fully paid
   if (startYear > endYear) {
-    return { records: [], grandTotal: 0 };
+    return {
+      propertyId: property.id,
+      currentTd: property.tdNumber,
+      ownerName: property.ownerName,
+      assessedValue: property.assessedValue,
+      records: [],
+      summary: {
+        totalBasicTax: 0,
+        totalSefTax: 0,
+        totalBaseTax: 0,
+        totalPenalty: 0,
+        totalDiscount: 0,
+        grandTotal: 0,
+      },
+      grandTotal: 0,
+    };
   }
 
   for (let year = startYear; year <= endYear; year++) {
     const isCurrentYear = year === CURRENT_YEAR;
-    
-    // Base Tax Calculation
-    const baseTax = property.assessedValue * BASE_TAX_RATE;
-    
-    // Penalty Calculation Logic
-    let monthsDelayed: number;
+    const isDelinquent = year < CURRENT_YEAR;
 
-    if (year < CURRENT_YEAR) {
-      // Past years are calculated from Jan 1st of that year to Present
-      // Simplified logic: If it's a full past year, we consider it 12 months late per year passed
-      // relative to the tax cycle.
-      // However, the rule says max 36 months (72%).
-      // Let's approximate delay based on how many months have passed since Jan 1 of that tax year.
-      const monthsSinceStartOfTaxYear = ((CURRENT_YEAR - year) * 12) + (new Date().getMonth() + 1);
+    // 1. Statutory Base Tax: 1% Basic Tax + 1% SEF Tax = 2% Base Rate
+    const systemBasicTax = Math.round(property.assessedValue * 0.01 * 100) / 100;
+    const systemSefTax = Math.round(property.assessedValue * 0.01 * 100) / 100;
+    const systemBaseTax = systemBasicTax + systemSefTax;
+
+    // 2. Penalty Calculation Logic (RA 7160 Sec. 255: 2% per month, capped at 36 months / 72%)
+    let monthsDelayed: number;
+    if (isDelinquent) {
+      const monthsSinceStartOfTaxYear = ((CURRENT_YEAR - year) * 12) + paymentMonth;
       monthsDelayed = monthsSinceStartOfTaxYear;
     } else {
-      // Current year: Delay starts usually after Q1 or based on local ordinance. 
-      // For this prototype, let's assume delay counts if we are past March (Q1).
-      // If currently January, delay is 0.
-      const currentMonthIndex = new Date().getMonth(); // 0 = Jan
-      // Assuming penalty starts accruing immediately for prototype simplicity or after Jan.
-      monthsDelayed = currentMonthIndex + 1; 
+      monthsDelayed = paymentMonth;
     }
 
-    // Cap the effective months for penalty calculation
     const effectiveMonths = Math.min(monthsDelayed, MAX_PENALTY_MONTHS);
-    
-    // Calculate Penalty Amount
     const penaltyRate = effectiveMonths * PENALTY_RATE_PER_MONTH;
-    const penaltyAmount = baseTax * penaltyRate;
+    const penaltyAmount = Math.round(systemBaseTax * penaltyRate * 100) / 100;
 
-    const totalDue = baseTax + penaltyAmount;
-    
+    // 3. System-calculated Discount Rate strictly based on payment date & delinquency
+    let systemDiscountRate: number;
+    if (isDelinquent) {
+      // Delinquent prior-year obligations: strictly 0% discount
+      systemDiscountRate = delinquentRate;
+    } else {
+      // Current year payment-date-based discount policy:
+      if (paymentMonth >= earlyStartMonth && paymentMonth <= earlyEndMonth) {
+        systemDiscountRate = earlyDiscountRate; // 20% Jan 1 - Mar 31
+      } else {
+        systemDiscountRate = regularPromptRate; // 10% Apr 1 - Dec 31
+      }
+    }
+
+    // 4. Authorized Assessor Manual Overrides
+    const override = options?.overrides?.[year];
+    const isManuallyEdited = Boolean(
+      override && (
+        override.basicTax !== undefined ||
+        override.sefTax !== undefined ||
+        override.discountRate !== undefined
+      )
+    );
+
+    const appliedBasicTax = override?.basicTax !== undefined ? override.basicTax : systemBasicTax;
+    const appliedSefTax = override?.sefTax !== undefined ? override.sefTax : systemSefTax;
+    const appliedDiscountRate = override?.discountRate !== undefined ? override.discountRate : systemDiscountRate;
+    const editReason = override?.reason;
+
+    // 5. Derived Computations:
+    // - Base Tax = Basic Tax + SEF Tax
+    // - Discount Amount = (Basic Tax + SEF Tax) * Discount Rate
+    // - Net Due = Base Tax + Penalty - Discount Amount
+    const appliedBaseTax = Math.round((appliedBasicTax + appliedSefTax) * 100) / 100;
+    const discountAmount = Math.round(appliedBaseTax * appliedDiscountRate * 100) / 100;
+    const totalDue = Math.max(0, Math.round((appliedBaseTax + penaltyAmount - discountAmount) * 100) / 100);
+
     records.push({
       year,
       status: isCurrentYear ? 'Current' : 'Delinquent',
-      baseTax,
-      monthsDelayed: effectiveMonths, // Displaying the capped months used for calc
+      basicTax: appliedBasicTax,
+      sefTax: appliedSefTax,
+      baseTax: appliedBaseTax,
+      systemBasicTax,
+      systemSefTax,
+      systemDiscountRate,
+      isManuallyEdited,
+      editReason,
+      monthsDelayed: effectiveMonths,
       penaltyRate,
       penaltyAmount,
+      discountRate: appliedDiscountRate,
+      discountAmount,
       totalDue,
-      isPayable: true // In a real app, logic might force sequential selection
+      isPayable: true,
     });
 
+    totalBasicTax += appliedBasicTax;
+    totalSefTax += appliedSefTax;
+    totalBaseTax += appliedBaseTax;
+    totalPenalty += penaltyAmount;
+    totalDiscount += discountAmount;
     grandTotal += totalDue;
   }
 
-  // Sort: Oldest years first (Standard ledger view)
+  // Sort: Oldest years first (Standard ledger view / Arrears-First rule)
   records.sort((a, b) => a.year - b.year);
 
+  const summary: TaxSummary = {
+    totalBasicTax: Math.round(totalBasicTax * 100) / 100,
+    totalSefTax: Math.round(totalSefTax * 100) / 100,
+    totalBaseTax: Math.round(totalBaseTax * 100) / 100,
+    totalPenalty: Math.round(totalPenalty * 100) / 100,
+    totalDiscount: Math.round(totalDiscount * 100) / 100,
+    grandTotal: Math.round(grandTotal * 100) / 100,
+  };
+
   return {
+    propertyId: property.id,
+    currentTd: property.tdNumber,
+    ownerName: property.ownerName,
+    assessedValue: property.assessedValue,
     records,
-    grandTotal
+    summary,
+    grandTotal: Math.round(grandTotal * 100) / 100,
   };
 };

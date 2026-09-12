@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { Property, CalculationResult, OfficialReceipt, DashboardStatsData, User, RptarAuditLog, SyncStatusData, SecurityAuditLog, AccountableFormBooklet, TaxYearRecord } from '@/types';
+import { Property, CalculationResult, OfficialReceipt, DashboardStatsData, User, RptarAuditLog, SyncStatusData, SecurityAuditLog, AccountableFormBooklet, TaxYearRecord, MunicipalTaxSettings, CsvImportBatch } from '@/types';
 import { calculateTaxLiability as localCalculateTaxLiability } from '@/utils/taxLogic';
 import { createSessionToken } from '@/lib/crypto';
 
@@ -35,9 +35,10 @@ export const api = {
     }));
   },
 
-  async getPropertyAssessment(propertyId: string, fallbackProp?: Property): Promise<CalculationResult> {
+  async getPropertyAssessment(propertyId: string, fallbackProp?: Property, customSettings?: MunicipalTaxSettings): Promise<CalculationResult> {
+    const settings = customSettings || await this.getMunicipalTaxSettings();
     if (fallbackProp) {
-      return localCalculateTaxLiability(fallbackProp);
+      return localCalculateTaxLiability(fallbackProp, { paymentDate: new Date(), settings });
     }
     const { data } = await supabase.from('properties').select('*').eq('id', propertyId).single();
     if (data) {
@@ -53,7 +54,7 @@ export const api = {
         propertyClass: data.property_class,
         isShellRecord: Boolean(data.is_shell_record)
       };
-      return localCalculateTaxLiability(prop);
+      return localCalculateTaxLiability(prop, { paymentDate: new Date(), settings });
     }
     return { records: [], grandTotal: 0 };
   },
@@ -205,12 +206,17 @@ export const api = {
           .eq('id', payload.propertyId);
       }
 
-      // Save payment record
+      // Save payment record with full immutable snapshot
       await supabase.from('payment_postings').insert({
         receipt_no: receiptNo,
         property_id: payload.propertyId,
         paid_records: payload.paidRecords,
         total_paid: totalPaid,
+        basic_tax: basicTax,
+        sef_tax: sefTax,
+        penalty_amount: penalty,
+        discount_amount: discount,
+        discount_rate: payload.paidRecords[0]?.discountRate || 0,
         tender_type: payload.tenderType,
         tender_reference: payload.tenderReference,
         status: 'ISSUED',
@@ -753,41 +759,294 @@ export const api = {
     };
   },
 
-  // 8. Bulk CSV / Excel Import
+  // 8. Field-Level Audit Trail
+  async logFieldOverrideAudit(entry: {
+    propertyId?: number | string;
+    tdNumber: string;
+    taxYear: number;
+    fieldChanged: 'BASIC_TAX' | 'SEF_TAX' | 'DISCOUNT_RATE' | string;
+    originalValue: number;
+    newValue: number;
+    reason: string;
+    assessorName: string;
+    stationId?: string;
+    userId?: number;
+    userRole?: string;
+  }): Promise<void> {
+    try {
+      const difference = Math.round((entry.newValue - entry.originalValue) * 100) / 100;
+      await supabase.from('rptar_audit_logs').insert({
+        property_id: entry.propertyId ? Number(entry.propertyId) : null,
+        td_number: entry.tdNumber,
+        tax_year: entry.taxYear,
+        action_type: 'FIELD_OVERRIDE',
+        field_changed: entry.fieldChanged,
+        original_value: entry.originalValue,
+        new_value: entry.newValue,
+        difference,
+        reason: entry.reason,
+        assessor_name: entry.assessorName,
+        station_id: entry.stationId || 'Assessor-Desk-02',
+        details: `Manually modified ${entry.fieldChanged} on Tax Year ${entry.taxYear} from ${entry.originalValue} to ${entry.newValue} (${difference > 0 ? '+' : ''}${difference}). Reason: ${entry.reason}`
+      });
+    } catch (err) {
+      console.warn('Field override audit logging failed:', err);
+    }
+  },
+
+  // 9. Municipal Tax Settings
+  async getMunicipalTaxSettings(): Promise<MunicipalTaxSettings> {
+    try {
+      const { data, error } = await supabase
+        .from('municipal_tax_settings')
+        .select('*')
+        .order('id', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error || !data) {
+        return {
+          earlyPaymentDiscountRate: 0.20,
+          earlyPaymentStartMonth: 1,
+          earlyPaymentEndMonth: 3,
+          regularPromptDiscountRate: 0.10,
+          delinquentDiscountRate: 0.00,
+          effectiveYear: 2026,
+          updatedBy: 'System Default'
+        };
+      }
+
+      return {
+        id: data.id,
+        earlyPaymentDiscountRate: Number(data.early_payment_discount_rate),
+        earlyPaymentStartMonth: Number(data.early_payment_start_month),
+        earlyPaymentEndMonth: Number(data.early_payment_end_month),
+        regularPromptDiscountRate: Number(data.regular_prompt_discount_rate),
+        delinquentDiscountRate: Number(data.delinquent_discount_rate),
+        effectiveYear: Number(data.effective_year),
+        updatedBy: data.updated_by,
+        updatedAt: data.updated_at
+      };
+    } catch {
+      return {
+        earlyPaymentDiscountRate: 0.20,
+        earlyPaymentStartMonth: 1,
+        earlyPaymentEndMonth: 3,
+        regularPromptDiscountRate: 0.10,
+        delinquentDiscountRate: 0.00,
+        effectiveYear: 2026,
+        updatedBy: 'System Default'
+      };
+    }
+  },
+
+  async updateMunicipalTaxSettings(settings: Partial<MunicipalTaxSettings>, updatedBy = 'admin'): Promise<MunicipalTaxSettings> {
+    const row = {
+      early_payment_discount_rate: settings.earlyPaymentDiscountRate ?? 0.20,
+      early_payment_start_month: settings.earlyPaymentStartMonth ?? 1,
+      early_payment_end_month: settings.earlyPaymentEndMonth ?? 3,
+      regular_prompt_discount_rate: settings.regularPromptDiscountRate ?? 0.10,
+      delinquent_discount_rate: settings.delinquentDiscountRate ?? 0.00,
+      effective_year: settings.effectiveYear || 2026,
+      updated_by: updatedBy,
+      updated_at: new Date().toISOString()
+    };
+
+    const { data, error } = await supabase
+      .from('municipal_tax_settings')
+      .insert(row)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return {
+      id: data.id,
+      earlyPaymentDiscountRate: Number(data.early_payment_discount_rate),
+      earlyPaymentStartMonth: Number(data.early_payment_start_month),
+      earlyPaymentEndMonth: Number(data.early_payment_end_month),
+      regularPromptDiscountRate: Number(data.regular_prompt_discount_rate),
+      delinquentDiscountRate: Number(data.delinquent_discount_rate),
+      effectiveYear: Number(data.effective_year),
+      updatedBy: data.updated_by,
+      updatedAt: data.updated_at
+    };
+  },
+
+  // 10. Assessor Import Center & Smart Barangay Upsert
+  async getImportBatches(barangay?: string): Promise<CsvImportBatch[]> {
+    try {
+      let query = supabase.from('csv_import_batches').select('*').order('id', { ascending: false });
+      if (barangay && barangay !== 'All') {
+        query = query.eq('barangay', barangay);
+      }
+      const { data, error } = await query;
+      if (error || !data) return [];
+      return data.map(b => ({
+        id: b.id,
+        batchName: b.batch_name,
+        barangay: b.barangay,
+        filename: b.filename,
+        totalRows: b.total_rows,
+        insertedRows: b.inserted_rows,
+        updatedRows: b.updated_rows,
+        unchangedRows: b.unchanged_rows,
+        importedBy: b.imported_by,
+        createdAt: b.created_at
+      }));
+    } catch {
+      return [];
+    }
+  },
+
   async bulkImportProperties(
     properties: Array<Partial<Property> & Record<string, unknown>>,
     assessorName = 'Juan Reyes',
-    stationId = 'Assessor-Desk-02'
-  ): Promise<{ message: string; insertedCount: number; skippedCount: number; errors: unknown[] }> {
-    const rows = properties
-      .filter(p => p.tdNumber)
-      .map(p => ({
-        td_number: p.tdNumber,
-        previous_td_number: p.previousTdNumber || '',
-        owner_name: p.ownerName || 'Unnamed Taxpayer',
-        address: p.address || '',
-        barangay: p.barangay || 'Poblacion',
-        assessed_value: Number(p.assessedValue) || 0,
-        last_paid_year: Number(p.lastPaidYear) || 2020,
-        property_class: p.propertyClass || 'Residential',
-        is_shell_record: Boolean(p.isShellRecord)
-      }));
+    stationId = 'Assessor-Desk-02',
+    batchMetadata?: { filename?: string; barangay?: string }
+  ): Promise<{
+    message: string;
+    insertedCount: number;
+    updatedCount: number;
+    unchangedCount: number;
+    batchId?: number;
+    errors: unknown[];
+  }> {
+    const validRows = properties.filter(p => p.tdNumber);
+    if (validRows.length === 0) {
+      return { message: 'No valid rows to import', insertedCount: 0, updatedCount: 0, unchangedCount: 0, errors: [] };
+    }
 
-    const { error } = await supabase.from('properties').insert(rows);
-    if (error) throw error;
+    // Fetch existing properties to perform Smart Upsert and protect financial history
+    const tdNumbers = validRows.map(p => String(p.tdNumber).trim());
+    const { data: existingData } = await supabase
+      .from('properties')
+      .select('*')
+      .in('td_number', tdNumbers);
 
+    const existingMap = new Map<string, Record<string, unknown>>();
+    (existingData || []).forEach(p => existingMap.set(p.td_number, p));
+
+    let insertedCount = 0;
+    let updatedCount = 0;
+    let unchangedCount = 0;
+    const errors: unknown[] = [];
+
+    const toInsert: Array<Record<string, unknown>> = [];
+
+    for (const p of validRows) {
+      const cleanTd = String(p.tdNumber).trim();
+      const existing = existingMap.get(cleanTd);
+
+      if (!existing) {
+        // VALID_NEW: Insert brand new property record
+        toInsert.push({
+          td_number: cleanTd,
+          previous_td_number: p.previousTdNumber || '',
+          pin: p.pin || '',
+          owner_name: p.ownerName || 'Unnamed Taxpayer',
+          address: p.address || 'Santa Rosa, Nueva Ecija',
+          barangay: p.barangay || 'Poblacion',
+          property_class: p.propertyClass || 'Residential',
+          lot_area_sqm: Number(p.lotAreaSqm) || 100,
+          market_value: Number(p.marketValue) || 0,
+          assessed_value: Number(p.assessedValue) || 0,
+          last_paid_year: Number(p.lastPaidYear) || 2025, // Initial setup for new parcel only
+          is_shell_record: Boolean(p.isShellRecord),
+          updated_at: new Date().toISOString()
+        });
+        insertedCount++;
+      } else {
+        // Existing parcel: check if UNCHANGED for idempotency
+        const isIdentical =
+          String(existing.owner_name).trim() === String(p.ownerName || '').trim() &&
+          String(existing.address).trim() === String(p.address || '').trim() &&
+          String(existing.barangay).trim() === String(p.barangay || '').trim() &&
+          String(existing.property_class).trim() === String(p.propertyClass || '').trim() &&
+          Number(existing.assessed_value) === Number(p.assessedValue || 0) &&
+          Number(existing.market_value) === Number(p.marketValue || 0);
+
+        if (isIdentical) {
+          unchangedCount++;
+        } else {
+          // VALID_UPDATE: Smart upsert without overwriting financial history (last_paid_year)
+          try {
+            await supabase
+              .from('properties')
+              .update({
+                previous_td_number: p.previousTdNumber || existing.previous_td_number,
+                pin: p.pin || existing.pin,
+                owner_name: p.ownerName || existing.owner_name,
+                address: p.address || existing.address,
+                barangay: p.barangay || existing.barangay,
+                property_class: p.propertyClass || existing.property_class,
+                lot_area_sqm: p.lotAreaSqm !== undefined ? Number(p.lotAreaSqm) : existing.lot_area_sqm,
+                market_value: p.marketValue !== undefined ? Number(p.marketValue) : existing.market_value,
+                assessed_value: p.assessedValue !== undefined ? Number(p.assessedValue) : existing.assessed_value,
+                is_shell_record: p.isShellRecord !== undefined ? Boolean(p.isShellRecord) : existing.is_shell_record,
+                updated_at: new Date().toISOString()
+                // NOTE: last_paid_year is deliberately EXCLUDED to preserve treasury payment history!
+              })
+              .eq('td_number', cleanTd);
+
+            updatedCount++;
+          } catch (updateErr) {
+            errors.push(updateErr);
+          }
+        }
+      }
+    }
+
+    if (toInsert.length > 0) {
+      const { error: insertError } = await supabase.from('properties').insert(toInsert);
+      if (insertError) {
+        errors.push(insertError);
+        insertedCount = 0;
+      }
+    }
+
+    // Record Ingestion Batch
+    const primaryBarangay = batchMetadata?.barangay || validRows[0]?.barangay || 'Multiple';
+    const filename = batchMetadata?.filename || `Santa_Rosa_Import_${new Date().toISOString().split('T')[0]}.csv`;
+    let batchId: number | undefined;
+
+    try {
+      const { data: batchData } = await supabase.from('csv_import_batches').insert({
+        batch_name: `Batch-${Date.now().toString().slice(-6)}`,
+        barangay: primaryBarangay,
+        filename,
+        total_rows: validRows.length,
+        inserted_rows: insertedCount,
+        updated_rows: updatedCount,
+        unchanged_rows: unchangedCount,
+        imported_by: assessorName
+      }).select('id').single();
+
+      batchId = batchData?.id;
+    } catch {
+      // Non-blocking
+    }
+
+    // Log high-level audit entry
     await supabase.from('rptar_audit_logs').insert({
-      td_number: 'BULK-IMPORT',
-      action_type: 'CREATED',
+      td_number: 'BATCH-IMPORT',
+      action_type: 'UPDATED',
       assessor_name: assessorName,
       station_id: stationId,
-      details: `Bulk imported ${rows.length} properties via CSV`
+      details: `Smart upsert processed ${validRows.length} parcels (${insertedCount} new, ${updatedCount} updated, ${unchangedCount} unchanged) for Barangay ${primaryBarangay}`
     });
 
-    return { message: 'Import successful', insertedCount: rows.length, skippedCount: 0, errors: [] };
+    return {
+      message: `Processed ${validRows.length} parcels: ${insertedCount} added, ${updatedCount} updated, ${unchangedCount} unchanged`,
+      insertedCount,
+      updatedCount,
+      unchangedCount,
+      batchId,
+      errors
+    };
   },
 
   getBackupDownloadUrl(): string {
     return '#';
   }
 };
+
