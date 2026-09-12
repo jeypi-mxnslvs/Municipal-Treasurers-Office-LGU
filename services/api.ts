@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { Property, CalculationResult, OfficialReceipt, DashboardStatsData, User, RptarAuditLog, SyncStatusData, SecurityAuditLog, AccountableFormBooklet } from '@/types';
+import { Property, CalculationResult, OfficialReceipt, DashboardStatsData, User, RptarAuditLog, SyncStatusData, SecurityAuditLog, AccountableFormBooklet, TaxYearRecord } from '@/types';
 import { calculateTaxLiability as localCalculateTaxLiability } from '@/utils/taxLogic';
 import { createSessionToken } from '@/lib/crypto';
 
@@ -135,7 +135,7 @@ export const api = {
   // 2. Payments & Receipts
   async postPayment(payload: {
     propertyId: string | number;
-    paidRecords: any[];
+    paidRecords: TaxYearRecord[];
     tenderType: string;
     tenderReference?: string;
     postedBy: string;
@@ -143,10 +143,10 @@ export const api = {
     userId?: number;
   }): Promise<OfficialReceipt> {
     const totalPaid = payload.paidRecords.reduce((sum, r) => sum + (r.totalDue || 0), 0);
-    const basicTax = payload.paidRecords.reduce((sum, r) => sum + (r.basicTax || (r.assessedValue || 0) * 0.01), 0);
-    const sefTax = payload.paidRecords.reduce((sum, r) => sum + (r.sefTax || (r.assessedValue || 0) * 0.01), 0);
-    const penalty = payload.paidRecords.reduce((sum, r) => sum + (r.penalty || 0), 0);
-    const discount = payload.paidRecords.reduce((sum, r) => sum + (r.discount || 0), 0);
+    const basicTax = payload.paidRecords.reduce((sum, r) => sum + (r.basicTax ?? ((r.baseTax || 0) / 2)), 0);
+    const sefTax = payload.paidRecords.reduce((sum, r) => sum + (r.sefTax ?? ((r.baseTax || 0) / 2)), 0);
+    const penalty = payload.paidRecords.reduce((sum, r) => sum + (r.penaltyAmount || 0), 0);
+    const discount = payload.paidRecords.reduce((sum, r) => sum + (r.discountAmount || 0), 0);
 
     let receiptNo = '';
     let status: 'ISSUED' | 'VOIDED' = 'ISSUED';
@@ -754,7 +754,11 @@ export const api = {
   },
 
   // 8. Bulk CSV / Excel Import
-  async bulkImportProperties(properties: any[], assessorName = 'Juan Reyes', stationId = 'Assessor-Desk-02'): Promise<{ message: string; insertedCount: number; skippedCount: number; errors: any[] }> {
+  async bulkImportProperties(
+    properties: Array<Partial<Property> & Record<string, unknown>>,
+    assessorName = 'Juan Reyes',
+    stationId = 'Assessor-Desk-02'
+  ): Promise<{ message: string; insertedCount: number; skippedCount: number; errors: unknown[] }> {
     const rows = properties
       .filter(p => p.tdNumber)
       .map(p => ({
