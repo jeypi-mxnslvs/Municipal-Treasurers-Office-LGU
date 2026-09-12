@@ -211,32 +211,98 @@ export const api = {
     const clearedCount = list.filter(p => !p.is_shell_record && (p.last_paid_year || 0) >= 2026).length;
     const delinquentCount = list.filter(p => !p.is_shell_record && (p.last_paid_year || 0) < 2026).length;
 
+    // Calculate dynamic arrears and barangay metrics
+    let totalDelinquentDebt = 0;
+    const barangayMap = new Map<string, { properties: number; outstandingDebt: number }>();
+
+    for (const p of list) {
+      const bgy = p.barangay || 'Unassigned';
+      const isDelinquent = !p.is_shell_record && (p.last_paid_year || 0) < 2026;
+      let debt = 0;
+
+      if (!p.is_shell_record) {
+        const mappedProperty: Property = {
+          id: String(p.id),
+          tdNumber: p.td_number,
+          previousTdNumber: p.previous_td_number || '',
+          pin: p.pin,
+          ownerName: p.owner_name,
+          address: p.address || '',
+          barangay: p.barangay || '',
+          propertyClass: p.property_class || 'Residential',
+          assessedValue: Number(p.assessed_value) || 0,
+          marketValue: Number(p.market_value) || 0,
+          lastPaidYear: p.last_paid_year || 2020,
+          isShellRecord: p.is_shell_record || false
+        };
+        debt = localCalculateTaxLiability(mappedProperty).grandTotal;
+      }
+
+      if (isDelinquent) {
+        totalDelinquentDebt += debt;
+      }
+
+      const existing = barangayMap.get(bgy) || { properties: 0, outstandingDebt: 0 };
+      barangayMap.set(bgy, {
+        properties: existing.properties + 1,
+        outstandingDebt: existing.outstandingDebt + (isDelinquent ? debt : 0)
+      });
+    }
+
+    // Query real collections from payment_postings
+    const { data: payments } = await supabase
+      .from('payment_postings')
+      .select('total_paid, posted_at');
+
+    let totalCollected = 0;
+    let todayCollected = 0;
+    const monthlyCollections = new Map<string, number>();
+    const todayDate = new Date().toDateString();
+
+    if (payments && payments.length > 0) {
+      for (const pay of payments) {
+        const amount = Number(pay.total_paid) || 0;
+        totalCollected += amount;
+
+        const payDate = pay.posted_at ? new Date(pay.posted_at) : new Date();
+        if (payDate.toDateString() === todayDate) {
+          todayCollected += amount;
+        }
+
+        const monthShort = payDate.toLocaleString('en-US', { month: 'short' });
+        monthlyCollections.set(monthShort, (monthlyCollections.get(monthShort) || 0) + amount);
+      }
+    }
+
+    const standardMonths = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const currentMonthIdx = new Date().getMonth();
+    const monthsToShow = standardMonths.slice(0, Math.max(8, currentMonthIdx + 1));
+    const targetSchedule = [150000, 120000, 200000, 100000, 90000, 160000, 80000, 80000, 120000, 100000, 90000, 150000];
+
+    const monthlyTrend = monthsToShow.map((month, idx) => ({
+      month,
+      collections: monthlyCollections.get(month) || 0,
+      target: targetSchedule[idx] || 100000
+    }));
+
+    const barangayBreakdown = Array.from(barangayMap.entries()).map(([barangay, data]) => ({
+      barangay,
+      properties: data.properties,
+      outstandingDebt: Math.round(data.outstandingDebt)
+    }));
+
     return {
       totalProperties,
       clearedCount,
       delinquentCount,
       partialCount: 0,
       shellRecordsCount,
-      totalCollected: 125000,
-      todayCollected: 18500,
-      totalDelinquentDebt: 340329,
+      totalCollected: Math.round(totalCollected),
+      todayCollected: Math.round(todayCollected),
+      totalDelinquentDebt: Math.round(totalDelinquentDebt),
       collectionEfficiency: totalProperties > 0 ? Math.round((clearedCount / totalProperties) * 100) : 0,
-      monthlyTrend: [
-        { month: 'Jan', collections: 125000, target: 150000 },
-        { month: 'Feb', collections: 98000, target: 120000 },
-        { month: 'Mar', collections: 240000, target: 200000 },
-        { month: 'Apr', collections: 85000, target: 100000 },
-        { month: 'May', collections: 67000, target: 90000 },
-        { month: 'Jun', collections: 180000, target: 160000 },
-        { month: 'Jul', collections: 72000, target: 80000 },
-        { month: 'Aug', collections: 65000, target: 80000 }
-      ],
-      barangayBreakdown: [
-        { barangay: 'Acacia', properties: list.filter(p => p.barangay === 'Acacia').length, outstandingDebt: 7550 },
-        { barangay: 'San Jose', properties: list.filter(p => p.barangay === 'San Jose').length, outstandingDebt: 17730 },
-        { barangay: 'Industrial Zone', properties: list.filter(p => p.barangay === 'Industrial Zone').length, outstandingDebt: 311850 },
-        { barangay: 'Poblacion', properties: list.filter(p => p.barangay?.includes('Poblacion')).length, outstandingDebt: 3199 }
-      ]
+      monthlyTrend,
+      barangayBreakdown
     };
   },
 

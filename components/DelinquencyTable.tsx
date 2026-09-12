@@ -76,22 +76,8 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
   }
 
   // Quick Scope Helpers
-  const handleSelectOneQuarter = () => {
+  const handleSelectOldestYear = () => {
     setSelectedMaxIndex(0);
-  };
-
-  const handleSelectOneYear = () => {
-    if (records.length === 0) return;
-    const firstYear = records[0].year;
-    let maxIdx = 0;
-    for (let i = 0; i < records.length; i++) {
-      if (records[i].year === firstYear) {
-        maxIdx = i;
-      } else {
-        break;
-      }
-    }
-    setSelectedMaxIndex(maxIdx);
   };
 
   const handleSelectAll = () => {
@@ -114,7 +100,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
             </h3>
           </div>
           <Badge variant="secondary" className="gap-1 bg-emerald-50 text-emerald-700 border-emerald-200 font-semibold">
-            <Calendar size={12} /> {records.length} Total Periods Owed
+            <Calendar size={12} /> {records.length} {records.length === 1 ? 'Tax Year Owed' : 'Tax Years Owed'}
           </Badge>
         </div>
 
@@ -127,38 +113,42 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
             type="button"
             variant={selectedMaxIndex === 0 ? "default" : "outline"}
             size="sm"
-            onClick={handleSelectOneQuarter}
+            onClick={handleSelectOldestYear}
             className="h-8 gap-1.5 rounded-lg text-xs"
           >
             <CheckSquare size={13} />
-            Pay Next 1 Quarter
+            Pay Oldest Year ({records[0].year})
           </Button>
 
-          <Button
-            type="button"
-            variant={
-              selectedMaxIndex > 0 && selectedMaxIndex < records.length - 1 && records[selectedMaxIndex].year === records[0].year
-                ? "default"
-                : "outline"
-            }
-            size="sm"
-            onClick={handleSelectOneYear}
-            className="h-8 gap-1.5 rounded-lg text-xs"
-          >
-            <Layers size={13} />
-            Pay 1 Full Year ({records[0].year})
-          </Button>
+          {records.length > 2 && (
+            <Button
+              type="button"
+              variant={
+                selectedMaxIndex === records.length - 2
+                  ? "default"
+                  : "outline"
+              }
+              size="sm"
+              onClick={() => setSelectedMaxIndex(records.length - 2)}
+              className="h-8 gap-1.5 rounded-lg text-xs"
+            >
+              <Layers size={13} />
+              Pay Prior Arrears (Excl. Current Year)
+            </Button>
+          )}
 
-          <Button
-            type="button"
-            variant={selectedMaxIndex === records.length - 1 ? "default" : "outline"}
-            size="sm"
-            onClick={handleSelectAll}
-            className="h-8 gap-1.5 rounded-lg text-xs"
-          >
-            <Sparkles size={13} />
-            Pay All Dues (Full Settlement)
-          </Button>
+          {records.length > 1 && (
+            <Button
+              type="button"
+              variant={selectedMaxIndex === records.length - 1 ? "default" : "outline"}
+              size="sm"
+              onClick={handleSelectAll}
+              className="h-8 gap-1.5 rounded-lg text-xs"
+            >
+              <Sparkles size={13} />
+              Pay All Dues ({records.length} Years)
+            </Button>
+          )}
         </div>
       </div>
       
@@ -295,7 +285,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
           <div>
             <span className="text-slate-400 text-xs uppercase tracking-wider font-semibold">
-              Selected Scope Due ({selectedRecords.length} of {records.length} Quarters)
+              Selected Scope Due ({selectedRecords.length} of {records.length} {records.length === 1 ? 'Year' : 'Years'})
             </span>
             <p className="text-[11px] text-slate-400">
               {selectedRecords.length < records.length ? 'Partial settlement based on sequential Arrears-First order' : 'Full outstanding liability settlement'}

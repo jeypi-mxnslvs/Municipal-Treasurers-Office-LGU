@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Property, TaxYearRecord, User, OfficialReceipt, DashboardStatsData, TaxSummary } from './types';
 import { api } from './services/api';
 import Header from './components/Header';
@@ -54,7 +54,7 @@ const App: React.FC = () => {
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
 
   // Load properties and dashboard stats from API
-  const loadData = async (silent = false) => {
+  const loadData = useCallback(async (silent = false) => {
     if (!currentUser) return;
     if (!silent) setIsLoading(true);
     try {
@@ -69,13 +69,13 @@ const App: React.FC = () => {
     } finally {
       if (!silent) setIsLoading(false);
     }
-  };
+  }, [currentUser]);
 
   useEffect(() => {
     if (currentUser) {
       loadData();
     }
-  }, [currentUser]);
+  }, [currentUser, loadData]);
 
   // Live Multi-Assessor Background Synchronization
   useEffect(() => {
@@ -106,7 +106,7 @@ const App: React.FC = () => {
     }, 7000);
 
     return () => clearInterval(interval);
-  }, [currentUser]);
+  }, [currentUser, loadData]);
 
   const handlePostPaymentView = async (property: Property) => {
     setSelectedProperty(property);
@@ -219,7 +219,7 @@ const App: React.FC = () => {
 
       {/* Live Sync Toast Notification */}
       {syncToast && (
-        <div className="fixed bottom-5 right-5 z-50 bg-slate-900 text-white p-4 rounded-2xl shadow-2xl border border-slate-700 flex items-center gap-3 animate-fade-in-up max-w-md text-xs">
+        <div className="fixed bottom-5 right-5 z-[100] bg-slate-900 text-white p-4 rounded-2xl shadow-2xl border border-slate-700 flex items-center gap-3 animate-fade-in-up max-w-md text-xs">
           <div className="p-2 bg-blue-600 rounded-xl animate-pulse">
             <Bell size={18} className="text-white" />
           </div>
@@ -287,15 +287,27 @@ const App: React.FC = () => {
             </div>
 
             {selectedProperty && (
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Left Column: Property Card & Clearance Action Box */}
-                <div className="lg:col-span-1 space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+                {/* Property Card: Column 1 on desktop, 1st on mobile */}
+                <div className="lg:col-span-1 order-1">
                   <PropertyCard 
                     property={selectedProperty} 
                     onViewAudit={() => handleOpenAuditModal(selectedProperty)}
                   />
+                </div>
 
-                  {/* Sequential Clearance Action Box */}
+                {/* Statement of Account: Columns 2-3 on desktop, 2nd on mobile (before clearance action) */}
+                <div className="lg:col-span-2 lg:row-span-2 order-2">
+                  <DelinquencyTable 
+                    records={taxRecords} 
+                    summary={taxSummary} 
+                    grandTotal={grandTotal}
+                    onSelectionChange={handleSelectionChange}
+                  />
+                </div>
+
+                {/* Sequential Clearance Action Box: Column 1 on desktop below PropertyCard, 3rd on mobile below DelinquencyTable */}
+                <div className="lg:col-span-1 order-3 lg:col-start-1 lg:row-start-2">
                   <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4 no-print">
                     <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
                       <ShieldCheck size={18} className="text-emerald-600" />
@@ -306,10 +318,10 @@ const App: React.FC = () => {
                       <div className="space-y-4 text-xs">
                         <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 space-y-1">
                           <p className="font-bold">
-                            Selected Scope: {selectedRecords.length} of {taxRecords.length} Quarters
+                            Selected Scope: {selectedRecords.length} of {taxRecords.length} {taxRecords.length === 1 ? 'Tax Year' : 'Tax Years'}
                           </p>
                           <p className="text-[11px] text-blue-700">
-                            Under the <strong>Arrears-First rule</strong>, earlier quarters must be settled chronologically before subsequent ones.
+                            Under the <strong>Arrears-First rule</strong>, earlier tax years must be settled chronologically before subsequent ones.
                           </p>
                         </div>
 
@@ -337,16 +349,6 @@ const App: React.FC = () => {
                       </div>
                     )}
                   </div>
-                </div>
-
-                {/* Right Column: Statement of Account */}
-                <div className="lg:col-span-2">
-                  <DelinquencyTable 
-                    records={taxRecords} 
-                    summary={taxSummary} 
-                    grandTotal={grandTotal}
-                    onSelectionChange={handleSelectionChange}
-                  />
                 </div>
               </div>
             )}

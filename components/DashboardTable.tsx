@@ -14,6 +14,13 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
+import {
   Search,
   MoreVertical,
   Plus,
@@ -53,7 +60,6 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedBarangay, setSelectedBarangay] = useState<string>('All');
   const [selectedStatus, setSelectedStatus] = useState<string>('All');
-  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
 
   const filteredProperties = properties.filter((p) => {
@@ -213,85 +219,63 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
 
                 return (
                   <TableRow key={property.id} className="hover:bg-blue-50/40">
-                    <TableCell className="relative">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          setOpenDropdownId(openDropdownId === property.id ? null : property.id)
-                        }
-                        className="h-8 w-8 p-0 text-slate-500 hover:text-slate-800"
-                      >
-                        <MoreVertical size={16} />
-                      </Button>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-slate-500 hover:text-slate-800"
+                          >
+                            <MoreVertical size={16} />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-52">
+                          <DropdownMenuItem
+                            onClick={() => onSelectProperty(property)}
+                            className="text-slate-700 hover:text-blue-600 focus:text-blue-600 focus:bg-blue-50"
+                          >
+                            <CreditCard size={14} className="text-blue-600 mr-2" />
+                            {canClearDues
+                              ? 'Inspect & Clear Dues'
+                              : 'View Statement of Account'}
+                          </DropdownMenuItem>
 
-                      {openDropdownId === property.id && (
-                        <>
-                          <div
-                            className="fixed inset-0 z-10"
-                            onClick={() => setOpenDropdownId(null)}
-                          />
-                          <div className="absolute left-6 mt-1 w-52 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-20 animate-in zoom-in-95 duration-100">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                onSelectProperty(property);
-                                setOpenDropdownId(null);
-                              }}
-                              className="w-full flex items-center gap-2.5 px-4 py-2 text-xs font-medium text-slate-700 hover:bg-blue-50 hover:text-blue-600"
+                          {canEdit && (
+                            <DropdownMenuItem
+                              onClick={() => onEditProperty(property)}
+                              className="text-slate-700 hover:text-blue-600 focus:text-blue-600 focus:bg-blue-50"
                             >
-                              <CreditCard size={14} className="text-blue-600" />
-                              {canClearDues
-                                ? 'Inspect & Clear Dues'
-                                : 'View Statement of Account'}
-                            </button>
+                              <Edit3 size={14} className="text-slate-500 mr-2" />
+                              Update RPTAR
+                            </DropdownMenuItem>
+                          )}
 
-                            {canEdit && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  onEditProperty(property);
-                                  setOpenDropdownId(null);
-                                }}
-                                className="w-full flex items-center gap-2.5 px-4 py-2 text-xs font-medium text-slate-700 hover:bg-blue-50 hover:text-blue-600"
+                          {onViewAudit && (
+                            <DropdownMenuItem
+                              onClick={() => onViewAudit(property)}
+                              className="text-slate-700 hover:text-blue-600 focus:text-blue-600 focus:bg-blue-50"
+                            >
+                              <History size={14} className="text-blue-500 mr-2" />
+                              View Revision Trail
+                            </DropdownMenuItem>
+                          )}
+
+                          {canDelete && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => onDeleteProperty(property.id)}
+                                className="text-rose-600 hover:text-rose-700 focus:text-rose-700 focus:bg-rose-50"
                               >
-                                <Edit3 size={14} className="text-slate-500" /> Update RPTAR
-                              </button>
-                            )}
-
-                            {onViewAudit && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  onViewAudit(property);
-                                  setOpenDropdownId(null);
-                                }}
-                                className="w-full flex items-center gap-2.5 px-4 py-2 text-xs font-medium text-slate-700 hover:bg-blue-50 hover:text-blue-600"
-                              >
-                                <History size={14} className="text-blue-500" /> View Revision
-                                Trail
-                              </button>
-                            )}
-
-                            {canDelete && (
-                              <>
-                                <div className="h-px bg-slate-100 my-1" />
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    onDeleteProperty(property.id);
-                                    setOpenDropdownId(null);
-                                  }}
-                                  className="w-full flex items-center gap-2.5 px-4 py-2 text-xs font-medium text-rose-600 hover:bg-rose-50"
-                                >
-                                  <Trash2 size={14} /> Delete Record
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        </>
-                      )}
+                                <Trash2 size={14} className="text-rose-600 mr-2" />
+                                Delete Record
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1.5">
