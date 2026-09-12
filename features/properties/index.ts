@@ -1,3 +1,4 @@
-export { default as DashboardTable } from "@/components/DashboardTable";
-export { default as RptarModal } from "@/components/RptarModal";
-export { default as BulkImportModal } from "@/components/BulkImportModal";
+export { default as DashboardTable } from './DashboardTable';
+export { default as PropertyCard } from './PropertyCard';
+export { default as RptarModal } from './RptarModal';
+export { default as BulkImportModal } from './BulkImportModal';

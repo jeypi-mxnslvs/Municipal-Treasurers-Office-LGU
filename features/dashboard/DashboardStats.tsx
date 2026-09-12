@@ -1,5 +1,5 @@
 import React from 'react';
-import { DashboardStatsData } from '../types';
+import { DashboardStatsData } from '@/types';
 import { AlertTriangle, CheckCircle2, FileText, Landmark } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import {

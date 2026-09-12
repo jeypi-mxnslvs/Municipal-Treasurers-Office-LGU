@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { TaxYearRecord, TaxSummary } from '../types';
+import { TaxYearRecord, TaxSummary } from '@/types';
 import { AlertCircle, CheckCircle2, Tag, Calendar, CheckSquare, Layers, Sparkles } from 'lucide-react';
-import { Button } from './ui/button';
-import { Badge } from './ui/badge';
-import { Card, CardContent } from './ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -11,7 +11,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from './ui/table';
+} from '@/components/ui/table';
 
 interface DelinquencyTableProps {
   records: TaxYearRecord[];

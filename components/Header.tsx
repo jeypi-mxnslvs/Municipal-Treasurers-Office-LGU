@@ -1,6 +1,6 @@
 import React from 'react';
 import { Building2, UserCircle, LogOut, Users } from 'lucide-react';
-import { User } from '../types';
+import { User } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 

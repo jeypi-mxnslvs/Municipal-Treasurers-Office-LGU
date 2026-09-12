@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { RptarAuditLog, Property } from '../types';
-import { api } from '../services/api';
+import { RptarAuditLog, Property } from '@/types';
+import { api } from '@/services/api';
 import {
   Dialog,
   DialogContent,

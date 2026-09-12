@@ -1,1 +1,1 @@
-export { default as DashboardStats } from "@/components/DashboardStats";
+export { default as DashboardStats } from './DashboardStats';

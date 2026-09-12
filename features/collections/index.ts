@@ -1,1 +1,1 @@
-export { default as OfficialReceiptModal } from "@/components/OfficialReceiptModal";
+export { default as OfficialReceiptModal } from './OfficialReceiptModal';

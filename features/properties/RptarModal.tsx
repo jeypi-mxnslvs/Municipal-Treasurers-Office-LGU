@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Property } from '../types';
-import { BARANGAYS, PROPERTY_CLASSES } from '../constants';
+import { Property } from '@/types';
+import { BARANGAYS, PROPERTY_CLASSES } from '@/constants';
 import {
   Dialog,
   DialogContent,
