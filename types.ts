@@ -122,3 +122,14 @@ export interface SyncStatusData {
   serverTime: string;
   activeConnections?: number;
 }
+
+export interface SecurityAuditLog {
+  id: number;
+  event_type: 'LOGIN_SUCCESS' | 'LOGIN_FAILURE' | 'USER_CREATED' | 'ROLE_CHANGED' | 'PASSWORD_RESET' | 'USER_DELETED' | 'ACCESS_DENIED';
+  username: string;
+  user_id?: number;
+  station_id?: string;
+  ip_address?: string;
+  details?: string;
+  created_at: string;
+}

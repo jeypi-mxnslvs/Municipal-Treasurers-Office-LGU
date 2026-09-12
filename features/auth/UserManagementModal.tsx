@@ -29,6 +29,7 @@ import {
   Trash2,
   Download,
 } from 'lucide-react';
+import PasswordConfirmationModal from './PasswordConfirmationModal';
 
 interface UserManagementModalProps {
   isOpen: boolean;
@@ -52,6 +53,9 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
     text: string;
   } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Destructive Action Re-authentication State
+  const [userPendingDeletion, setUserPendingDeletion] = useState<User | null>(null);
 
   // Password Reset State
   const [resetTargetUser, setResetTargetUser] = useState<User | null>(null);
@@ -106,7 +110,7 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
     }
   };
 
-  const handleDeleteUser = async (userToDelete: User) => {
+  const handleDeleteUser = (userToDelete: User) => {
     if (userToDelete.username === 'admin') {
       alert('The primary System Administrator account cannot be deleted.');
       return;
@@ -117,24 +121,24 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
       return;
     }
 
-    if (
-      confirm(
-        `Are you sure you want to permanently delete the staff account "${userToDelete.name}" (${userToDelete.username})?`
-      )
-    ) {
-      try {
-        await api.deleteUser(userToDelete.id);
-        setStatusMessage({
-          type: 'success',
-          text: `Account "${userToDelete.name}" deleted successfully.`,
-        });
-        await fetchUsersList();
-      } catch (err) {
-        setStatusMessage({
-          type: 'error',
-          text: err instanceof Error ? err.message : 'Failed to delete user',
-        });
-      }
+    setUserPendingDeletion(userToDelete);
+  };
+
+  const confirmDeleteUser = async () => {
+    if (!userPendingDeletion) return;
+    try {
+      await api.deleteUser(userPendingDeletion.id, currentUser?.username || 'admin');
+      setStatusMessage({
+        type: 'success',
+        text: `Account "${userPendingDeletion.name}" deleted successfully.`,
+      });
+      setUserPendingDeletion(null);
+      await fetchUsersList();
+    } catch (err) {
+      setStatusMessage({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Failed to delete user',
+      });
     }
   };
 
@@ -175,7 +179,8 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <>
+      <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-4xl max-h-[92vh] p-0 flex flex-col overflow-hidden gap-0 border-slate-200 shadow-2xl">
         {/* Modal Header */}
         <DialogHeader className="bg-slate-900 px-6 py-4 flex flex-row items-center justify-between text-white border-b border-slate-800 shrink-0">
@@ -472,6 +477,17 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <PasswordConfirmationModal
+      isOpen={Boolean(userPendingDeletion)}
+      title="Authorize Staff Account Deletion"
+      description={`Are you sure you want to permanently delete the staff account "${userPendingDeletion?.name}" (${userPendingDeletion?.username})? Please confirm your administrator password to proceed.`}
+      username={currentUser?.username || 'admin'}
+      destructiveActionLabel="Permanently Delete Account"
+      onConfirm={confirmDeleteUser}
+      onClose={() => setUserPendingDeletion(null)}
+    />
+    </>
   );
 };
 

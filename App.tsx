@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Property, TaxYearRecord, User, OfficialReceipt, DashboardStatsData, TaxSummary } from './types';
 import { api } from './services/api';
 import Header from './components/Header';
-import { LoginPage, UserManagementModal } from '@/features/auth';
+import { LoginPage, UserManagementModal, PasswordConfirmationModal } from '@/features/auth';
 import { DashboardStats } from '@/features/dashboard';
 import { DashboardTable, PropertyCard, RptarModal, BulkImportModal } from '@/features/properties';
 import { DelinquencyTable } from '@/features/assessment';
@@ -31,6 +31,7 @@ const App: React.FC = () => {
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [auditTargetProperty, setAuditTargetProperty] = useState<Property | null>(null);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [propertyPendingDeletion, setPropertyPendingDeletion] = useState<string | null>(null);
 
   // Live Multi-Assessor Sync State & Notification Toast
   const [syncToast, setSyncToast] = useState<{ message: string; author: string } | null>(null);
@@ -141,11 +142,15 @@ const App: React.FC = () => {
     setIsAuditModalOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to delete this RPTAR property record?')) {
-      await api.deleteProperty(id);
-      await loadData();
-    }
+  const handleDelete = (id: string) => {
+    setPropertyPendingDeletion(id);
+  };
+
+  const confirmDeleteProperty = async () => {
+    if (!propertyPendingDeletion) return;
+    await api.deleteProperty(propertyPendingDeletion);
+    setPropertyPendingDeletion(null);
+    await loadData();
   };
 
   const handleSaveProperty = async (data: Partial<Property>) => {
@@ -442,6 +447,17 @@ const App: React.FC = () => {
         onImportComplete={() => loadData()}
         properties={properties}
         currentUser={currentUser}
+      />
+
+      {/* Destructive Action Password Re-authentication Modal */}
+      <PasswordConfirmationModal
+        isOpen={Boolean(propertyPendingDeletion)}
+        title="Authorize Property Deletion"
+        description="Deleting a real property assessment record permanently removes it from the RPTAR masterlist and affects historical ledger records. Please confirm your password to proceed."
+        username={currentUser?.username || 'admin'}
+        destructiveActionLabel="Permanently Delete Record"
+        onConfirm={confirmDeleteProperty}
+        onClose={() => setPropertyPendingDeletion(null)}
       />
     </div>
   );

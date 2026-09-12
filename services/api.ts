@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
-import { Property, CalculationResult, OfficialReceipt, DashboardStatsData, User, RptarAuditLog, SyncStatusData } from '../types';
-import { calculateTaxLiability as localCalculateTaxLiability } from '../utils/taxLogic';
-import { createSessionToken } from '../lib/crypto';
+import { Property, CalculationResult, OfficialReceipt, DashboardStatsData, User, RptarAuditLog, SyncStatusData, SecurityAuditLog } from '@/types';
+import { calculateTaxLiability as localCalculateTaxLiability } from '@/utils/taxLogic';
+import { createSessionToken } from '@/lib/crypto';
 
 export const api = {
   // 1. Properties
@@ -335,15 +335,16 @@ export const api = {
     }));
   },
 
-  async login(username: string, password: string): Promise<{ token: string; user: User }> {
+  async login(username: string, password: string, stationId = 'Workstation'): Promise<{ token: string; user: User }> {
     const cleanUsername = username.trim().toLowerCase();
 
-    // 1. Attempt secure database stored procedure first
+    // 1. Attempt secure database stored procedure first (with automated security audit logging)
     try {
       const { data: rpcData, error: rpcError } = await supabase
         .rpc('authenticate_user', {
           p_username: cleanUsername,
-          p_password: password
+          p_password: password,
+          p_station_id: stationId
         });
 
       if (!rpcError && Array.isArray(rpcData) && rpcData.length > 0) {
@@ -366,16 +367,29 @@ export const api = {
     // 2. Direct verification fallback
     const { data: user, error } = await supabase
       .from('users')
-      .select('id, full_name, username, role, station_id, password, password_hash')
+      .select('id, full_name, username, role, station_id, password_hash')
       .eq('username', cleanUsername)
       .single();
 
     if (error || !user) {
+      await this.logSecurityEvent({
+        eventType: 'LOGIN_FAILURE',
+        username: cleanUsername,
+        stationId,
+        details: 'Staff account not found'
+      });
       throw new Error('Invalid credentials. Staff account not found.');
     }
 
-    const isValid = user.password === password || (user.password_hash && user.password_hash === password);
+    const isValid = user.password_hash ? user.password_hash === password : false;
     if (!isValid) {
+      await this.logSecurityEvent({
+        eventType: 'LOGIN_FAILURE',
+        username: cleanUsername,
+        userId: user.id,
+        stationId,
+        details: 'Invalid password'
+      });
       throw new Error('Invalid credentials. (Default password is "admin123")');
     }
 
@@ -387,8 +401,40 @@ export const api = {
       stationId: user.station_id
     };
 
+    await this.logSecurityEvent({
+      eventType: 'LOGIN_SUCCESS',
+      username: authenticatedUser.username || cleanUsername,
+      userId: Number(authenticatedUser.id),
+      stationId,
+      details: 'Authenticated via fallback'
+    });
+
     const token = await createSessionToken(authenticatedUser);
     return { token, user: authenticatedUser };
+  },
+
+  async verifyPassword(username: string, password: string): Promise<boolean> {
+    const cleanUsername = username.trim().toLowerCase();
+    try {
+      const { data, error } = await supabase.rpc('authenticate_user', {
+        p_username: cleanUsername,
+        p_password: password,
+        p_station_id: 'Security-Reauth'
+      });
+      if (!error && Array.isArray(data) && data.length > 0) {
+        return true;
+      }
+    } catch {
+      // Fallback check
+    }
+
+    const { data: user } = await supabase
+      .from('users')
+      .select('password_hash')
+      .eq('username', cleanUsername)
+      .single();
+
+    return Boolean(user?.password_hash && user.password_hash === password);
   },
 
   async registerUser(userData: {
@@ -398,19 +444,28 @@ export const api = {
     role: string;
     stationId: string;
   }): Promise<{ message: string; user: User }> {
+    const cleanUsername = userData.username.trim().toLowerCase();
     const { data, error } = await supabase
       .from('users')
       .insert({
-        username: userData.username.trim().toLowerCase(),
-        password: userData.password,
+        username: cleanUsername,
+        password_hash: userData.password, // Automatically hashed by database trigger trg_users_hash_password
         full_name: userData.fullName,
         role: userData.role,
         station_id: userData.stationId
       })
-      .select()
+      .select('id, full_name, username, role, station_id')
       .single();
 
     if (error) throw new Error(error.message);
+
+    await this.logSecurityEvent({
+      eventType: 'USER_CREATED',
+      username: cleanUsername,
+      userId: data.id,
+      stationId: userData.stationId,
+      details: `Created staff account for ${userData.fullName} with role ${userData.role}`
+    });
 
     return {
       message: 'User registered successfully',
@@ -441,15 +496,35 @@ export const api = {
     };
   },
 
-  async deleteUser(id: string | number): Promise<{ message: string }> {
+  async deleteUser(id: string | number, adminUsername = 'admin'): Promise<{ message: string }> {
+    const { data: targetUser } = await supabase.from('users').select('username, full_name').eq('id', id).single();
     const { error } = await supabase.from('users').delete().eq('id', id);
     if (error) throw error;
+
+    await this.logSecurityEvent({
+      eventType: 'USER_DELETED',
+      username: adminUsername,
+      userId: typeof id === 'number' ? id : parseInt(id, 10),
+      details: `Deleted account for ${targetUser?.full_name || id} (${targetUser?.username || 'unknown'})`
+    });
+
     return { message: 'User deleted successfully' };
   },
 
-  async resetUserPassword(id: string | number, newPassword: string): Promise<{ message: string }> {
-    const { error } = await supabase.from('users').update({ password: newPassword }).eq('id', id);
+  async resetUserPassword(id: string | number, newPassword: string, adminUsername = 'admin'): Promise<{ message: string }> {
+    const { error } = await supabase
+      .from('users')
+      .update({ password_hash: newPassword })
+      .eq('id', id);
     if (error) throw error;
+
+    await this.logSecurityEvent({
+      eventType: 'PASSWORD_RESET',
+      username: adminUsername,
+      userId: typeof id === 'number' ? id : parseInt(id, 10),
+      details: `Password reset for user ID ${id}`
+    });
+
     return { message: 'Password reset successfully' };
   },
 
@@ -469,6 +544,36 @@ export const api = {
       .from('rptar_audit_logs')
       .select('*')
       .order('timestamp', { ascending: false });
+
+    return data || [];
+  },
+
+  async logSecurityEvent(event: {
+    eventType: SecurityAuditLog['event_type'];
+    username: string;
+    userId?: number;
+    stationId?: string;
+    details?: string;
+  }): Promise<void> {
+    try {
+      await supabase.from('security_audit_logs').insert({
+        event_type: event.eventType,
+        username: event.username,
+        user_id: event.userId,
+        station_id: event.stationId || 'Workstation',
+        details: event.details || ''
+      });
+    } catch {
+      // Non-blocking in offline / local development modes
+    }
+  },
+
+  async getSecurityAuditLogs(): Promise<SecurityAuditLog[]> {
+    const { data } = await supabase
+      .from('security_audit_logs')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(100);
 
     return data || [];
   },
@@ -509,7 +614,7 @@ export const api = {
         is_shell_record: Boolean(p.isShellRecord)
       }));
 
-    const { data, error } = await supabase.from('properties').insert(rows).select();
+    const { error } = await supabase.from('properties').insert(rows);
     if (error) throw error;
 
     await supabase.from('rptar_audit_logs').insert({
