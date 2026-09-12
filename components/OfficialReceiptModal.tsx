@@ -1,6 +1,6 @@
 import React from 'react';
 import { OfficialReceipt } from '../types';
-import { Printer, X, CheckCircle2, FileSpreadsheet, ShieldCheck, Building } from 'lucide-react';
+import { Printer, X, CheckCircle2, Building } from 'lucide-react';
 
 interface ClearanceModalProps {
   isOpen?: boolean;

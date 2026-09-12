@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { RptarAuditLog, Property } from '../types';
 import { api } from '../services/api';
-import { History, X, Clock, UserCheck, ShieldCheck, FileText, ArrowRight } from 'lucide-react';
+import { History, X, Clock, UserCheck, FileText } from 'lucide-react';
 
 interface AuditLogModalProps {
   isOpen: boolean;
@@ -70,12 +70,12 @@ const AuditLogModal: React.FC<AuditLogModalProps> = ({ isOpen, onClose, property
                   <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-1.5 hover:bg-blue-50/40 transition-colors">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
-                        <span className={`px-2.5 py-0.5 rounded-md font-bold text-[10px] uppercase flex items-center gap-1 ${log.action_type === 'DUES_CLEARED' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
+                        <span className={`px-2.5 py-0.5 rounded-md font-bold text-[10px] uppercase flex items-center gap-1 ${log.action_type === 'CLEARED' || log.action_type === 'DUES_CLEARED' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
                             log.action_type === 'CREATED' ? 'bg-blue-100 text-blue-800 border border-blue-300' :
                               log.action_type === 'DELETED' ? 'bg-rose-100 text-rose-800 border border-rose-300' :
                                 'bg-amber-100 text-amber-800 border border-amber-300'
                           }`}>
-                          {log.action_type === 'DUES_CLEARED' ? 'DUES CLEARED' : log.action_type}
+                          {log.action_type === 'CLEARED' || log.action_type === 'DUES_CLEARED' ? 'DUES CLEARED' : log.action_type}
                         </span>
                         <span className="font-mono font-bold text-slate-800 text-xs">
                           {log.td_number}

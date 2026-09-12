@@ -30,7 +30,7 @@ export const calculateTaxLiability = (property: Property): CalculationResult => 
     const baseTax = property.assessedValue * BASE_TAX_RATE;
     
     // Penalty Calculation Logic
-    let monthsDelayed = 0;
+    let monthsDelayed: number;
 
     if (year < CURRENT_YEAR) {
       // Past years are calculated from Jan 1st of that year to Present

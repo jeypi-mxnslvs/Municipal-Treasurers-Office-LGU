@@ -105,7 +105,7 @@ export interface RptarAuditLog {
   id: number;
   property_id?: number;
   td_number: string;
-  action_type: 'CREATED' | 'UPDATED' | 'VALUATION_REVISED' | 'CLEARED' | 'DELETED';
+  action_type: 'CREATED' | 'UPDATED' | 'VALUATION_REVISED' | 'CLEARED' | 'DUES_CLEARED' | 'DELETED';
   assessor_name: string;
   station_id: string;
   details: string;
