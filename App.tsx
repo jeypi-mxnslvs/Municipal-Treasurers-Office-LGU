@@ -13,6 +13,7 @@ import UserManagementModal from './components/UserManagementModal';
 import AuditLogModal from './components/AuditLogModal';
 import BulkImportModal from './components/BulkImportModal';
 import { Printer, ArrowLeft, CheckCircle2, ShieldCheck, CheckCircle, RefreshCw, Bell } from 'lucide-react';
+import { verifySessionToken, DEFAULT_SESSION_TIMEOUT_MS } from './lib/crypto';
 
 const App: React.FC = () => {
   // Authentication State
@@ -20,6 +21,7 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('lgu_user');
     return saved ? JSON.parse(saved) : null;
   });
+  const [sessionWarning, setSessionWarning] = useState<string | null>(null);
 
   const [view, setView] = useState<'dashboard' | 'posting'>('dashboard');
   const [properties, setProperties] = useState<Property[]>([]);
@@ -196,15 +198,63 @@ const App: React.FC = () => {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = useCallback((reason?: string) => {
     localStorage.removeItem('lgu_user');
     localStorage.removeItem('lgu_token');
     setCurrentUser(null);
     setView('dashboard');
-  };
+    if (reason) {
+      setSessionWarning(reason);
+    }
+  }, []);
+
+  // 1. Initial boot session verification
+  useEffect(() => {
+    const token = localStorage.getItem('lgu_token');
+    if (token) {
+      verifySessionToken(token).then((payload) => {
+        if (!payload) {
+          handleLogout('Your session has expired. Please sign in again.');
+        }
+      });
+    } else if (currentUser) {
+      handleLogout('No active session token found. Please sign in again.');
+    }
+  }, [currentUser, handleLogout]);
+
+  // 2. 15-Minute Inactivity Auto-Logout Timer (Terminal Protection)
+  useEffect(() => {
+    if (!currentUser) return;
+
+    let timer: NodeJS.Timeout;
+
+    const resetTimer = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        handleLogout('Workstation auto-locked after 15 minutes of inactivity for security.');
+      }, DEFAULT_SESSION_TIMEOUT_MS);
+    };
+
+    const activityEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'];
+    activityEvents.forEach((ev) => window.addEventListener(ev, resetTimer, { passive: true }));
+    resetTimer();
+
+    return () => {
+      clearTimeout(timer);
+      activityEvents.forEach((ev) => window.removeEventListener(ev, resetTimer));
+    };
+  }, [currentUser, handleLogout]);
 
   if (!currentUser) {
-    return <LoginPage onLoginSuccess={(user) => setCurrentUser(user)} />;
+    return (
+      <LoginPage 
+        onLoginSuccess={(user) => {
+          setSessionWarning(null);
+          setCurrentUser(user);
+        }} 
+        sessionWarning={sessionWarning} 
+      />
+    );
   }
 
   const canClearDues = currentUser.role === 'Assessor' || currentUser.role === 'Admin' || currentUser.role === 'Cashier';

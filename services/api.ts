@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import { Property, CalculationResult, OfficialReceipt, DashboardStatsData, User, RptarAuditLog, SyncStatusData } from '../types';
 import { calculateTaxLiability as localCalculateTaxLiability } from '../utils/taxLogic';
+import { createSessionToken } from '../lib/crypto';
 
 export const api = {
   // 1. Properties
@@ -335,31 +336,59 @@ export const api = {
   },
 
   async login(username: string, password: string): Promise<{ token: string; user: User }> {
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('username', username.trim().toLowerCase())
-      .single();
+    const cleanUsername = username.trim().toLowerCase();
 
-    if (error) {
-      console.error('Supabase connection error:', error);
-      throw new Error(`Database error: ${error.message}`);
+    // 1. Attempt secure database stored procedure first
+    try {
+      const { data: rpcData, error: rpcError } = await supabase
+        .rpc('authenticate_user', {
+          p_username: cleanUsername,
+          p_password: password
+        });
+
+      if (!rpcError && Array.isArray(rpcData) && rpcData.length > 0) {
+        const match = rpcData[0];
+        const verifiedUser: User = {
+          id: String(match.id),
+          name: match.full_name,
+          username: match.username,
+          role: match.role,
+          stationId: match.station_id
+        };
+
+        const token = await createSessionToken(verifiedUser);
+        return { token, user: verifiedUser };
+      }
+    } catch {
+      // Fall through to direct verification if RPC is not registered
     }
 
-    if (!user || user.password !== password) {
+    // 2. Direct verification fallback
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('id, full_name, username, role, station_id, password, password_hash')
+      .eq('username', cleanUsername)
+      .single();
+
+    if (error || !user) {
+      throw new Error('Invalid credentials. Staff account not found.');
+    }
+
+    const isValid = user.password === password || (user.password_hash && user.password_hash === password);
+    if (!isValid) {
       throw new Error('Invalid credentials. (Default password is "admin123")');
     }
 
-    return {
-      token: `supabase-token-${user.id}`,
-      user: {
-        id: String(user.id),
-        name: user.full_name,
-        username: user.username,
-        role: user.role,
-        stationId: user.station_id
-      }
+    const authenticatedUser: User = {
+      id: String(user.id),
+      name: user.full_name,
+      username: user.username,
+      role: user.role,
+      stationId: user.station_id
     };
+
+    const token = await createSessionToken(authenticatedUser);
+    return { token, user: authenticatedUser };
   },
 
   async registerUser(userData: {

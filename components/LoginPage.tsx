@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/
 
 interface LoginPageProps {
   onLoginSuccess: (user: User) => void;
+  sessionWarning?: string | null;
 }
 
 const PRESET_ACCOUNTS: Array<{
@@ -41,7 +42,7 @@ const PRESET_ACCOUNTS: Array<{
   }
 ];
 
-const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
+const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, sessionWarning }) => {
   // Step 1: Username / Staff Profile Selection; Step 2: Password Entry
   const [step, setStep] = useState<1 | 2>(1);
   const [username, setUsername] = useState('juan.assessor');
@@ -149,6 +150,13 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                   : 'Confirm your credentials to unlock the municipal property ledger.'}
               </p>
             </div>
+
+            {sessionWarning && (
+              <div className="p-3.5 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs flex items-center gap-2 font-medium animate-fade-in-up">
+                <Lock size={16} className="text-amber-600 flex-shrink-0" />
+                <span>{sessionWarning}</span>
+              </div>
+            )}
 
             {error && (
               <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center gap-2 font-medium">
