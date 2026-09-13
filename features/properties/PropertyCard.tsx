@@ -15,7 +15,7 @@ const PropertyCard: React.FC<PropertyCardProps> = ({ property, onViewAudit }) =>
     <Card className="rounded-2xl shadow-sm border-slate-200 overflow-hidden">
       <CardHeader className="bg-slate-50 px-5 py-3.5 border-b border-slate-200 flex flex-row justify-between items-center space-y-0">
         <h3 className="text-slate-800 font-bold text-sm flex items-center gap-2">
-          <FileText size={16} className="text-blue-600" />
+          <FileText size={16} className="text-emerald-700" />
           RPTAR Property Master
         </h3>
         <div className="flex items-center gap-2">
@@ -28,7 +28,7 @@ const PropertyCard: React.FC<PropertyCardProps> = ({ property, onViewAudit }) =>
               className="bg-white hover:bg-slate-100 text-slate-700 border-slate-300 text-xs font-semibold gap-1 h-7 px-2.5 shadow-xs"
               title="View RPTAR Change History & Assessor Trail"
             >
-              <History size={13} className="text-blue-600" />
+              <History size={13} className="text-emerald-700" />
               History
             </Button>
           )}
@@ -81,7 +81,7 @@ const PropertyCard: React.FC<PropertyCardProps> = ({ property, onViewAudit }) =>
               Taxable Assessed Value
             </label>
             <div className="flex items-center gap-1.5 mt-0.5">
-              <TrendingUp size={15} className="text-blue-600" />
+              <TrendingUp size={15} className="text-emerald-700" />
               <p className="text-slate-900 font-black text-base font-mono">
                 ₱{property.assessedValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </p>

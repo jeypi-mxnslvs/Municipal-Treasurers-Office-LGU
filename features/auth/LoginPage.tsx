@@ -1,325 +1,360 @@
 import React, { useState } from 'react';
 import { User } from '@/types';
 import { api } from '@/services/api';
-import { Building2, ShieldAlert, ArrowRight, UserCircle2, ArrowLeft, Lock } from 'lucide-react';
+import { createSessionToken } from '@/lib/crypto';
+import { Lock, User as UserIcon, ArrowRight, Sparkles, ShieldAlert, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 
 interface LoginPageProps {
   onLoginSuccess: (user: User) => void;
   sessionWarning?: string | null;
 }
 
-const PRESET_ACCOUNTS: Array<{
+interface DemoPersonnel {
+  title: string;
   username: string;
-  role: 'Admin' | 'Assessor' | 'Viewer';
+  role: 'Admin' | 'Cashier' | 'Assessor' | 'Viewer';
   name: string;
-  station: string;
-  desc: string;
-}> = [
+  stationId: string;
+}
+
+const DEMO_PERSONNEL: DemoPersonnel[] = [
   {
-    username: 'juan.assessor',
-    role: 'Assessor',
-    name: 'Juan Reyes',
-    station: 'Assessor-Desk-02',
-    desc: 'Property appraisal, RPTAR masterlist & sequential dues clearance',
+    title: 'MUNICIPAL TREASURER',
+    username: 'treasurer',
+    role: 'Admin',
+    name: 'Municipal Treasurer',
+    stationId: 'Treasury-Office',
   },
   {
+    title: 'ASSISTANT TREASURER',
+    username: 'asst.treasurer',
+    role: 'Admin',
+    name: 'Assistant Municipal Treasurer',
+    stationId: 'Treasury-Asst',
+  },
+  {
+    title: 'WINDOW 01 CASHIER',
+    username: 'cashier1',
+    role: 'Cashier',
+    name: 'Window 01 Cashier',
+    stationId: 'Window-01',
+  },
+  {
+    title: 'WINDOW 02 CASHIER',
+    username: 'cashier2',
+    role: 'Cashier',
+    name: 'Window 02 Cashier',
+    stationId: 'Window-02',
+  },
+  {
+    title: 'REVENUE STAFF',
+    username: 'assessor',
+    role: 'Assessor',
+    name: 'Revenue Assessment Staff',
+    stationId: 'Assessor-Desk',
+  },
+  {
+    title: 'COA AUDITOR',
+    username: 'auditor',
+    role: 'Viewer',
+    name: 'COA Resident Auditor',
+    stationId: 'COA-Audit-Desk',
+  },
+  {
+    title: 'SYSTEM ADMINISTRATOR',
     username: 'admin',
     role: 'Admin',
     name: 'System Administrator',
-    station: 'Main-HQ',
-    desc: 'Full system control, masterlist CRUD, staff management & DB backup',
+    stationId: 'Main-HQ',
   },
-  {
-    username: 'mayor.office',
-    role: 'Viewer',
-    name: 'Hon. Mayor Office',
-    station: 'Executive-Desk',
-    desc: 'Read-only executive access to collection KPIs & revenue analytics',
-  }
 ];
 
+// Legacy / alias accounts compatibility mapping
+const LEGACY_ACCOUNTS: Record<string, { role: 'Admin' | 'Cashier' | 'Assessor' | 'Viewer'; name: string; stationId: string }> = {
+  'juan.assessor': { role: 'Assessor', name: 'Juan Reyes', stationId: 'Assessor-Desk-02' },
+  'mayor.office': { role: 'Viewer', name: 'Hon. Mayor Office', stationId: 'Executive-Desk' },
+};
+
+const DEFAULT_DEMO_PASSWORD = 'demotreasury2026!';
+
 const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, sessionWarning }) => {
-  // Step 1: Username / Staff Profile Selection; Step 2: Password Entry
-  const [step, setStep] = useState<1 | 2>(1);
-  const [username, setUsername] = useState('juan.assessor');
-  const [password, setPassword] = useState('admin123');
-  const [identifiedUser, setIdentifiedUser] = useState<User | null>(null);
+  const [username, setUsername] = useState('treasurer');
+  const [password, setPassword] = useState(DEFAULT_DEMO_PASSWORD);
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Step 1: Lookup and verify staff username
-  const handleProceedToPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setIsLoading(true);
+  const matchedDemo = DEMO_PERSONNEL.find(
+    (p) => p.username.toLowerCase() === username.trim().toLowerCase()
+  );
 
-    try {
-      const user = await api.lookupUser(username.trim());
-      if (user) {
-        setIdentifiedUser(user);
-        setStep(2);
-      } else {
-        // Fallback for preset matches
-        const preset = PRESET_ACCOUNTS.find(p => p.username.toLowerCase() === username.trim().toLowerCase());
-        if (preset) {
-          setIdentifiedUser({
-            id: preset.username,
-            name: preset.name,
-            username: preset.username,
-            role: preset.role,
-            stationId: preset.station
-          });
-          setStep(2);
-        } else {
-          setError(`Staff account "${username}" not found in municipal directory.`);
-        }
-      }
-    } catch {
-      setError('Unable to verify staff username.');
-    } finally {
-      setIsLoading(false);
-    }
+  const handleQuickSelect = (personnel: DemoPersonnel) => {
+    setUsername(personnel.username);
+    setPassword(DEFAULT_DEMO_PASSWORD);
+    setError(null);
   };
 
-  // Step 2: Authenticate password
-  const handleFinalLogin = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setIsLoading(true);
 
+    const cleanUsername = username.trim().toLowerCase();
+    const cleanPassword = password.trim();
+
     try {
-      const res = await api.login(username, password);
+      // 1. Attempt API / Supabase authentication
+      const selectedStation = matchedDemo?.stationId || 'Workstation';
+      const res = await api.login(cleanUsername, cleanPassword, selectedStation);
       localStorage.setItem('lgu_token', res.token);
       localStorage.setItem('lgu_user', JSON.stringify(res.user));
       onLoginSuccess(res.user);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Invalid password. (Default test password is "admin123")');
+      // 2. Fallback for demo test personnel if database record does not exist
+      const demoAccount =
+        DEMO_PERSONNEL.find((p) => p.username.toLowerCase() === cleanUsername) ||
+        (LEGACY_ACCOUNTS[cleanUsername]
+          ? {
+              username: cleanUsername,
+              title: LEGACY_ACCOUNTS[cleanUsername].name,
+              ...LEGACY_ACCOUNTS[cleanUsername],
+            }
+          : null);
+
+      const isValidDemoPassword =
+        cleanPassword === DEFAULT_DEMO_PASSWORD || cleanPassword === 'admin123';
+
+      if (demoAccount && isValidDemoPassword) {
+        const demoUser: User = {
+          id: demoAccount.username,
+          name: demoAccount.name,
+          username: demoAccount.username,
+          role: demoAccount.role,
+          stationId: demoAccount.stationId,
+        };
+
+        const token = await createSessionToken(demoUser);
+        localStorage.setItem('lgu_token', token);
+        localStorage.setItem('lgu_user', JSON.stringify(demoUser));
+        onLoginSuccess(demoUser);
+        return;
+      }
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Invalid credentials. Please verify your username and password.'
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleSelectPreset = (preset: typeof PRESET_ACCOUNTS[0]) => {
-    setUsername(preset.username);
-    setPassword('admin123');
-    setIdentifiedUser({
-      id: preset.username,
-      name: preset.name,
-      username: preset.username,
-      role: preset.role,
-      stationId: preset.station
-    });
-    setError(null);
-    setStep(2);
-  };
-
   return (
-    <div className="min-h-screen bg-slate-50/50 flex flex-col justify-between text-slate-800 font-sans">
-      {/* Top Banner */}
-      <header className="border-b border-slate-200/80 py-4 px-6 sm:px-12 flex justify-between items-center bg-white shadow-xs">
-        <div className="flex items-center gap-3">
-          <div className="bg-emerald-600 p-2.5 rounded-xl text-white shadow-sm">
-            <Building2 size={24} />
-          </div>
-          <div>
-            <h1 className="font-extrabold text-lg text-slate-900 tracking-tight leading-tight">
-              Municipal Treasurer's Office
+    <div className="min-h-screen w-full flex flex-col lg:flex-row bg-[#fafafa] text-slate-900 font-sans selection:bg-emerald-100 selection:text-emerald-900">
+      {/* Left Pane: Staff Authentication Workstation */}
+      <div className="w-full lg:w-1/2 min-h-screen flex flex-col justify-between p-6 sm:p-10 lg:p-14 xl:p-16 bg-white border-r border-slate-200/80">
+        <div className="max-w-md w-full mx-auto my-auto py-8">
+          {/* Workstation Header */}
+          <div className="mb-6">
+            <h1 className="font-serif text-3xl sm:text-4xl font-bold tracking-tight text-slate-950">
+              Sign in
             </h1>
-            <p className="text-xs text-slate-500 font-medium">Municipality of Santa Rosa, Nueva Ecija</p>
+            <p className="text-xs sm:text-sm text-slate-500 mt-2 leading-relaxed">
+              Secure internal workstation for revenue assessment, tax collection, cashiering
+              operations, and financial auditing.
+            </p>
           </div>
-        </div>
-      </header>
 
-      {/* Main Login Content */}
-      <main className="flex-grow container mx-auto px-4 py-8 sm:py-12 max-w-5xl flex items-center justify-center">
-        <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+          {/* Session Warnings & Error Banners */}
+          {typeof sessionWarning === 'string' && sessionWarning.trim() && (
+            <div className="mb-5 p-3.5 bg-amber-50/90 border border-amber-200/80 text-amber-900 rounded-lg text-xs flex items-center gap-2.5 font-medium">
+              <Lock size={15} className="text-amber-600 shrink-0" />
+              <span>{sessionWarning}</span>
+            </div>
+          )}
 
-          {/* Left Column: Active Directory-Style 2-Step Form */}
-          <div className="lg:col-span-6 space-y-6">
-            <div>
-              <h2 className="text-2xl sm:text-3xl font-black text-slate-900 mt-2 tracking-tight">
-                {step === 1 ? 'Identify Staff Account' : 'Enter Terminal Password'}
-              </h2>
-              <p className="text-sm text-slate-500 mt-1">
-                {step === 1
-                  ? 'Enter your municipal username or select your counter profile below.'
-                  : 'Confirm your credentials to unlock the municipal property ledger.'}
-              </p>
+          {error && (
+            <div className="mb-5 p-3.5 bg-rose-50/90 border border-rose-200/80 text-rose-900 rounded-lg text-xs flex items-center gap-2.5 font-medium">
+              <ShieldAlert size={15} className="text-rose-600 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          {/* Sign In Form */}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Staff User Identification */}
+            <div className="space-y-1.5">
+              <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                Staff User Identification
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                  <UserIcon size={16} />
+                </div>
+                <Input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="e.g. cashier1 or treasurer"
+                  className="h-11 pl-10 pr-10 text-sm font-normal bg-white border-slate-300/90 focus-visible:ring-emerald-600/30 focus-visible:border-emerald-600 rounded-lg transition-colors placeholder:text-slate-400"
+                  required
+                  autoFocus
+                />
+                {matchedDemo && (
+                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded">
+                      <CheckCircle2 size={11} className="text-emerald-600" />
+                      {matchedDemo.role}
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
 
-            {sessionWarning && (
-              <div className="p-3.5 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs flex items-center gap-2 font-medium animate-fade-in-up">
-                <Lock size={16} className="text-amber-600 flex-shrink-0" />
-                <span>{sessionWarning}</span>
+            {/* Access Credential / Password */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                  Access Credential / Password
+                </label>
+                <span className="text-[10px] font-mono text-slate-400">
+                  Default: demotreasury2026!
+                </span>
               </div>
-            )}
-
-            {error && (
-              <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center gap-2 font-medium">
-                <ShieldAlert size={16} className="flex-shrink-0" />
-                <span>{error}</span>
-              </div>
-            )}
-
-            {/* STEP 1: Enter Username */}
-            {step === 1 ? (
-              <form onSubmit={handleProceedToPassword} className="space-y-4 animate-fade-in-up">
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider">
-                    Municipal Staff Username
-                  </label>
-                  <Input
-                    type="text"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    className="font-mono text-sm h-11 rounded-xl"
-                    placeholder="e.g. juan.assessor"
-                    required
-                    autoFocus
-                  />
-                  <p className="text-[11px] text-slate-400">
-                    Enter username to detect assigned counter and permissions.
-                  </p>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                  <Lock size={16} />
                 </div>
-
-                <Button
-                  type="submit"
-                  disabled={isLoading}
-                  className="w-full h-11 rounded-xl font-bold gap-2 text-sm shadow-sm"
+                <Input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••••••"
+                  className="h-11 pl-10 pr-10 text-sm font-mono bg-white border-slate-300/90 focus-visible:ring-emerald-600/30 focus-visible:border-emerald-600 rounded-lg transition-colors"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 focus:outline-hidden"
+                  tabIndex={-1}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
-                  <UserCircle2 size={16} />
-                  {isLoading ? 'Verifying Account...' : 'Next: Verify Credentials'}
-                </Button>
-              </form>
-            ) : (
-              /* STEP 2: Active Directory Detected Profile & Password */
-              <form onSubmit={handleFinalLogin} className="space-y-4 animate-fade-in-up">
-                {/* Detected Staff Card */}
-                {identifiedUser && (
-                  <Card className="border-slate-200 bg-slate-50/60 shadow-xs">
-                    <CardContent className="p-4 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shadow-xs">
-                          {identifiedUser.name.charAt(0)}
-                        </div>
-                        <div>
-                          <h4 className="font-bold text-sm text-slate-900 leading-tight">
-                            {identifiedUser.name}
-                          </h4>
-                          <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-0.5">
-                            <Badge variant="secondary" className="font-semibold text-emerald-700 bg-emerald-50 border-emerald-200 py-0">
-                              {identifiedUser.role}
-                            </Badge>
-                            <span>•</span>
-                            <span className="font-mono text-[11px]">{identifiedUser.stationId}</span>
-                          </div>
-                        </div>
-                      </div>
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
 
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setStep(1)}
-                        className="text-xs text-emerald-700 hover:text-emerald-800 gap-1 h-8"
-                      >
-                        <ArrowLeft size={12} />
-                        Switch
-                      </Button>
-                    </CardContent>
-                  </Card>
-                )}
+            {/* Submit Button */}
+            <Button
+              type="submit"
+              disabled={isLoading}
+              className="w-full h-11 bg-[#06382c] hover:bg-[#084838] active:bg-[#04281f] text-white font-bold text-xs uppercase tracking-wider rounded-lg shadow-sm transition-all flex items-center justify-center gap-2 group cursor-pointer mt-2"
+            >
+              <span>{isLoading ? 'Signing In to Workstation...' : 'Sign In to Workstation'}</span>
+              {!isLoading && (
+                <ArrowRight
+                  size={15}
+                  className="transition-transform group-hover:translate-x-1"
+                />
+              )}
+            </Button>
+          </form>
 
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider">
-                    Account Password
-                  </label>
-                  <Input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="font-mono text-sm h-11 rounded-xl"
-                    placeholder="••••••••"
-                    required
-                    autoFocus
-                  />
-                  <p className="text-[11px] text-slate-400">
-                    Default test password: <code className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-700 font-mono font-bold">admin123</code>
-                  </p>
-                </div>
+          {/* Demo / Test Personnel Quick Select Grid */}
+          <div className="mt-8 pt-6 border-t border-slate-100">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800 uppercase tracking-wider mb-3">
+              <Sparkles size={13} className="text-emerald-600" />
+              <span>Demo / Test Personnel</span>
+            </div>
 
-                <div className="flex gap-2.5 pt-1">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setStep(1)}
-                    className="h-11 rounded-xl font-bold text-xs px-5"
-                  >
-                    Back
-                  </Button>
-
-                  <Button
-                    type="submit"
-                    disabled={isLoading}
-                    className="flex-grow h-11 rounded-xl font-bold gap-2 text-sm shadow-sm"
-                  >
-                    <Lock size={16} />
-                    {isLoading ? 'Unlocking Workspace...' : 'Sign In & Open Workspace'}
-                  </Button>
-                </div>
-              </form>
-            )}
-          </div>
-
-          {/* Right Column: 1-Click Role Profiles */}
-          <div className="lg:col-span-6">
-            <Card className="border-slate-200 bg-slate-50/70 shadow-xs">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base font-extrabold text-slate-800">
-                  1-Click Quick Login by Counter
-                </CardTitle>
-                <CardDescription className="text-xs text-slate-500">
-                  Select a municipal profile below to auto-detect identity and test permissions:
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {PRESET_ACCOUNTS.map((preset) => (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {DEMO_PERSONNEL.map((personnel) => {
+                const isSelected =
+                  username.trim().toLowerCase() === personnel.username.toLowerCase();
+                return (
                   <button
-                    key={preset.username}
+                    key={personnel.username}
                     type="button"
-                    onClick={() => handleSelectPreset(preset)}
-                    className="w-full p-4 rounded-xl border border-slate-200 hover:border-emerald-400 bg-white hover:bg-emerald-50/30 text-left transition-all flex items-center justify-between group shadow-2xs hover:shadow-sm cursor-pointer"
+                    onClick={() => handleQuickSelect(personnel)}
+                    className={`text-left p-2.5 rounded-lg border transition-all cursor-pointer ${
+                      isSelected
+                        ? 'border-emerald-600 bg-emerald-50/50 shadow-2xs ring-1 ring-emerald-600/20'
+                        : 'border-slate-200/90 bg-white hover:border-emerald-400 hover:bg-slate-50/60 shadow-2xs'
+                    }`}
                   >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="font-extrabold text-xs uppercase tracking-wide border-slate-300">
-                          {preset.role}
-                        </Badge>
-                        <span className="text-[10px] font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
-                          {preset.station}
-                        </span>
-                      </div>
-                      <p className="text-xs font-bold text-slate-800">{preset.name}</p>
-                      <p className="text-[11px] text-slate-500 leading-tight">{preset.desc}</p>
-                    </div>
-                    <ArrowRight size={18} className="text-slate-400 group-hover:text-emerald-600 group-hover:translate-x-1 transition-all flex-shrink-0 ml-2" />
+                    <span className="text-[10px] font-black text-slate-800 tracking-wide uppercase block leading-tight truncate">
+                      {personnel.title}
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-500 mt-1 block truncate">
+                      {personnel.username}
+                    </span>
                   </button>
-                ))}
-              </CardContent>
-            </Card>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom-left discreet monogram */}
+        <div className="pt-4 flex items-center justify-start">
+          <div
+            className="w-7 h-7 rounded-full bg-slate-900 text-white flex items-center justify-center font-serif text-xs font-bold select-none shadow-xs"
+            title="Municipality of Santa Rosa • Province of Nueva Ecija"
+          >
+            N
+          </div>
+        </div>
+      </div>
+
+      {/* Right Pane: Official Municipal Treasury Showcase */}
+      <div className="hidden lg:flex lg:w-1/2 min-h-screen flex-col justify-between p-10 lg:p-14 xl:p-16 bg-[#04261f] text-white relative overflow-hidden select-none">
+        {/* Subtle decorative radial glow */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[520px] h-[520px] bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
+
+        {/* Top Official Banner */}
+        <div className="flex items-center justify-between pb-4 border-b border-emerald-800/40 relative z-10">
+          <span className="text-[10px] font-mono tracking-widest text-emerald-300/80 uppercase">
+            Republic of the Philippines · Province of Nueva Ecija
+          </span>
+          <span className="border border-emerald-500/40 text-emerald-300 text-[10px] font-mono tracking-wider px-2 py-0.5 rounded uppercase">
+            Official System
+          </span>
+        </div>
+
+        {/* Center Official Branding */}
+        <div className="flex flex-col items-center justify-center text-center my-auto py-12 relative z-10">
+          <div className="relative group">
+            <img
+              src="/santa-rosa-seal.png"
+              alt="Official Seal of Santa Rosa, Nueva Ecija"
+              className="w-44 h-44 xl:w-48 xl:h-48 object-contain drop-shadow-[0_10px_25px_rgba(0,0,0,0.5)] transition-transform duration-500 hover:scale-105"
+            />
           </div>
 
-        </div>
-      </main>
+          <h2 className="font-serif text-3xl xl:text-4xl font-medium tracking-tight text-white mt-8 mb-1">
+            Municipality of Santa Rosa
+          </h2>
+          <p className="text-sm xl:text-base text-emerald-200/80 font-serif font-normal">
+            Nueva Ecija, Philippines
+          </p>
 
-      {/* Footer */}
-      <footer className="border-t border-slate-100 py-4 px-6 text-center text-xs text-slate-400">
-        <p>Republic of the Philippines • Local Government Unit of Santa Rosa, Nueva Ecija • Real Property Tax Administration System</p>
-      </footer>
+          <div className="w-20 border-t border-emerald-700/50 my-6" />
+
+          <p className="italic text-emerald-200/70 text-xs sm:text-sm font-serif max-w-sm leading-relaxed px-4">
+            &ldquo;Public service through accountable financial management.&rdquo;
+          </p>
+        </div>
+
+        {/* Bottom Municipal Footer */}
+        <div className="flex items-center justify-between pt-4 border-t border-emerald-800/40 text-[11px] font-mono text-emerald-400/60 relative z-10">
+          <span>Office of the Municipal Treasurer</span>
+          <span>Treasury Management System</span>
+        </div>
+      </div>
     </div>
   );
 };

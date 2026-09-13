@@ -1,5 +1,5 @@
 import React from 'react';
-import { Building2, UserCircle, LogOut, Users, BookOpen } from 'lucide-react';
+import { UserCircle, LogOut, Users, BookOpen } from 'lucide-react';
 import { User } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -32,20 +32,24 @@ const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="bg-slate-900 text-white shadow-md border-b border-slate-800 no-print">
+    <header className="bg-[#04261f] text-white shadow-md border-b border-emerald-900/60 no-print select-none">
       <div className="container mx-auto px-4 py-3 flex justify-between items-center max-w-7xl">
-        {/* Brand */}
+        {/* Brand with Santa Rosa Official Seal */}
         <div className="flex items-center gap-3">
-          <div className="bg-blue-600 p-2.5 rounded-xl shadow-inner flex items-center justify-center shrink-0">
-            <Building2 size={22} className="text-white" />
+          <div className="p-1 rounded-xl bg-emerald-950/70 border border-emerald-500/20 shadow-xs flex items-center justify-center shrink-0">
+            <img
+              src="/santa-rosa-seal.png"
+              alt="Official Seal of Santa Rosa, Nueva Ecija"
+              className="w-9 h-9 object-contain drop-shadow-sm transition-transform hover:scale-105"
+            />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="font-extrabold text-base sm:text-lg tracking-tight leading-tight">
+              <h1 className="font-extrabold text-base sm:text-lg tracking-tight leading-tight text-white">
                 Municipal Treasurer's Office
               </h1>
             </div>
-            <p className="text-xs text-slate-400 hidden sm:block">
+            <p className="text-xs text-emerald-200/70 hidden sm:block font-normal">
               Real Property Tax Administration & Compliance (RA 7160)
             </p>
           </div>
@@ -60,7 +64,7 @@ const Header: React.FC<HeaderProps> = ({
               variant="outline"
               size="sm"
               onClick={onOpenUserManagement}
-              className="bg-purple-600/20 hover:bg-purple-600 text-purple-300 hover:text-white border-purple-500/40 text-xs font-bold gap-1.5"
+              className="bg-emerald-800/30 hover:bg-emerald-700 text-emerald-200 hover:text-white border-emerald-600/40 text-xs font-bold gap-1.5"
             >
               <Users size={14} />
               <span className="hidden md:inline">Register Staff</span>
@@ -74,7 +78,7 @@ const Header: React.FC<HeaderProps> = ({
               variant="outline"
               size="sm"
               onClick={onOpenBooklets}
-              className="bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border-emerald-500/40 text-xs font-bold gap-1.5"
+              className="bg-emerald-800/30 hover:bg-emerald-700 text-emerald-200 hover:text-white border-emerald-600/40 text-xs font-bold gap-1.5"
               title="View Accountable Form 51 Serial Custody Register"
             >
               <BookOpen size={14} />
@@ -83,16 +87,16 @@ const Header: React.FC<HeaderProps> = ({
           )}
 
           {/* User Account / Role Card */}
-          <div className="flex items-center gap-2 px-3 py-1.5">
-            <UserCircle size={24} className="text-blue-400 shrink-0" />
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-950/40 rounded-xl border border-emerald-800/40">
+            <UserCircle size={24} className="text-emerald-400 shrink-0" />
             <div className="text-left">
-              <p className="text-xs font-semibold text-slate-200 leading-tight">{user.name}</p>
+              <p className="text-xs font-semibold text-slate-100 leading-tight">{user.name}</p>
               <div className="flex items-center gap-1.5 text-[10px] mt-0.5">
-                <span className="text-slate-400">{user.stationId}</span>
-                <span className="text-slate-600">•</span>
+                <span className="text-emerald-300/80 font-mono">{user.stationId}</span>
+                <span className="text-emerald-700">•</span>
                 <Badge
                   variant={getRoleBadgeVariant(user.role)}
-                  className="text-[9px] px-1.5 py-0 font-bold uppercase tracking-wider"
+                  className="text-[9px] px-1.5 py-0 font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
                 >
                   {user.role}
                 </Badge>
@@ -106,7 +110,7 @@ const Header: React.FC<HeaderProps> = ({
             variant="outline"
             size="sm"
             onClick={onLogout}
-            className="bg-slate-800 hover:bg-rose-900/40 text-slate-300 hover:text-rose-300 border-slate-700 hover:border-rose-500/40 text-xs font-semibold gap-1.5"
+            className="bg-emerald-950/80 hover:bg-rose-950/60 text-emerald-200 hover:text-rose-200 border-emerald-800/60 hover:border-rose-700/60 text-xs font-semibold gap-1.5"
             title="Log Out and return to Sign-In screen"
           >
             <LogOut size={14} />

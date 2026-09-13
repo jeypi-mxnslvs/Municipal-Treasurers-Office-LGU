@@ -103,7 +103,7 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-lg font-bold text-slate-800">RPTAR Property Masterlist</h2>
-            <Badge variant="secondary" className="font-semibold text-xs text-blue-700 bg-blue-100">
+            <Badge variant="secondary" className="font-semibold text-xs text-emerald-800 bg-emerald-100/90 border border-emerald-200/70">
               {filteredProperties.length} of {properties.length} Accounts
             </Badge>
           </div>
@@ -176,7 +176,7 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
               className="border-slate-300 text-slate-700 hover:bg-slate-100 font-bold gap-1.5 whitespace-nowrap text-xs"
               title="Bulk CSV / Excel Masterlist Import & Export"
             >
-              <FileSpreadsheet size={15} className="text-blue-600" />
+              <FileSpreadsheet size={15} className="text-emerald-700" />
               Bulk CSV / Excel
             </Button>
           )}
@@ -186,7 +186,7 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
               type="button"
               size="sm"
               onClick={onAddProperty}
-              className="bg-blue-600 hover:bg-blue-500 text-white font-bold gap-1.5 shadow-sm whitespace-nowrap text-xs"
+              className="bg-[#064e3b] hover:bg-[#085a44] text-white font-bold gap-1.5 shadow-sm whitespace-nowrap text-xs"
             >
               <Plus size={16} />
               Add Property
@@ -218,7 +218,7 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
                 const status = property.status || (debt === 0 ? 'CLEARED' : 'DELINQUENT');
 
                 return (
-                  <TableRow key={property.id} className="hover:bg-blue-50/40">
+                  <TableRow key={property.id} className="hover:bg-emerald-50/30 transition-colors">
                     <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -234,9 +234,9 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
                         <DropdownMenuContent align="start" className="w-52">
                           <DropdownMenuItem
                             onClick={() => onSelectProperty(property)}
-                            className="text-slate-700 hover:text-blue-600 focus:text-blue-600 focus:bg-blue-50"
+                            className="text-slate-700 hover:text-emerald-700 focus:text-emerald-700 focus:bg-emerald-50"
                           >
-                            <CreditCard size={14} className="text-blue-600 mr-2" />
+                            <CreditCard size={14} className="text-emerald-700 mr-2" />
                             {canClearDues
                               ? 'Inspect & Clear Dues'
                               : 'View Statement of Account'}
@@ -245,7 +245,7 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
                           {canEdit && (
                             <DropdownMenuItem
                               onClick={() => onEditProperty(property)}
-                              className="text-slate-700 hover:text-blue-600 focus:text-blue-600 focus:bg-blue-50"
+                              className="text-slate-700 hover:text-emerald-700 focus:text-emerald-700 focus:bg-emerald-50"
                             >
                               <Edit3 size={14} className="text-slate-500 mr-2" />
                               Update RPTAR
@@ -255,9 +255,9 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
                           {onViewAudit && (
                             <DropdownMenuItem
                               onClick={() => onViewAudit(property)}
-                              className="text-slate-700 hover:text-blue-600 focus:text-blue-600 focus:bg-blue-50"
+                              className="text-slate-700 hover:text-emerald-700 focus:text-emerald-700 focus:bg-emerald-50"
                             >
-                              <History size={14} className="text-blue-500 mr-2" />
+                              <History size={14} className="text-emerald-600 mr-2" />
                               View Revision Trail
                             </DropdownMenuItem>
                           )}
@@ -377,7 +377,7 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
             size="sm"
             onClick={() => handlePageChange(currentPage + 1)}
             disabled={currentPage === totalPages}
-            className="bg-blue-600 hover:bg-blue-500 text-white font-semibold gap-1 shadow-xs"
+            className="bg-[#064e3b] hover:bg-[#085a44] text-white font-semibold gap-1 shadow-xs"
           >
             Next List
             <ChevronRight size={14} />
