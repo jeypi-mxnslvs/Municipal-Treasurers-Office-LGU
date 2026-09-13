@@ -6,7 +6,7 @@ import { LoginPage, UserManagementModal, PasswordConfirmationModal } from '@/fea
 import { DashboardStats } from '@/features/dashboard';
 import { DashboardTable, PropertyCard, RptarModal, BulkImportModal } from '@/features/properties';
 import { DelinquencyTable } from '@/features/assessment';
-import { OfficialReceiptModal } from '@/features/collections';
+import { OfficialReceiptModal, BookletManagerModal } from '@/features/collections';
 import { AuditLogModal } from '@/features/audit';
 import { Printer, ArrowLeft, CheckCircle2, ShieldCheck, CheckCircle, RefreshCw, Bell } from 'lucide-react';
 import { verifySessionToken, DEFAULT_SESSION_TIMEOUT_MS } from './lib/crypto';
@@ -28,6 +28,7 @@ const App: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalInitialData, setModalInitialData] = useState<Property | null>(null);
   const [isUserManagementModalOpen, setIsUserManagementModalOpen] = useState(false);
+  const [isBookletModalOpen, setIsBookletModalOpen] = useState(false);
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [auditTargetProperty, setAuditTargetProperty] = useState<Property | null>(null);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
@@ -178,8 +179,10 @@ const App: React.FC = () => {
       const clearanceSlip = await api.postPayment({
         propertyId: selectedProperty.id,
         paidRecords: selectedRecords,
-        tenderType: 'CLEARED',
-        postedBy: `${currentUser.name} (${currentUser.role} • ${currentUser.stationId})`
+        tenderType: 'CASH',
+        postedBy: `${currentUser.name} (${currentUser.role} • ${currentUser.stationId})`,
+        stationId: currentUser.stationId,
+        userId: typeof currentUser.id === 'number' ? currentUser.id : parseInt(String(currentUser.id || 0), 10)
       });
 
       setIssuedReceipt(clearanceSlip);
@@ -199,13 +202,15 @@ const App: React.FC = () => {
     }
   };
 
-  const handleLogout = useCallback((reason?: string) => {
+  const handleLogout = useCallback((reason?: unknown) => {
     localStorage.removeItem('lgu_user');
     localStorage.removeItem('lgu_token');
     setCurrentUser(null);
     setView('dashboard');
-    if (reason) {
+    if (typeof reason === 'string' && reason.trim()) {
       setSessionWarning(reason);
+    } else {
+      setSessionWarning(null);
     }
   }, []);
 
@@ -261,17 +266,18 @@ const App: React.FC = () => {
   const canClearDues = currentUser.role === 'Assessor' || currentUser.role === 'Admin' || currentUser.role === 'Cashier';
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-100 text-slate-800 font-sans">
+    <div className="min-h-screen flex flex-col bg-slate-50/80 text-slate-800 font-sans">
       <Header 
         user={currentUser} 
-        onLogout={handleLogout}
+        onLogout={() => handleLogout()}
         onOpenUserManagement={() => setIsUserManagementModalOpen(true)}
+        onOpenBooklets={() => setIsBookletModalOpen(true)}
       />
 
       {/* Live Sync Toast Notification */}
       {syncToast && (
         <div className="fixed bottom-5 right-5 z-[100] bg-slate-900 text-white p-4 rounded-2xl shadow-2xl border border-slate-700 flex items-center gap-3 animate-fade-in-up max-w-md text-xs">
-          <div className="p-2 bg-blue-600 rounded-xl animate-pulse">
+          <div className="p-2 bg-emerald-600 rounded-xl animate-pulse">
             <Bell size={18} className="text-white" />
           </div>
           <div>
@@ -323,7 +329,7 @@ const App: React.FC = () => {
                   onClick={() => handleOpenAuditModal(selectedProperty)}
                   className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold border border-slate-300 rounded-xl transition-all"
                 >
-                  <RefreshCw size={14} className="text-blue-600" />
+                  <RefreshCw size={14} className="text-emerald-700" />
                   View Revision Trail
                 </button>
 
@@ -367,11 +373,11 @@ const App: React.FC = () => {
 
                     {taxRecords.length > 0 ? (
                       <div className="space-y-4 text-xs">
-                        <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 space-y-1">
+                        <div className="p-3.5 bg-emerald-50/80 border border-emerald-200 rounded-xl text-emerald-950 space-y-1">
                           <p className="font-bold">
                             Selected Scope: {selectedRecords.length} of {taxRecords.length} {taxRecords.length === 1 ? 'Tax Year' : 'Tax Years'}
                           </p>
-                          <p className="text-[11px] text-blue-700">
+                          <p className="text-[11px] text-emerald-800">
                             Under the <strong>Arrears-First rule</strong>, earlier tax years must be settled chronologically before subsequent ones.
                           </p>
                         </div>
@@ -381,7 +387,7 @@ const App: React.FC = () => {
                             <button 
                               onClick={handleMarkDuesCleared}
                               disabled={isProcessingClearance || selectedRecords.length === 0}
-                              className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 active:scale-98 disabled:opacity-50"
+                              className="w-full py-3.5 bg-[#064e3b] hover:bg-[#085a44] text-white font-black text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 active:scale-98 disabled:opacity-50"
                             >
                               <CheckCircle2 size={18} />
                               {isProcessingClearance ? 'Processing Clearance...' : `Mark Selected Dues as Cleared (₱${selectedScopeSubtotal.toLocaleString(undefined, { minimumFractionDigits: 2 })})`}
@@ -419,11 +425,22 @@ const App: React.FC = () => {
       <OfficialReceiptModal 
         isOpen={isReceiptModalOpen}
         receipt={issuedReceipt}
+        currentUser={currentUser}
+        onReceiptVoided={async () => {
+          await loadData();
+        }}
         onClose={() => {
           setIsReceiptModalOpen(false);
           setIssuedReceipt(null);
           setView('dashboard');
         }}
+      />
+
+      {/* AF-51 Booklet Register Modal */}
+      <BookletManagerModal
+        isOpen={isBookletModalOpen}
+        onClose={() => setIsBookletModalOpen(false)}
+        currentUser={currentUser}
       />
 
       {/* Admin User Management Modal */}

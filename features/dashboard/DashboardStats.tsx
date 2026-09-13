@@ -66,7 +66,7 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ stats }) => {
         {/* Collection Efficiency / Cleared Rate */}
         <Card className="rounded-2xl border-slate-200 shadow-sm hover:shadow-md transition-shadow">
           <CardContent className="p-5 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+            <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
               <CheckCircle2 className="h-6 w-6" />
             </div>
             <div>
@@ -76,7 +76,7 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ stats }) => {
               <p className="text-xl font-bold text-slate-800">
                 {stats.collectionEfficiency}%
               </p>
-              <p className="text-xs text-blue-600 font-medium mt-0.5">
+              <p className="text-xs text-emerald-700 font-medium mt-0.5">
                 {stats.clearedCount} of {stats.totalProperties} accounts cleared
               </p>
             </div>
@@ -117,8 +117,8 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ stats }) => {
               </p>
             </div>
             <div className="flex items-center gap-4 text-xs font-medium">
-              <span className="flex items-center gap-1.5 text-blue-600">
-                <span className="w-2.5 h-2.5 rounded-full bg-blue-600 inline-block"></span> Actual Collections
+              <span className="flex items-center gap-1.5 text-emerald-700">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 inline-block"></span> Actual Collections
               </span>
               <span className="flex items-center gap-1.5 text-slate-400">
                 <span className="w-2.5 h-2.5 rounded-full bg-slate-300 inline-block"></span> Target
@@ -148,7 +148,7 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ stats }) => {
                     fontSize: '12px',
                   }}
                 />
-                <Bar dataKey="collections" fill="#2563eb" radius={[6, 6, 0, 0]} name="Collected" />
+                <Bar dataKey="collections" fill="#059669" radius={[6, 6, 0, 0]} name="Collected" />
                 <Bar dataKey="target" fill="#cbd5e1" radius={[6, 6, 0, 0]} name="Target" />
               </BarChart>
             </ResponsiveContainer>
