@@ -24,6 +24,11 @@ export interface TaxYearRecord {
   basicTax?: number;
   sefTax?: number;
   baseTax: number;
+  systemBasicTax?: number;       // Original system-calculated Basic Tax
+  systemSefTax?: number;         // Original system-calculated SEF Tax
+  systemDiscountRate?: number;   // Original system-calculated Discount Rate
+  isManuallyEdited?: boolean;    // Flag indicating field(s) were manually overridden
+  editReason?: string;           // Mandatory reason for manual assessor override
   monthsDelayed: number;
   penaltyRate: number;
   penaltyAmount: number;
@@ -123,7 +128,15 @@ export interface RptarAuditLog {
   id: number;
   property_id?: number;
   td_number: string;
-  action_type: 'CREATED' | 'UPDATED' | 'VALUATION_REVISED' | 'CLEARED' | 'DUES_CLEARED' | 'DELETED' | 'RECEIPT_VOIDED';
+  tax_year?: number;
+  action_type: 'CREATED' | 'UPDATED' | 'VALUATION_REVISED' | 'FIELD_OVERRIDE' | 'CLEARED' | 'DUES_CLEARED' | 'DELETED' | 'RECEIPT_VOIDED';
+  field_changed?: 'BASIC_TAX' | 'SEF_TAX' | 'DISCOUNT_RATE' | string;
+  original_value?: number;
+  new_value?: number;
+  difference?: number;
+  reason?: string;
+  user_id?: number;
+  user_role?: string;
   assessor_name: string;
   station_id: string;
   details: string;
@@ -139,6 +152,42 @@ export interface SyncStatusData {
   } | null;
   serverTime: string;
   activeConnections?: number;
+}
+
+export interface MunicipalTaxSettings {
+  id?: number;
+  earlyPaymentDiscountRate: number; // default 0.20 (20% for Jan-Mar)
+  earlyPaymentStartMonth: number;    // default 1 (January)
+  earlyPaymentEndMonth: number;      // default 3 (March)
+  regularPromptDiscountRate: number; // default 0.10 (10% for Apr-Dec payment-date policy)
+  delinquentDiscountRate: number;    // default 0.00 (0% for past years)
+  effectiveYear: number;             // default 2026
+  updatedBy?: string;
+  updatedAt?: string;
+}
+
+export type CsvImportRowState =
+  | 'VALID_NEW'
+  | 'VALID_UPDATE'
+  | 'UNCHANGED'
+  | 'DUPLICATE_IN_FILE'
+  | 'INVALID_TD'
+  | 'INVALID_BARANGAY'
+  | 'INVALID_PROPERTY_CLASS'
+  | 'INVALID_NUMERIC_VALUE'
+  | 'CONFLICTING_RECORD';
+
+export interface CsvImportBatch {
+  id?: number;
+  batchName: string;
+  barangay: string;
+  filename: string;
+  totalRows: number;
+  insertedRows: number;
+  updatedRows: number;
+  unchangedRows: number;
+  importedBy: string;
+  createdAt?: string;
 }
 
 export interface SecurityAuditLog {
