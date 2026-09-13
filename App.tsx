@@ -155,15 +155,20 @@ const App: React.FC = () => {
   };
 
   const handleSaveProperty = async (data: Partial<Property>) => {
-    const payload = {
-      ...data,
-      assessorName: currentUser?.name || 'Juan Reyes',
-      stationId: currentUser?.stationId || 'Assessor-Desk-02'
-    };
+    try {
+      const payload = {
+        ...data,
+        assessorName: currentUser?.name || 'Juan Reyes',
+        stationId: currentUser?.stationId || 'Assessor-Desk-02'
+      };
 
-    await api.saveProperty(payload);
-    setIsModalOpen(false);
-    await loadData();
+      await api.saveProperty(payload);
+      setIsModalOpen(false);
+      await loadData();
+    } catch (err) {
+      console.error('Failed to save property:', err);
+      alert(err instanceof Error ? err.message : 'Failed to save property. Please check required fields.');
+    }
   };
 
   const handleSelectionChange = (selected: TaxYearRecord[], subtotal: number) => {
@@ -359,6 +364,9 @@ const App: React.FC = () => {
                     records={taxRecords} 
                     summary={taxSummary} 
                     grandTotal={grandTotal}
+                    canEdit={currentUser?.role === 'Assessor' || currentUser?.role === 'Admin'}
+                    property={selectedProperty}
+                    currentUser={currentUser}
                     onSelectionChange={handleSelectionChange}
                   />
                 </div>

@@ -51,17 +51,52 @@ $$\text{Penalty Rate} = \text{Effective Delay Months} \times 0.02$$
 $$\text{Penalty Amount} = \text{Base Tax} \times \text{Penalty Rate}$$
 $$\text{Total Year Liability} = \text{Base Tax} + \text{Penalty Amount} - \text{Discounts}$$
 
-### 2.4 Discounts (Prompt & Advance Payment)
-- **Prompt Payment Discount**: `10%` discount on current year dues if paid on or before the end of the applicable quarter.
-- **Advance Payment Discount**: `20%` discount if the full annual tax for the succeeding year is paid prior to January 1 of that tax year.
-- **Strict Rule**: Discounts apply **only** to the Current/Advance year tax, never to delinquent prior-year liabilities.
+### 2.4 Payment-Date-Based Discounts (Municipal Tax Policy)
+Discounts apply strictly based on the **payment date** for the current tax year (and advance payments).
+> [!IMPORTANT]
+> **Payment-Date-Based Policy**: The 10% rate is a **payment-date-based discount policy** (April 1 to December 31), NOT a quarterly discount, unless the system is formally expanded to true quarter-level accounting.
+- **Default Rates & Windows**:
+  - **January 1 – March 31**: Default discount is **`20%`** (`early_payment_discount_rate = 0.20`).
+  - **April 1 – December 31**: Default discount is **`10%`** (`regular_prompt_discount_rate = 0.10`).
+  - **Delinquent Prior-Year Obligations**: Default discount is strictly **`0%`** (`delinquent_discount_rate = 0.00`). Under RA 7160, discounts apply **only** to the current or advance year, never to delinquent prior-year liabilities.
+- **Configurable Tax Policy**:
+  - These percentages must NOT be permanently hardcoded. They are stored in `municipal_tax_settings` and auto-populate based on payment date and delinquency status.
 
-### 2.5 "Arrears First" Sequential Settlement Rule
+### 2.5 Authorized Assessor Manual Overrides & Real-Time Recalculation
+Authorized Assessors have statutory discretion to manually adjust populated tax fields:
+- **Editable Fields**:
+  1. `Basic Tax` (PHP)
+  2. `SEF Tax` (PHP)
+  3. `Discount Rate` (%)
+- **System Default Display**: The UI must display the system-calculated default value alongside the editable input so that discrepancies remain clear.
+- **Immediate Recalculation**:
+  - Changing Basic Tax, SEF Tax, or Discount Rate immediately recalculates:
+    $$\text{Eligible Tax Base} = \text{Basic Tax} + \text{SEF Tax}$$
+    $$\text{Discount Amount} = \text{Eligible Tax Base} \times \text{Discount Rate}$$
+    $$\text{Net Amount Due} = \text{Eligible Tax Base} + \text{Penalty Amount} - \text{Discount Amount}$$
+  - **Non-Free Entry for Discount Amount**: `Discount Amount` is always mathematically derived from the applied discount rate and eligible tax base; it cannot be an independent free-text entry.
+  - **Preservation of System Defaults**: Manual edits must NOT silently overwrite original calculated values or alter the underlying statutory rate configuration.
+
+### 2.6 Field-Level Audit Trail (`rptar_audit_logs`)
+Every manual modification to `Basic Tax`, `SEF Tax`, or `Discount Rate` creates an individual field-level audit record. Generic "assessment modified" entries are strictly prohibited.
+- **Preserved Audit Fields**:
+  - `property_id` & `td_number`
+  - `tax_year`
+  - `field_changed` (`BASIC_TAX`, `SEF_TAX`, `DISCOUNT_RATE`)
+  - `original_value` (system-calculated default)
+  - `new_value` (assessor-applied value)
+  - `difference` (`new_value - original_value`)
+  - `user_id` / `user_name` & `user_role`
+  - `station_id` (workstation identifier)
+  - `reason` (mandatory assessor justification)
+  - `created_at` (audit timestamp)
+
+### 2.7 "Arrears First" Sequential Settlement Rule
 - Taxpayers **cannot** pay current year (2026) dues while delinquent prior-year liabilities remain unsettled.
 - Payment scopes must be applied strictly in chronological order starting from the earliest unpaid year ($\text{lastPaidYear} + 1$).
 - Tellers may select 1 Quarter, 1 Year, or Full Payoff, but selection must anchor on the oldest unpaid record.
 
-### 2.6 Shell Records Rule
+### 2.8 Shell Records Rule
 - Properties flagged as `is_shell_record = true` represent historical, unverified, or fragmented legacy parcels lacking a verified Tax Declaration (TD) Number or Property Identification Number (PIN).
 - **Payment Prohibition**: Shell records **cannot** have payments posted until formally verified, updated with SFMV rates, and certified by the Municipal Assessor.
 
@@ -126,6 +161,7 @@ erDiagram
         numeric sef_tax
         numeric penalty_amount
         numeric discount_amount
+        numeric discount_rate
         text tender_type
         text tender_reference
         text status
@@ -149,10 +185,41 @@ erDiagram
         int id PK
         int property_id FK
         text td_number
+        int tax_year
         text action_type
+        text field_changed
+        numeric original_value
+        numeric new_value
+        numeric difference
+        text reason
         text assessor_name
         text station_id
         text details
+        timestamptz created_at
+    }
+
+    municipal_tax_settings {
+        int id PK
+        numeric early_payment_discount_rate
+        int early_payment_start_month
+        int early_payment_end_month
+        numeric regular_prompt_discount_rate
+        numeric delinquent_discount_rate
+        int effective_year
+        text updated_by
+        timestamptz updated_at
+    }
+
+    csv_import_batches {
+        int id PK
+        text batch_name
+        text barangay
+        text filename
+        int total_rows
+        int inserted_rows
+        int updated_rows
+        int unchanged_rows
+        text imported_by
         timestamptz created_at
     }
 ```
@@ -163,6 +230,54 @@ erDiagram
 |---|---|---|---|---|---|
 | **Property** | `id` | `id` | `string` / `number` | No | Primary Key |
 | | `td_number` | `tdNumber` | `string` | No | Unique Tax Declaration No. |
+| | `previous_td_number` | `previousTdNumber` | `string` | Yes | Prior cancelled TD |
+| | `pin` | `pin` | `string` | Yes | Property Identification No. |
+| | `owner_name` | `ownerName` | `string` | No | Declared Owner |
+| | `address` | `address` | `string` | No | Property location |
+| | `barangay` | `barangay` | `string` | No | One of 33 Santa Rosa barangays |
+| | `property_class` | `propertyClass` | `string` | No | Residential, Agricultural, etc. |
+| | `lot_area_sqm` | `lotAreaSqm` | `number` | Yes | Area in square meters |
+| | `market_value` | `marketValue` | `number` | No | Total Market Value (PHP) |
+| | `assessed_value` | `assessedValue` | `number` | No | Total Taxable Assessed Value |
+| | `last_paid_year` | `lastPaidYear` | `number` | No | Default `2025` |
+| | `is_shell_record` | `isShellRecord` | `boolean` | No | Default `false` |
+| **Receipt Snapshot** | `receipt_no` | `receiptNo` | `string` | No | AF-51 Sequential No. |
+| | `property_id` | `propertyId` | `number` | No | Foreign Key $\rightarrow$ `properties.id` |
+| | `paid_records` | `itemizedRecords` | `TaxYearRecord[]` | No | JSONB snapshot of settled dues |
+| | `basic_tax` | `basicTax` | `number` | No | Applied Basic Tax snapshot |
+| | `sef_tax` | `sefTax` | `number` | No | Applied SEF Tax snapshot |
+| | `discount_rate` | `discountRate` | `number` | No | Applied Discount % snapshot |
+| | `discount_amount` | `discountAmount` | `number` | No | Applied Discount PHP snapshot |
+| | `penalty_amount` | `penaltyAmount` | `number` | No | Applied Penalty PHP snapshot |
+| | `total_paid` | `totalPaid` | `number` | No | Net Amount Due snapshot |
+| | `tender_type` | `tenderType` | `'CASH' \| 'CHECK' \| 'ONLINE'` | No | Tender classification |
+| | `tender_reference`| `tenderReference` | `string` | Yes | Check No. / Transaction ID |
+| | `status` | `status` | `'ISSUED' \| 'VOIDED'` | No | Default `'ISSUED'` |
+| | `posted_by` | `postedBy` | `string` | No | Teller name / username |
+| | `posted_at` | `date` | `string` (ISO 8601) | No | Timestamp of issuance |
+
+### 3.2 Assessor Import Center & Smart Barangay Upsert Specification
+The system supports continuous ingestion of property rolls categorized across Santa Rosa's 33 barangays:
+1. **Unique Identification**: `td_number` is the definitive master key.
+2. **Smart Upsert (Last-Write-Wins per TD)**:
+   - If incoming row matches an existing `td_number` in the database, update property details (owner, address, classification, valuations) with newer data.
+   - If incoming row does not exist, insert it as a new property.
+   - Preserves unmentioned properties in that barangay.
+3. **Financial History Protection (INVARIANT)**:
+   - Bulk CSV imports must **never** overwrite or reset financial transaction records or payment milestones (`last_paid_year`, `payment_postings`). Tax liability and settlement status remain strictly under treasury cashier jurisdiction.
+4. **Staging Workflow**:
+   $$\text{Upload} \longrightarrow \text{Validate} \longrightarrow \text{Stage} \longrightarrow \text{Review/Diff} \longrightarrow \text{Authorize} \longrightarrow \text{Atomic Upsert} \longrightarrow \text{Audit Log} \longrightarrow \text{Batch History}$$
+5. **Row Validation States**:
+   - `VALID_NEW`: Completely new parcel ready for insertion.
+   - `VALID_UPDATE`: Existing parcel with modified data ready for update.
+   - `UNCHANGED`: Identical record; skipped to ensure idempotency.
+   - `DUPLICATE_IN_FILE`: Repeated TD within the same CSV upload.
+   - `INVALID_TD`: Missing or malformed Tax Declaration Number.
+   - `INVALID_BARANGAY`: Barangay not in canonical list of 33 Santa Rosa barangays.
+   - `INVALID_PROPERTY_CLASS`: Class not in canonical SFMV classes.
+   - `INVALID_NUMERIC_VALUE`: Negative, NaN, or corrupted market/assessed value.
+   - `CONFLICTING_RECORD`: Parcel exhibits conflicting ownership or boundary constraints.
+6. **Idempotency**: Re-uploading an identical CSV produces zero spurious updates or duplicate audit noise.
 | | `previous_td_number` | `previousTdNumber` | `string` | Yes | Prior cancelled TD |
 | | `pin` | `pin` | `string` | Yes | Property Identification No. |
 | | `owner_name` | `ownerName` | `string` | No | Declared Owner |
@@ -206,11 +321,21 @@ Philippine Local Government Code and Commission on Audit (COA) Circulars mandate
    - Voiding an OR resets the associated property's `last_paid_year` to its pre-payment state.
    - The receipt record status changes to `'VOIDED'` with timestamp, cancellation reason code, and authorizing officer username.
 
+### 4.3 Payment Snapshot & Financial Immutability
+When an Official Receipt (AF-51) is posted:
+1. **Permanent Snapshot**: The transaction locks in the final applied `basic_tax`, `sef_tax`, `discount_rate`, `discount_amount`, `penalty_amount`, and `total_paid` (`netAmountDue`).
+2. **Strict Immutability**: Later modifications to municipal tax settings, Schedule of Market Values, or individual property assessments must **never** retroactively recalculate or modify already-posted payment records. Historical receipts reflect the exact statutory and authorized financial values at the moment of issuance.
+
 ---
 
 ## 5. Security Architecture & Role-Based Access Control (RBAC)
 
 ### 5.1 Role Hierarchy & Permissions Matrix
+
+> [!WARNING]
+> **RBAC Conflict Notice Requiring Municipal Confirmation**:
+> The matrix below designates **Bulk Import Assessment Data (CSV)** as strictly `Admin` only. However, existing operational documentation (e.g. `README.md`) permits `Assessor` desks to ingest barangay rolls. 
+> **Action Required**: This conflict must be formally resolved and confirmed with the Municipal Treasurer / Assessor before production locking.
 
 | Capability / Resource | Admin | Assessor | Cashier (Teller) | Viewer (Mayor / Exec) |
 |---|:---:|:---:|:---:|:---:|
@@ -219,11 +344,12 @@ Philippine Local Government Code and Commission on Audit (COA) Circulars mandate
 | **Calculate Dues & Tax Assessment** | ✅ | ✅ | ✅ | ✅ |
 | **Create / Update Property Masterlist** | ✅ | ✅ | ❌ | ❌ |
 | **Verify / Promote Shell Records** | ✅ | ✅ | ❌ | ❌ |
-| **Bulk Import Assessment Data (CSV)** | ✅ | ❌ | ❌ | ❌ |
+| **Bulk Import Assessment Data (CSV)** | ✅ | ⚠️ *Conflict* | ❌ | ❌ |
 | **Issue AF-51 Official Receipts** | ✅ | ✅ | ✅ | ❌ |
 | **Void / Cancel Official Receipts** | ✅ (Authorized) | ❌ | ❌ | ❌ |
 | **Manage Users & Stations** | ✅ | ❌ | ❌ | ❌ |
 | **Assign Accountable Form Booklets** | ✅ | ❌ | ❌ | ❌ |
+| **Configure Municipal Tax Settings** | ✅ | ❌ | ❌ | ❌ |
 | **View Audit Logs** | ✅ | ✅ (Read) | ❌ | ❌ |
 
 ### 5.2 Password & Authentication Policy
@@ -273,9 +399,34 @@ export interface ITreasuryRepository {
 }
 ```
 
-Drivers implement this interface:
-1. `SupabaseRepository`: Cloud PostgreSQL via `@supabase/supabase-js`.
-2. `LocalHttpRepository`: On-Premise local server via REST API (`FastAPI` / `Node.js` / `Go`).
+### 6.3 Tax Assessment UI & Authorized Override Layout Specification
+The Tax Assessment modal and teller interface must distinctly display system-calculated defaults alongside authorized editable inputs:
+
+```text
++--------------------------------------------------------------+
+| Tax Assessment & Settlement (Tax Year: 2026)                 |
++--------------------------------------------------------------+
+| Basic Tax (1%)                                               |
+| [ ₱1,000.00                                            ✎ ]  |
+| System calculated: ₱1,000.00                                  |
+|                                                              |
+| Special Education Fund (SEF 1%)                              |
+| [ ₱1,000.00                                            ✎ ]  |
+| System calculated: ₱1,000.00                                  |
+|                                                              |
+| Discount Rate                                                |
+| [ 20.00 %                                              ✎ ]  |
+| System default: 20.00% (Jan 1 - Mar 31 Early Payment Policy) |
+|                                                              |
+| ------------------------------------------------------------ |
+| Discount Amount (Calculated):                      ₱400.00   |
+| Delinquency Penalty:                                 ₱0.00   |
+| ------------------------------------------------------------ |
+| NET AMOUNT DUE:                                  ₱1,600.00   |
++--------------------------------------------------------------+
+```
+- Visual indicators (e.g. amber tag or icon) appear whenever a field differs from its system default.
+- Any manual override requires an accompanying reason before payment posting or clearance slip generation.
 
 ---
 
