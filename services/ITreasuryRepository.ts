@@ -27,6 +27,7 @@ export interface ITreasuryRepository {
   // 1. Properties & Assessment
   getProperties(search?: string, barangay?: string): Promise<Property[]>;
   getPropertyAssessment(propertyId: string, fallbackProp?: Property, customSettings?: MunicipalTaxSettings): Promise<CalculationResult>;
+  getPropertyCompletedRecords(propertyId: string | number, property?: Property): Promise<TaxYearRecord[]>;
   saveProperty(propertyData: Partial<Property>): Promise<Property>;
   deleteProperty(propertyId: string): Promise<void>;
   lookupSfmv(barangay: string, propertyClass: string): Promise<{ base_rate_sqm: number; assessment_level: number }>;

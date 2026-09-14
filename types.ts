@@ -19,8 +19,18 @@ export interface Property {
 export interface TaxYearRecord {
   id?: string;
   year: number;
+  periodLabel?: string;          // Official bracket display string (e.g. "1973-79", "2026 1-2Q")
+  startYear?: number;            // Starting year of the bracket
+  endYear?: number;              // Ending year of the bracket
+  yearsCovered?: number[];       // All calendar years covered (e.g. [1973, 1974, ..., 1979])
+  quarterSpan?: string;          // E.g. "1-2Q" or "3-4Q"
+  isAdvance?: boolean;           // Advance payment period flag
   quarter?: number;
-  status: 'Delinquent' | 'Current' | 'Advance';
+  status: 'Delinquent' | 'Current' | 'Advance' | 'Cleared';
+  receiptNo?: string;
+  clearedAt?: string;
+  clearedBy?: string;
+  clearanceReference?: string;
   basicTax?: number;
   sefTax?: number;
   baseTax: number;

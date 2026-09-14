@@ -41,6 +41,7 @@ const App: React.FC = () => {
   // Clearance & Assessment View State
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [taxRecords, setTaxRecords] = useState<TaxYearRecord[]>([]);
+  const [completedTaxRecords, setCompletedTaxRecords] = useState<TaxYearRecord[]>([]);
   const [taxSummary, setTaxSummary] = useState<TaxSummary | undefined>(undefined);
   const [grandTotal, setGrandTotal] = useState<number>(0);
   
@@ -108,15 +109,32 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [currentUser, loadData]);
 
-  const handlePostPaymentView = async (property: Property) => {
+  const initialRestoredRef = useRef(false);
+
+  const handlePostPaymentView = useCallback(async (property: Property) => {
     setSelectedProperty(property);
     setIsLoading(true);
     setView('posting');
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
     try {
-      const result = await api.getPropertyAssessment(property.id, property);
+      const url = new URL(window.location.href);
+      url.searchParams.set('view', 'posting');
+      url.searchParams.set('td', property.tdNumber);
+      window.history.replaceState({}, '', url.toString());
+      localStorage.setItem('lgu_active_td', property.tdNumber);
+      localStorage.setItem('lgu_active_view', 'posting');
+    } catch {
+      // Non-blocking URL update
+    }
+
+    try {
+      const [result, completed] = await Promise.all([
+        api.getPropertyAssessment(property.id, property),
+        api.getPropertyCompletedRecords(property.id, property)
+      ]);
       setTaxRecords(result.records);
+      setCompletedTaxRecords(completed);
       setSelectedRecords(result.records);
       setTaxSummary(result.summary);
       setGrandTotal(result.grandTotal);
@@ -126,7 +144,46 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  const handleBackToDashboard = useCallback(() => {
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('view');
+      url.searchParams.delete('td');
+      window.history.replaceState({}, '', url.pathname + (url.search ? url.search : ''));
+      localStorage.removeItem('lgu_active_td');
+      localStorage.removeItem('lgu_active_view');
+    } catch {
+      // Non-blocking
+    }
+    setSelectedProperty(null);
+    setView('dashboard');
+    loadData();
+  }, [loadData]);
+
+  // Restore Statement of Account on page reload / refresh if previously viewing a property
+  useEffect(() => {
+    if (!currentUser || properties.length === 0 || initialRestoredRef.current) return;
+
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const savedTd = searchParams.get('td') || localStorage.getItem('lgu_active_td');
+      const savedView = searchParams.get('view') || localStorage.getItem('lgu_active_view');
+
+      if (savedTd && (savedView === 'posting' || savedView === 'soa')) {
+        const targetProperty = properties.find(
+          (p) => p.tdNumber === savedTd || String(p.id) === savedTd
+        );
+        if (targetProperty) {
+          initialRestoredRef.current = true;
+          handlePostPaymentView(targetProperty);
+        }
+      }
+    } catch {
+      // Non-blocking
+    }
+  }, [currentUser, properties, handlePostPaymentView]);
 
   const handleOpenAddModal = () => {
     setModalInitialData(null);
@@ -193,13 +250,28 @@ const App: React.FC = () => {
       setIssuedReceipt(clearanceSlip);
       setIsReceiptModalOpen(true);
 
-      const updatedResult = await api.getPropertyAssessment(selectedProperty.id, selectedProperty);
+      const [updatedResult, updatedCompleted] = await Promise.all([
+        api.getPropertyAssessment(selectedProperty.id, selectedProperty),
+        api.getPropertyCompletedRecords(selectedProperty.id, selectedProperty)
+      ]);
       setTaxRecords(updatedResult.records);
+      setCompletedTaxRecords(updatedCompleted);
       setSelectedRecords(updatedResult.records);
       setGrandTotal(updatedResult.grandTotal);
       setSelectedScopeSubtotal(updatedResult.grandTotal);
 
-      await loadData();
+      // Keep selectedProperty updated with newest clearance
+      if (selectedRecords.length > 0) {
+        const lastRecord = selectedRecords[selectedRecords.length - 1];
+        const isPartialFirstHalf = lastRecord.quarterSpan === '1-2Q';
+        const latestClearedYear = isPartialFirstHalf ? (lastRecord.year - 1) : (lastRecord.endYear || lastRecord.year);
+        setSelectedProperty((prev) => prev ? {
+          ...prev,
+          lastPaidYear: Math.max(prev.lastPaidYear, latestClearedYear)
+        } : null);
+      }
+
+      await loadData(true);
     } catch (err) {
       alert(`Clearance failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
@@ -210,6 +282,8 @@ const App: React.FC = () => {
   const handleLogout = useCallback((reason?: unknown) => {
     localStorage.removeItem('lgu_user');
     localStorage.removeItem('lgu_token');
+    localStorage.removeItem('lgu_active_td');
+    localStorage.removeItem('lgu_active_view');
     setCurrentUser(null);
     setView('dashboard');
     if (typeof reason === 'string' && reason.trim()) {
@@ -322,8 +396,8 @@ const App: React.FC = () => {
             {/* Navigation Bar */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm no-print">
               <button 
-                onClick={() => { setView('dashboard'); loadData(); }}
-                className="flex items-center gap-2 text-slate-600 hover:text-slate-900 text-xs font-bold transition-colors"
+                onClick={handleBackToDashboard}
+                className="flex items-center gap-2 text-slate-600 hover:text-slate-900 text-xs font-bold transition-colors cursor-pointer"
               >
                 <ArrowLeft size={16} />
                 Back to Masterlist Dashboard
@@ -350,29 +424,14 @@ const App: React.FC = () => {
 
             {selectedProperty && (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-                {/* Property Card: Column 1 on desktop, 1st on mobile */}
-                <div className="lg:col-span-1 order-1">
+                {/* Column 1: Property Master Card & Sequential Dues Clearance Action Box (Sticky on Desktop) */}
+                <div className="lg:col-span-1 space-y-6 lg:sticky lg:top-6 self-start">
                   <PropertyCard 
                     property={selectedProperty} 
                     onViewAudit={() => handleOpenAuditModal(selectedProperty)}
                   />
-                </div>
 
-                {/* Statement of Account: Columns 2-3 on desktop, 2nd on mobile (before clearance action) */}
-                <div className="lg:col-span-2 lg:row-span-2 order-2">
-                  <DelinquencyTable 
-                    records={taxRecords} 
-                    summary={taxSummary} 
-                    grandTotal={grandTotal}
-                    canEdit={currentUser?.role === 'Assessor' || currentUser?.role === 'Admin'}
-                    property={selectedProperty}
-                    currentUser={currentUser}
-                    onSelectionChange={handleSelectionChange}
-                  />
-                </div>
-
-                {/* Sequential Clearance Action Box: Column 1 on desktop below PropertyCard, 3rd on mobile below DelinquencyTable */}
-                <div className="lg:col-span-1 order-3 lg:col-start-1 lg:row-start-2">
+                  {/* Sequential Dues Clearance Action Box */}
                   <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4 no-print">
                     <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
                       <ShieldCheck size={18} className="text-emerald-600" />
@@ -383,10 +442,10 @@ const App: React.FC = () => {
                       <div className="space-y-4 text-xs">
                         <div className="p-3.5 bg-emerald-50/80 border border-emerald-200 rounded-xl text-emerald-950 space-y-1">
                           <p className="font-bold">
-                            Selected Scope: {selectedRecords.length} of {taxRecords.length} {taxRecords.length === 1 ? 'Tax Year' : 'Tax Years'}
+                            Selected Scope: {selectedRecords.length} of {taxRecords.length} {taxRecords.length === 1 ? 'Tax Period' : 'Tax Periods'}
                           </p>
                           <p className="text-[11px] text-emerald-800">
-                            Under the <strong>Arrears-First rule</strong>, earlier tax years must be settled chronologically before subsequent ones.
+                            Under the <strong>Arrears-First rule</strong>, earlier tax periods must be settled chronologically before subsequent ones.
                           </p>
                         </div>
 
@@ -395,10 +454,25 @@ const App: React.FC = () => {
                             <button 
                               onClick={handleMarkDuesCleared}
                               disabled={isProcessingClearance || selectedRecords.length === 0}
-                              className="w-full py-3.5 bg-[#064e3b] hover:bg-[#085a44] text-white font-black text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 active:scale-98 disabled:opacity-50"
+                              className={`w-full transition-all duration-200 rounded-xl shadow-md active:scale-98 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2 bg-[#064e3b] hover:bg-[#085a44] text-white ${
+                                selectedScopeSubtotal >= 100000 
+                                  ? 'px-3 py-2.5 sm:py-3' 
+                                  : 'px-4 py-3 sm:py-3.5'
+                              }`}
                             >
-                              <CheckCircle2 size={18} />
-                              {isProcessingClearance ? 'Processing Clearance...' : `Mark Selected Dues as Cleared (₱${selectedScopeSubtotal.toLocaleString(undefined, { minimumFractionDigits: 2 })})`}
+                              <CheckCircle2 size={18} className="shrink-0 text-emerald-300" />
+                              <div className={`flex items-center justify-center gap-1.5 text-center ${
+                                selectedScopeSubtotal >= 100000 ? 'flex-col sm:flex-row' : 'flex-wrap'
+                              }`}>
+                                <span className="font-bold text-xs sm:text-sm">
+                                  {isProcessingClearance ? 'Processing Clearance...' : 'Mark Selected Dues as Cleared'}
+                                </span>
+                                {!isProcessingClearance && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-950/60 border border-emerald-500/30 text-emerald-200 font-extrabold text-xs sm:text-sm tracking-tight tabular-nums whitespace-nowrap">
+                                    ₱{selectedScopeSubtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </span>
+                                )}
+                              </div>
                             </button>
                           ) : (
                             <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-center text-xs">
@@ -414,6 +488,20 @@ const App: React.FC = () => {
                       </div>
                     )}
                   </div>
+                </div>
+
+                {/* Column 2-3: Statement of Account Table */}
+                <div className="lg:col-span-2">
+                  <DelinquencyTable 
+                    records={taxRecords} 
+                    completedRecords={completedTaxRecords}
+                    summary={taxSummary} 
+                    grandTotal={grandTotal}
+                    canEdit={currentUser?.role === 'Assessor' || currentUser?.role === 'Admin'}
+                    property={selectedProperty}
+                    currentUser={currentUser}
+                    onSelectionChange={handleSelectionChange}
+                  />
                 </div>
               </div>
             )}
@@ -435,12 +523,20 @@ const App: React.FC = () => {
         receipt={issuedReceipt}
         currentUser={currentUser}
         onReceiptVoided={async () => {
-          await loadData();
+          await loadData(true);
+        }}
+        onStayOnProperty={() => {
+          setIsReceiptModalOpen(false);
+          setIssuedReceipt(null);
+        }}
+        onReturnToDashboard={() => {
+          setIsReceiptModalOpen(false);
+          setIssuedReceipt(null);
+          handleBackToDashboard();
         }}
         onClose={() => {
           setIsReceiptModalOpen(false);
           setIssuedReceipt(null);
-          setView('dashboard');
         }}
       />
 

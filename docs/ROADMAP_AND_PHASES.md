@@ -298,9 +298,18 @@ Treasury operations require statutory reports mandated by the **Bureau of Local 
      - Penalties / Surcharges collected.
      - Advance payment discounts granted.
 2. **Notice of Delinquency (RA 7160 Sec. 254)**:
-   - Batch generator for official demand letters to delinquent property owners.
-   - Formatted with Santa Rosa municipal seal, statutory interest escalation warnings, and legal remedies (warrant of levy).
-   - Printable in batch format for postal delivery.
+   - Batch generator for official demand notices to delinquent property owners matching [`docs/templates/notice_of_delinquency_template.csv`](file:///home/jeipyyy/Documents/Projects/Municipal-Treasurers-Office-LGU/docs/templates/notice_of_delinquency_template.csv) and [`docs/SSOT.md Section 2.9`](file:///home/jeipyyy/Documents/Projects/Municipal-Treasurers-Office-LGU/docs/SSOT.md#29-statutory-notice-of-delinquency-ra-7160-sec-254-specification).
+   - Organizes multi-decade delinquency rolls into canonical municipal assessment era brackets:
+     - Multi-year blocks: `1973-79`, `1980-85`, `1986`, `1987-1991`, `1992-1993`, `1994-2005`, `2006-11`
+     - Individual annual rolls: `2012` through `2025`
+     - Current operational year splits: `2026 1-2Q` (overdue/delinquent), `2026 3-4 Q` (current/prompt)
+     - Advance year: `2027` (prompt discount eligible)
+   - Computes `Unpaid Taxes` (Basic + SEF), `Penalties/Discount` (2%/month up to 72% statutory cap or prompt discount), and `Total Tax Delinquency`.
+   - Embeds Santa Rosa municipal seal, statutory legal remedies under Sec. 254/256, and canonical signatories:
+     - Prepared by: `Revenue Collection Clerk`
+     - Approved by: `Myra V. Cunanan, Municipal Treasurer`
+     - Received by: `Signature over printed name & Date`
+   - Printable in high-fidelity batch format (`@media print` CSS / `@react-pdf/renderer`) and CSV/XLSX.
 3. **RPTAR Continuous Ledger Sheet**:
    - Generates official Real Property Tax Account Register ledger cards per Tax Declaration.
 4. **Export Formats**:

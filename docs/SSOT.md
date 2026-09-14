@@ -43,11 +43,12 @@ $$\text{Base Tax} = \text{Assessed Value} \times 0.02 = \text{Basic Tax (1\%)} +
 
 ### 2.3 Delinquency Penalties (Surcharges)
 - **Accrual Rate**: `2%` per month of delay (`PENALTY_RATE_PER_MONTH = 0.02`) (RA 7160 Sec. 255).
-- **Statutory Penalty Cap**: Maximum of `36 months` (`MAX_PENALTY_MONTHS = 36`), capping total penalty at **`72%`** (`0.72`) of the delinquent base tax.
+- **Statutory Penalty Cap**: Maximum of `36 months` (`MAX_PENALTY_MONTHS = 36`), capping modern annual surcharges at **`72%`** (`0.72`) of the delinquent base tax.
+- **Municipal Legacy Roll Schedule (Santa Rosa Treasury)**: Under Santa Rosa Treasury's official operational schedule, delinquent periods for tax years $\le 2022$ (including historical brackets `1973-79` through `2022`) are capped at a fixed municipal legacy rate of **`24%`** (`0.24`) rather than 72%. Modern years follow: `2023` (72%), `2024` (66%), `2025` (42%), `2026 1-2Q` (18%), `2026 3-4 Q` (0%), and `2027` (20% advance discount).
 - **Accrual Start**: Past delinquent years accrue from January 1 of that tax year. Current year liabilities accrue penalty quarterly or after statutory deadlines.
 
 $$\text{Effective Delay Months} = \min(\text{Months Delayed}, 36)$$
-$$\text{Penalty Rate} = \text{Effective Delay Months} \times 0.02$$
+$$\text{Penalty Rate} = \text{Effective Delay Months} \times 0.02 \quad (\text{or } 0.24 \text{ for years } \le 2022)$$
 $$\text{Penalty Amount} = \text{Base Tax} \times \text{Penalty Rate}$$
 $$\text{Total Year Liability} = \text{Base Tax} + \text{Penalty Amount} - \text{Discounts}$$
 
@@ -99,6 +100,83 @@ Every manual modification to `Basic Tax`, `SEF Tax`, or `Discount Rate` creates 
 ### 2.8 Shell Records Rule
 - Properties flagged as `is_shell_record = true` represent historical, unverified, or fragmented legacy parcels lacking a verified Tax Declaration (TD) Number or Property Identification Number (PIN).
 - **Payment Prohibition**: Shell records **cannot** have payments posted until formally verified, updated with SFMV rates, and certified by the Municipal Assessor.
+
+### 2.9 Statutory Notice of Delinquency (RA 7160 Sec. 254 Specification)
+Under **Section 254 of Republic Act No. 7160 (Local Government Code of 1991)**, when real property tax becomes delinquent, the local treasurer must issue a formal Notice of Delinquency. The canonical Santa Rosa Notice of Delinquency document structure, period aggregation brackets, and signatory specifications are codified below:
+
+#### 2.9.1 Header & Legal Mandate
+- **Jurisdiction**: 
+  ```text
+  REPUBLIC OF THE PHILIPPINES
+  PROVINCE OF NUEVA ECIJA
+  Office of the Treasurer
+  Municipality of Santa Rosa
+  ```
+- **Document Title**: `NOTICE OF DELINQUENCY IN THE PAYMENT OF REAL PROPERTY TAX`
+- **Statutory Notice Text**:
+  > *"Notice is hereby served pursuant to the provision of Section 254, Republic Act No. 7160 (Local Government Code of 1991) the Real Property Tax for Calendar year 2025 and the previous years, has been delinquent with the respect to the figures."*
+- **Audit References**:
+  - `OR#`: Number of latest issued Official Receipt (Accountable Form 51)
+  - `LAST PAYMENT:`: Date and details of last recorded settlement
+  - `Notice Serving Period`: Current tax operations window (e.g. `SEPTEMBER 01-31, 2026`)
+
+#### 2.9.2 Property & Valuation Headers
+1. `Tax Declaration No.` (Current and previous TD reference)
+2. `Area` (Land area in square meters / hectares)
+3. `Assessed Value` (Taxable base in PHP)
+4. `Location` (Barangay and street location)
+5. `Kind of Property` (Classification: Residential, Agricultural, Commercial, Industrial, Machinery)
+
+#### 2.9.3 Historical Delinquency Period Groupings (Canonical Roll Brackets)
+To administer multi-decade delinquent arrears without document truncation, Santa Rosa Treasury codifies historical assessment eras into standard municipal aggregation brackets:
+
+| Period / Year Range | Bracket Type | Statutory / Historical Assessment Context |
+|---|---|---|
+| `1973-79` | Multi-Year Aggregate | Presidential Decree No. 464 (Real Property Tax Code of 1974) Enactment Era |
+| `1980-85` | Multi-Year Aggregate | Early 1980s General Assessment Revision Roll |
+| `1986` | Single Year | 1986 Constitutional Transition Period |
+| `1987-1991` | Multi-Year Aggregate | Late Pre-Local Government Code Roll |
+| `1992-1993` | Multi-Year Aggregate | RA 7160 Initial Enactment Period |
+| `1994-2005` | Multi-Year Aggregate | 1994 General Revision Era (12-year valuation block) |
+| `2006-11` | Multi-Year Aggregate | 2006 General Revision Era (6-year valuation block) |
+| `2012` to `2025` | Annual Itemized | Individual modern calendar assessment rolls |
+| `2026 1-2Q` | Semi-Annual Quarter Split | Overdue / Delinquent quarters of the operational year (Q1 & Q2) |
+| `2026 3-4 Q` | Semi-Annual Quarter Split | Current / Prompt payment quarters of the operational year (Q3 & Q4) |
+| `2027` | Annual Advance | Advance assessment year (eligible for advance prompt discount) |
+
+#### 2.9.4 Period Columnar Computation Rules & Municipal Penalty Schedule
+For each period or aggregated bracket above, calculations are governed by the official Santa Rosa Municipal Treasurer Notice of Delinquency schedule:
+
+| Period / Roll Bracket | Multiplier / Span | Unpaid Taxes Formula | Municipal Penalty / Discount Rate | Net Total Delinquency |
+|---|---|---|---|---|
+| `1973-79` | 7 Years | `(Assessed Value * 0.01) * 7 * 2` | `+24%` (`0.24`) | `Unpaid Taxes + (Unpaid Taxes * 0.24)` |
+| `1980-85` | 6 Years | `(Assessed Value * 0.01) * 6 * 2` | `+24%` (`0.24`) | `Unpaid Taxes + (Unpaid Taxes * 0.24)` |
+| `1986` | 1 Year | `(Assessed Value * 0.01) * 1 * 2` | `+24%` (`0.24`) | `Unpaid Taxes + (Unpaid Taxes * 0.24)` |
+| `1987-1991` | 5 Years | `(Assessed Value * 0.01) * 5 * 2` | `+24%` (`0.24`) | `Unpaid Taxes + (Unpaid Taxes * 0.24)` |
+| `1992-1993` | 2 Years | `(Assessed Value * 0.01) * 2 * 2` | `+24%` (`0.24`) | `Unpaid Taxes + (Unpaid Taxes * 0.24)` |
+| `1994-2005` | 12 Years | `(Assessed Value * 0.01) * 12 * 2` | `+24%` (`0.24`) | `Unpaid Taxes + (Unpaid Taxes * 0.24)` |
+| `2006-11` | 6 Years | `(Assessed Value * 0.01) * 6 * 2` | `+24%` (`0.24`) | `Unpaid Taxes + (Unpaid Taxes * 0.24)` |
+| `2012` to `2022` | 1 Year each | `(Assessed Value * 0.01) * 1 * 2` | `+24%` (`0.24` per year) | `Unpaid Taxes + (Unpaid Taxes * 0.24)` |
+| `2023` | 1 Year | `(Assessed Value * 0.01) * 1 * 2` | `+72%` (`0.72` max statutory) | `Unpaid Taxes + (Unpaid Taxes * 0.72)` |
+| `2024` | 1 Year | `(Assessed Value * 0.01) * 1 * 2` | `+66%` (`0.66` / 33 months) | `Unpaid Taxes + (Unpaid Taxes * 0.66)` |
+| `2025` | 1 Year | `(Assessed Value * 0.01) * 1 * 2` | `+42%` (`0.42` / 21 months) | `Unpaid Taxes + (Unpaid Taxes * 0.42)` |
+| `2026 1-2Q` | Half Year (0.5) | `(Assessed Value * 0.01) * 0.5 * 2` | `+18%` (`0.18` / 9 months) | `Unpaid Taxes + (Unpaid Taxes * 0.18)` |
+| `2026 3-4 Q` | Half Year (0.5) | `(Assessed Value * 0.01) * 0.5 * 2` | `None` (`0%` / prompt discount) | `Unpaid Taxes - Prompt Discount` |
+| `2027` | 1 Year | `(Assessed Value * 0.01) * 1 * 2` | `-20%` (`0.20` advance discount) | `Unpaid Taxes - (Unpaid Taxes * 0.20)` |
+
+> [!IMPORTANT]
+> **Santa Rosa Municipal Delinquency Protocol**:
+> Under Santa Rosa Treasury's official spreadsheet engine, all historical roll periods from `1973-79` through `2022` are assessed at a fixed municipal legacy rate of **`24%`** (`0.24`), rather than the 72% statutory cap. Calendar years 2023, 2024, and 2025 are annual rolls (`2023` at 72%, `2024` at 66%, and `2025` at 42%). Calendar year 2026 is divided semi-annually (`2026 1-2Q` at 18% penalty and `2026 3-4 Q` eligible for prompt discount).
+
+#### 2.9.5 Mandatory Accountable Totals & Signatories
+- **Summary Totals**:
+  - `BASIC`: Total Basic Tax (1% General Fund)
+  - `SEF`: Total Special Education Fund (1% Local School Board)
+  - `TOTAL`: Grand Total Tax Delinquency
+- **Canonical Signatories**:
+  - **Prepared by**: `Revenue Collection Clerk`
+  - **Received by**: `Signature over printed name & Date` (Taxpayer / Owner acknowledgment)
+  - **Approved by / Municipal Treasurer**: `Myra V. Cunanan, Municipal Treasurer`
 
 ---
 
@@ -467,6 +545,12 @@ The 33 official barangays of Santa Rosa, Nueva Ecija defined in [`constants.ts`]
 31. `Tramo`
 32. `Valenzuela (Poblacion)`
 33. `Zamora (Poblacion)`
+
+### 7.2 Municipal Treasury Administration & Canonical Signatories
+The canonical administrative officers and signatories for the Municipality of Santa Rosa, Nueva Ecija Treasury:
+- **Municipal Treasurer**: `Myra V. Cunanan`
+- **Collecting Officers**: `Revenue Collection Clerk` (authorized tellers and collection officers)
+- **Official Designation**: `Office of the Treasurer, Municipality of Santa Rosa, Province of Nueva Ecija`
 
 ---
 

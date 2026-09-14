@@ -39,18 +39,32 @@ describe("taxLogic - Municipal Payment-Date Policy & Assessor Overrides", () => 
     expect(result.grandTotal).toBe(0);
   });
 
-  it("caps penalty months at MAX_PENALTY_MONTHS (36 months / 72% penalty) for long-overdue years", () => {
+  it("enforces Santa Rosa 24% legacy rate for <=2022 and caps 2023 at 36 months / 72% penalty", () => {
     const result = calculateTaxLiability({
       ...mockProperty,
       lastPaidYear: CURRENT_YEAR - 10,
     });
+    // 10 records: 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026
     expect(result.records.length).toBe(10);
-    const oldestRecord = result.records[0];
+    const oldestRecord = result.records[0]; // 2017
     expect(oldestRecord.year).toBe(CURRENT_YEAR - 9);
     expect(oldestRecord.status).toBe("Delinquent");
-    expect(oldestRecord.monthsDelayed).toBe(MAX_PENALTY_MONTHS);
-    expect(oldestRecord.penaltyRate).toBe(0.72);
-    expect(oldestRecord.penaltyAmount).toBe(oldestRecord.baseTax * 0.72);
+    expect(oldestRecord.penaltyRate).toBe(0.24); // Santa Rosa Municipal schedule: 24% for <= 2022
+    expect(oldestRecord.penaltyAmount).toBe(oldestRecord.baseTax * 0.24);
+
+    // 2023: reaches 36 months / 72% maximum
+    const record2023 = result.records.find((r) => r.year === 2023);
+    expect(record2023).toBeDefined();
+    expect(record2023!.penaltyRate).toBe(0.72);
+    expect(record2023!.monthsDelayed).toBe(MAX_PENALTY_MONTHS);
+    expect(record2023!.penaltyAmount).toBe(record2023!.baseTax * 0.72);
+
+    // 2024: single annual roll (66% penalty per official schedule)
+    const r2024 = result.records.find((r) => r.periodLabel === "2024");
+    expect(r2024).toBeDefined();
+    expect(r2024!.baseTax).toBe(2000);
+    expect(r2024!.penaltyRate).toBe(0.66);
+    expect(r2024!.penaltyAmount).toBe(1320);
   });
 
   it("orders records chronologically (Arrears First) so oldest years are cleared first", () => {
@@ -153,6 +167,7 @@ describe("taxLogic - Municipal Payment-Date Policy & Assessor Overrides", () => 
       { paymentDate: janDate, settings: defaultSettings }
     );
     const delinquentRecords = result.records.filter((r) => r.status === "Delinquent");
+    // 2 delinquent records: 2024 and 2025
     expect(delinquentRecords.length).toBe(2);
     delinquentRecords.forEach((delRec) => {
       expect(delRec.discountRate).toBe(0.00);
@@ -377,4 +392,173 @@ describe("taxLogic - Municipal Payment-Date Policy & Assessor Overrides", () => 
     const rowState = isUnchanged ? "UNCHANGED" : "VALID_UPDATE";
     expect(rowState).toBe("UNCHANGED");
   });
+
+  // Canonical Municipal Assessment Brackets Suite (Option 1)
+  describe("Santa Rosa Canonical Municipal Assessment Brackets (Option 1)", () => {
+    it("aggregates historical multi-decade delinquent years into canonical municipal brackets", () => {
+      // Account delinquent from 1970 up to CURRENT_YEAR
+      const result = calculateTaxLiability({
+        ...mockProperty,
+        lastPaidYear: 1970,
+      });
+
+      const labels = result.records.map((r) => r.periodLabel);
+      expect(labels).toContain("1971-72");
+      expect(labels).toContain("1973-79");
+      expect(labels).toContain("1980-85");
+      expect(labels).toContain("1986");
+      expect(labels).toContain("1987-1991");
+      expect(labels).toContain("1992-1993");
+      expect(labels).toContain("1994-2005");
+      expect(labels).toContain("2006-11");
+      expect(labels).toContain("2012");
+      expect(labels).toContain("2025");
+      expect(labels).toContain("2026");
+
+      // Verify 1973-79 bracket math under Santa Rosa Treasury 24% legacy rate (7 years at AV 100,000)
+      const b73 = result.records.find((r) => r.periodLabel === "1973-79");
+      expect(b73).toBeDefined();
+      expect(b73!.yearsCovered).toEqual([1973, 1974, 1975, 1976, 1977, 1978, 1979]);
+      expect(b73!.basicTax).toBe(7000); // 7 * 1000
+      expect(b73!.sefTax).toBe(7000);   // 7 * 1000
+      expect(b73!.baseTax).toBe(14000);
+      expect(b73!.penaltyRate).toBe(0.24); // Santa Rosa Treasury 24% municipal legacy rate (<= 2022)
+      expect(b73!.penaltyAmount).toBe(3360); // 14000 * 0.24
+      expect(b73!.totalDue).toBe(17360); // 14000 + 3360
+      expect(b73!.status).toBe("Delinquent");
+    });
+
+    it("correctly handles partial bracket starts when lastPaidYear is inside an era (with 24% legacy rate)", () => {
+      // Last paid 1982 -> starts at 1983 inside the 1980-85 bracket
+      const result = calculateTaxLiability({
+        ...mockProperty,
+        lastPaidYear: 1982,
+      });
+
+      const firstRecord = result.records[0];
+      expect(firstRecord.periodLabel).toBe("1983-85");
+      expect(firstRecord.yearsCovered).toEqual([1983, 1984, 1985]);
+      expect(firstRecord.basicTax).toBe(3000); // 3 * 1000
+      expect(firstRecord.sefTax).toBe(3000);
+      expect(firstRecord.baseTax).toBe(6000);
+      expect(firstRecord.penaltyRate).toBe(0.24); // 24% legacy rate
+      expect(firstRecord.penaltyAmount).toBe(1440); // 6000 * 0.24
+      expect(firstRecord.totalDue).toBe(7440);
+    });
+
+    it("enforces exact Santa Rosa Municipal Penalty Schedule (24% for <=2022, 72% 2023, 66% 2024, 42% 2025, 18% 2026 1-2Q)", () => {
+      const septDate = new Date(CURRENT_YEAR, 8, 15); // Sept 15 (Month 9)
+      const result = calculateTaxLiability(
+        { ...mockProperty, lastPaidYear: 2021 },
+        { 
+          paymentDate: septDate,
+          splitCurrentYearQuarters: true,
+          includeAdvanceYear: true,
+          settings: defaultSettings 
+        }
+      );
+
+      // 2022: 24%
+      const r2022 = result.records.find((r) => r.periodLabel === "2022");
+      expect(r2022?.penaltyRate).toBe(0.24);
+
+      // 2023: 72%
+      const r2023 = result.records.find((r) => r.periodLabel === "2023");
+      expect(r2023?.penaltyRate).toBe(0.72);
+
+      // 2024: 66% (single annual roll)
+      const r2024 = result.records.find((r) => r.periodLabel === "2024");
+      expect(r2024?.baseTax).toBe(2000);
+      expect(r2024?.penaltyRate).toBe(0.66);
+      expect(r2024?.penaltyAmount).toBe(1320);
+
+      // 2025: 42%
+      const r2025 = result.records.find((r) => r.periodLabel === "2025");
+      expect(r2025?.penaltyRate).toBe(0.42);
+
+      // 2026 1-2Q: 18%
+      const r2026q12 = result.records.find((r) => r.periodLabel === "2026 1-2Q");
+      expect(r2026q12?.penaltyRate).toBe(0.18);
+
+      // 2026 3-4 Q: 0% penalty
+      const r2026q34 = result.records.find((r) => r.periodLabel === "2026 3-4 Q");
+      expect(r2026q34?.penaltyRate).toBe(0);
+
+      // 2027: 0% penalty, 20% advance discount
+      const r2027 = result.records.find((r) => r.periodLabel === "2027");
+      expect(r2027?.penaltyRate).toBe(0);
+      expect(r2027?.discountRate).toBe(0.20);
+    });
+
+    it("supports current year semi-annual quarter splits (2026 1-2Q vs 2026 3-4 Q)", () => {
+      const septDate = new Date(CURRENT_YEAR, 8, 15); // Sept 15 (Month 9)
+      const result = calculateTaxLiability(
+        { ...mockProperty, lastPaidYear: CURRENT_YEAR - 1 },
+        { 
+          paymentDate: septDate,
+          splitCurrentYearQuarters: true,
+          settings: defaultSettings 
+        }
+      );
+
+      expect(result.records).toHaveLength(2);
+      const q12 = result.records[0];
+      const q34 = result.records[1];
+
+      expect(q12.periodLabel).toBe(`${CURRENT_YEAR} 1-2Q`);
+      expect(q12.baseTax).toBe(1000); // 0.5 of annual 2000
+      expect(q12.status).toBe("Delinquent"); // Past June 30
+
+      expect(q34.periodLabel).toBe(`${CURRENT_YEAR} 3-4 Q`);
+      expect(q34.baseTax).toBe(1000);
+      expect(q34.status).toBe("Current");
+      expect(q34.discountRate).toBe(0.10); // 10% prompt discount
+      expect(q34.discountAmount).toBe(100);
+      expect(q34.totalDue).toBe(900); // 1000 - 100
+    });
+
+    it("supports advance tax year (2027) with 20% advance discount", () => {
+      const result = calculateTaxLiability(
+        { ...mockProperty, lastPaidYear: CURRENT_YEAR },
+        { 
+          includeAdvanceYear: true,
+          settings: defaultSettings 
+        }
+      );
+
+      expect(result.records).toHaveLength(1);
+      const adv = result.records[0];
+      expect(adv.year).toBe(CURRENT_YEAR + 1);
+      expect(adv.periodLabel).toBe(String(CURRENT_YEAR + 1));
+      expect(adv.status).toBe("Advance");
+      expect(adv.discountRate).toBe(0.20); // 20% advance prompt discount
+      expect(adv.discountAmount).toBe(400); // 2000 * 0.20
+      expect(adv.totalDue).toBe(1600); // 2000 - 400
+    });
+
+    it("matches Santa Rosa Treasury official CSV example for 1973-79 with Assessed Value = 100", () => {
+      // User CSV formula:
+      // Assessed Value = 100
+      // 1973-79: Unpaid Basic = (100 * 0.01) * 7 = 7.00, Penalty (24%) = 7.00 * 0.24 = 1.68, Total Basic = 8.68
+      // Combined Base Tax (Basic + SEF) = 14.00, Penalty (24%) = 3.36, Total Due = 17.36
+      const result = calculateTaxLiability(
+        { ...mockProperty, assessedValue: 100, lastPaidYear: 1972 },
+        { groupHistoricalBrackets: true }
+      );
+
+      const r1973_79 = result.records.find((r) => r.periodLabel === "1973-79");
+      expect(r1973_79).toBeDefined();
+      expect(r1973_79!.basicTax).toBe(7.00);
+      expect(r1973_79!.sefTax).toBe(7.00);
+      expect(r1973_79!.baseTax).toBe(14.00);
+      expect(r1973_79!.penaltyRate).toBe(0.24);
+      expect(r1973_79!.penaltyAmount).toBe(3.36);
+      expect(r1973_79!.totalDue).toBe(17.36);
+
+      // Single fund (Basic 1%) as shown in the single column of the spreadsheet:
+      const basicOnlyDelinquency = r1973_79!.basicTax + (r1973_79!.basicTax * r1973_79!.penaltyRate);
+      expect(basicOnlyDelinquency).toBe(8.68);
+    });
+  });
 });
+

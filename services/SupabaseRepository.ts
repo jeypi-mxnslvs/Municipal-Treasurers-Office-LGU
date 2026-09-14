@@ -57,8 +57,19 @@ export class SupabaseRepository implements ITreasuryRepository {
 
   async getPropertyAssessment(propertyId: string, fallbackProp?: Property, customSettings?: MunicipalTaxSettings): Promise<CalculationResult> {
     const settings = customSettings || await this.getMunicipalTaxSettings();
+    const completed = await this.getPropertyCompletedRecords(propertyId, fallbackProp);
+    const completedPeriodLabels = completed.map(r => r.periodLabel).filter(Boolean) as string[];
+
+    const calcOptions = {
+      paymentDate: new Date(),
+      settings,
+      completedPeriodLabels,
+      splitCurrentYearQuarters: true,
+      split2024Quarters: true,
+    };
+
     if (fallbackProp) {
-      return localCalculateTaxLiability(fallbackProp, { paymentDate: new Date(), settings });
+      return localCalculateTaxLiability(fallbackProp, calcOptions);
     }
     const { data } = await supabase.from('properties').select('*').eq('id', propertyId).single();
     if (data) {
@@ -74,9 +85,107 @@ export class SupabaseRepository implements ITreasuryRepository {
         propertyClass: data.property_class,
         isShellRecord: Boolean(data.is_shell_record)
       };
-      return localCalculateTaxLiability(prop, { paymentDate: new Date(), settings });
+      return localCalculateTaxLiability(prop, calcOptions);
     }
     return { records: [], grandTotal: 0 };
+  }
+
+  async getPropertyCompletedRecords(propertyId: string | number, property?: Property): Promise<TaxYearRecord[]> {
+    const completedRecordsMap = new Map<string, TaxYearRecord>();
+
+    // 1. Fetch digital payment postings
+    try {
+      const { data: postings } = await supabase
+        .from('payment_postings')
+        .select('*')
+        .eq('property_id', propertyId)
+        .eq('status', 'ISSUED')
+        .order('posted_at', { ascending: false });
+
+      if (postings && postings.length > 0) {
+        for (const post of postings) {
+          const paidRecords = (post.paid_records || []) as TaxYearRecord[];
+          for (const r of paidRecords) {
+            const key = r.periodLabel || String(r.year);
+            if (!completedRecordsMap.has(key)) {
+              completedRecordsMap.set(key, {
+                ...r,
+                status: 'Cleared',
+                receiptNo: post.receipt_no,
+                clearedAt: post.posted_at,
+                clearedBy: post.posted_by,
+                clearanceReference: `Official Receipt ${post.receipt_no}`,
+              });
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch payment postings for completed records:', e);
+    }
+
+    // 2. Fetch manual / offline delinquency completions
+    try {
+      const { data: completions } = await supabase
+        .from('delinquency_year_completions')
+        .select('*')
+        .eq('property_id', propertyId)
+        .eq('status', 'COMPLETED')
+        .order('tax_year', { ascending: false });
+
+      if (completions && completions.length > 0) {
+        for (const comp of completions) {
+          const compKey = comp.reference?.includes('Q') ? comp.reference : String(comp.tax_year);
+          if (!completedRecordsMap.has(compKey)) {
+            const baseTax = property ? Math.round(property.assessedValue * 0.02 * 100) / 100 : 0;
+            completedRecordsMap.set(compKey, {
+              year: comp.tax_year,
+              periodLabel: comp.reference?.includes('Q') ? comp.reference : undefined,
+              status: 'Cleared',
+              baseTax,
+              basicTax: baseTax / 2,
+              sefTax: baseTax / 2,
+              monthsDelayed: 0,
+              penaltyRate: 0,
+              penaltyAmount: 0,
+              discountRate: 0,
+              discountAmount: 0,
+              totalDue: baseTax,
+              clearedAt: comp.completed_at || comp.created_at,
+              clearedBy: comp.completed_by,
+              clearanceReference: comp.reference || 'Sequential Arrears Clearance',
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch delinquency completions:', e);
+    }
+
+    // 3. Fallback: if no records were found but property.lastPaidYear indicates settled history
+    if (completedRecordsMap.size === 0 && property && property.lastPaidYear >= 1970) {
+      const minYear = Math.max(property.lastPaidYear - 4, 1971);
+      const baseTax = Math.round(property.assessedValue * 0.02 * 100) / 100;
+      for (let y = minYear; y <= property.lastPaidYear; y++) {
+        completedRecordsMap.set(String(y), {
+          year: y,
+          status: 'Cleared',
+          baseTax,
+          basicTax: baseTax / 2,
+          sefTax: baseTax / 2,
+          monthsDelayed: 0,
+          penaltyRate: 0,
+          penaltyAmount: 0,
+          discountRate: 0,
+          discountAmount: 0,
+          totalDue: baseTax,
+          clearanceReference: 'Settled per Masterlist Baseline',
+          clearedBy: 'Historical RPTAR Record',
+        });
+      }
+    }
+
+    return Array.from(completedRecordsMap.values()).sort((a, b) => (a.year - b.year) || (a.periodLabel || '').localeCompare(b.periodLabel || ''));
   }
 
   async saveProperty(propertyData: Partial<Property>): Promise<Property> {
@@ -233,7 +342,11 @@ export class SupabaseRepository implements ITreasuryRepository {
 
       // Advance property last paid year
       if (payload.paidRecords.length > 0) {
-        const highestYear = Math.max(...payload.paidRecords.map(r => r.year || 0));
+        const lastRec = payload.paidRecords[payload.paidRecords.length - 1];
+        const isPartialFirstHalf = lastRec.quarterSpan === '1-2Q';
+        const highestYear = isPartialFirstHalf 
+          ? (lastRec.year - 1) 
+          : Math.max(...payload.paidRecords.map(r => r.endYear || r.year || 0));
         await supabase
           .from('properties')
           .update({ last_paid_year: highestYear, updated_at: new Date().toISOString() })

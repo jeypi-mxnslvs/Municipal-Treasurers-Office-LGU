@@ -45,7 +45,7 @@ interface DashboardTableProps {
   onOpenBulkModal?: () => void;
 }
 
-const ITEMS_PER_PAGE = 5;
+const DEFAULT_PAGE_SIZE = 25;
 
 const DashboardTable: React.FC<DashboardTableProps> = ({
   properties,
@@ -61,6 +61,7 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
   const [selectedBarangay, setSelectedBarangay] = useState<string>('All');
   const [selectedStatus, setSelectedStatus] = useState<string>('All');
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
   const filteredProperties = properties.filter((p) => {
     const matchesSearch =
@@ -79,11 +80,11 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
   });
 
   // Pagination Math
-  const totalPages = Math.ceil(filteredProperties.length / ITEMS_PER_PAGE) || 1;
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const totalPages = Math.ceil(filteredProperties.length / pageSize) || 1;
+  const startIndex = (currentPage - 1) * pageSize;
   const paginatedProperties = filteredProperties.slice(
     startIndex,
-    startIndex + ITEMS_PER_PAGE
+    startIndex + pageSize
   );
 
   const handlePageChange = (page: number) => {
@@ -343,16 +344,35 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
 
       {/* Pagination Footer */}
       <div className="bg-slate-50 px-5 py-3.5 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600 shrink-0">
-        <div>
-          Showing{' '}
-          <span className="font-bold text-slate-800">
-            {filteredProperties.length > 0 ? startIndex + 1 : 0}
-          </span>{' '}
-          to{' '}
-          <span className="font-bold text-slate-800">
-            {Math.min(startIndex + ITEMS_PER_PAGE, filteredProperties.length)}
-          </span>{' '}
-          of <span className="font-bold text-slate-800">{filteredProperties.length}</span> properties
+        <div className="flex items-center gap-3">
+          <div>
+            Showing{' '}
+            <span className="font-bold text-slate-800">
+              {filteredProperties.length > 0 ? startIndex + 1 : 0}
+            </span>{' '}
+            to{' '}
+            <span className="font-bold text-slate-800">
+              {Math.min(startIndex + pageSize, filteredProperties.length)}
+            </span>{' '}
+            of <span className="font-bold text-slate-800">{filteredProperties.length}</span> properties
+          </div>
+
+          <div className="flex items-center gap-1.5 text-xs text-slate-500">
+            <span className="text-[11px] text-slate-400">Rows:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="bg-white border border-slate-200 rounded px-1.5 py-0.5 text-xs font-semibold text-slate-700 cursor-pointer focus:outline-none focus:ring-1 focus:ring-emerald-600"
+            >
+              <option value={10}>10</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">

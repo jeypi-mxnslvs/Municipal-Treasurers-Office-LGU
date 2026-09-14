@@ -25,6 +25,7 @@ import { api } from '@/services/api';
 
 interface DelinquencyTableProps {
   records: TaxYearRecord[];
+  completedRecords?: TaxYearRecord[];
   summary?: TaxSummary;
   grandTotal?: number;
   canEdit?: boolean;
@@ -34,9 +35,11 @@ interface DelinquencyTableProps {
 }
 
 type EditableField = 'BASIC_TAX' | 'SEF_TAX' | 'DISCOUNT_RATE';
+type OrganizerTab = 'OUTSTANDING' | 'COMPLETED' | 'ALL';
 
 const DelinquencyTable: React.FC<DelinquencyTableProps> = ({ 
   records: initialRecords, 
+  completedRecords = [],
   summary: _summary, 
   grandTotal: _grandTotal,
   canEdit = true,
@@ -51,7 +54,19 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
     setRecords(initialRecords);
   }, [initialRecords]);
 
-  // Store selected index range (from index 0 up to selectedMaxIndex inclusive)
+  // Active Organizer Tab State
+  const [activeTab, setActiveTab] = useState<OrganizerTab>('OUTSTANDING');
+
+  // Auto-focus COMPLETED if outstanding is empty but completed records exist
+  useEffect(() => {
+    if (records.length === 0 && completedRecords.length > 0) {
+      setActiveTab('COMPLETED');
+    } else if (records.length > 0 && activeTab === 'COMPLETED' && completedRecords.length === 0) {
+      setActiveTab('OUTSTANDING');
+    }
+  }, [records.length, completedRecords.length, activeTab]);
+
+  // Store selected index range (from index 0 up to selectedMaxIndex inclusive) for outstanding records
   const [selectedMaxIndex, setSelectedMaxIndex] = useState<number>(records.length - 1);
 
   // Default to selecting all records whenever new records load
@@ -59,7 +74,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
     setSelectedMaxIndex(records.length - 1);
   }, [records.length]);
 
-  // Compute selected subset
+  // Compute selected subset for outstanding records
   const selectedRecords = React.useMemo(
     () => records.slice(0, selectedMaxIndex + 1),
     [records, selectedMaxIndex]
@@ -72,6 +87,40 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
   const selectedSefTax = selectedRecords.reduce((sum, r) => sum + (r.sefTax || (r.baseTax / 2) || 0), 0);
   const selectedPenalties = selectedRecords.reduce((sum, r) => sum + (r.penaltyAmount || 0), 0);
   const selectedDiscounts = selectedRecords.reduce((sum, r) => sum + (r.discountAmount || 0), 0);
+
+  // Aggregates for completed / settled records
+  const completedTotalDue = React.useMemo(
+    () => completedRecords.reduce((sum, r) => sum + (r.totalDue || 0), 0),
+    [completedRecords]
+  );
+  const completedBasicTax = React.useMemo(
+    () => completedRecords.reduce((sum, r) => sum + (r.basicTax || (r.baseTax / 2) || 0), 0),
+    [completedRecords]
+  );
+  const completedSefTax = React.useMemo(
+    () => completedRecords.reduce((sum, r) => sum + (r.sefTax || (r.baseTax / 2) || 0), 0),
+    [completedRecords]
+  );
+  const completedPenalties = React.useMemo(
+    () => completedRecords.reduce((sum, r) => sum + (r.penaltyAmount || 0), 0),
+    [completedRecords]
+  );
+  const completedDiscounts = React.useMemo(
+    () => completedRecords.reduce((sum, r) => sum + (r.discountAmount || 0), 0),
+    [completedRecords]
+  );
+
+  // Active list of records to render based on selected organizer tab
+  const displayedRecords = React.useMemo(() => {
+    if (activeTab === 'COMPLETED') {
+      return completedRecords;
+    }
+    if (activeTab === 'ALL') {
+      const combined = [...completedRecords, ...records];
+      return combined.sort((a, b) => a.year - b.year);
+    }
+    return records;
+  }, [activeTab, completedRecords, records]);
 
   // Modal state for manual assessor override
   const [editingRecord, setEditingRecord] = useState<TaxYearRecord | null>(null);
@@ -93,7 +142,8 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
     }
   }, [selectedRecords, selectedSubtotal]);
 
-  if (records.length === 0) {
+  // If no records exist in either outstanding or completed
+  if (records.length === 0 && completedRecords.length === 0) {
     return (
       <Card className="border-slate-200 shadow-sm">
         <CardContent className="p-12 text-center">
@@ -101,7 +151,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
             <CheckCircle2 size={32} className="text-emerald-600" />
           </div>
           <h3 className="text-lg font-bold text-slate-800">Account Fully Cleared</h3>
-          <p className="text-slate-500 text-sm mt-1">This property is paid up to date with zero delinquent liabilities.</p>
+          <p className="text-slate-500 text-sm mt-1">This property has no recorded outstanding or historical tax obligations.</p>
         </CardContent>
       </Card>
     );
@@ -217,7 +267,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
   return (
     <Card className="border-slate-200 shadow-sm overflow-hidden flex flex-col h-full animate-fade-in-up">
       {/* Header & Sequential Scope Selector */}
-      <div className="p-4 border-b border-slate-200 bg-slate-50/80 space-y-3">
+      <div className="p-4 border-b border-slate-200 bg-slate-50/80 space-y-3 shrink-0">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
           <div className="flex items-center gap-2">
             <AlertCircle size={18} className="text-emerald-600" />
@@ -226,222 +276,327 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
             </h3>
           </div>
           <Badge variant="secondary" className="gap-1 bg-emerald-50 text-emerald-700 border-emerald-200 font-semibold">
-            <Calendar size={12} /> {records.length} {records.length === 1 ? 'Tax Year Owed' : 'Tax Years Owed'}
+            <Calendar size={12} /> {records.length > 0 ? `${records.length} ${records.length === 1 ? 'Tax Year Owed' : 'Tax Years Owed'}` : `${completedRecords.length} ${completedRecords.length === 1 ? 'Tax Year Settled' : 'Tax Years Settled'}`}
           </Badge>
         </div>
 
-        {/* 1-Click Scope Buttons */}
-        <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-200/70 text-xs">
-          <span className="font-bold text-slate-500 uppercase tracking-wide text-[10px] mr-1">
-            Payment Scope:
-          </span>
-          <Button
-            type="button"
-            variant={selectedMaxIndex === 0 ? "default" : "outline"}
-            size="sm"
-            onClick={handleSelectOldestYear}
-            className="h-8 gap-1.5 rounded-lg text-xs"
-          >
-            <CheckSquare size={13} />
-            Pay Oldest Year ({records[0].year})
-          </Button>
-
-          {records.length > 2 && (
-            <Button
+        {/* Organizer Filter Tabs */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-200/70">
+          <div className="flex items-center gap-1.5 p-1 bg-slate-200/70 rounded-xl">
+            <button
               type="button"
-              variant={
-                selectedMaxIndex === records.length - 2
-                  ? "default"
-                  : "outline"
-              }
-              size="sm"
-              onClick={() => setSelectedMaxIndex(records.length - 2)}
-              className="h-8 gap-1.5 rounded-lg text-xs"
+              onClick={() => setActiveTab('OUTSTANDING')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                activeTab === 'OUTSTANDING'
+                  ? 'bg-white text-slate-900 shadow-xs border border-slate-200'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
             >
-              <Layers size={13} />
-              Pay Prior Arrears (Excl. Current Year)
-            </Button>
-          )}
+              <span>Outstanding Dues</span>
+              <Badge variant={records.length > 0 ? "destructive" : "secondary"} className="text-[10px] px-1.5 py-0 font-bold">
+                {records.length}
+              </Badge>
+            </button>
 
-          {records.length > 1 && (
-            <Button
+            <button
               type="button"
-              variant={selectedMaxIndex === records.length - 1 ? "default" : "outline"}
-              size="sm"
-              onClick={handleSelectAll}
-              className="h-8 gap-1.5 rounded-lg text-xs"
+              onClick={() => setActiveTab('COMPLETED')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                activeTab === 'COMPLETED'
+                  ? 'bg-white text-emerald-900 shadow-xs border border-slate-200'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
             >
-              <Sparkles size={13} />
-              Pay All Dues ({records.length} Years)
-            </Button>
+              <CheckCircle2 size={12} className="text-emerald-600" />
+              <span>Completed Dues</span>
+              <Badge variant="secondary" className="bg-emerald-100 text-emerald-800 border-emerald-200 text-[10px] px-1.5 py-0 font-bold">
+                {completedRecords.length}
+              </Badge>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('ALL')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                activeTab === 'ALL'
+                  ? 'bg-white text-slate-900 shadow-xs border border-slate-200'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Layers size={12} className="text-slate-500" />
+              <span>All History</span>
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-bold">
+                {records.length + completedRecords.length}
+              </Badge>
+            </button>
+          </div>
+
+          {/* Account status indicator */}
+          {records.length === 0 && completedRecords.length > 0 && (
+            <div className="flex items-center gap-1.5 text-xs text-emerald-800 bg-emerald-100/70 px-2.5 py-1 rounded-lg border border-emerald-300 font-bold">
+              <CheckCircle2 size={13} className="text-emerald-600" />
+              Account Fully Cleared — Good Standing
+            </div>
           )}
         </div>
+
+        {/* 1-Click Scope Buttons (Visible when activeTab is Outstanding or All with outstanding records) */}
+        {activeTab !== 'COMPLETED' && records.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-200/70 text-xs">
+            <span className="font-bold text-slate-500 uppercase tracking-wide text-[10px] mr-1">
+              Payment Scope:
+            </span>
+            <Button
+              type="button"
+              variant={selectedMaxIndex === 0 ? "default" : "outline"}
+              size="sm"
+              onClick={handleSelectOldestYear}
+              className="h-8 gap-1.5 rounded-lg text-xs"
+            >
+              <CheckSquare size={13} />
+              Pay Oldest Period ({records[0]?.periodLabel || records[0]?.year})
+            </Button>
+
+            {records.length > 2 && (
+              <Button
+                type="button"
+                variant={
+                  selectedMaxIndex === records.length - 2
+                    ? "default"
+                    : "outline"
+                }
+                size="sm"
+                onClick={() => setSelectedMaxIndex(records.length - 2)}
+                className="h-8 gap-1.5 rounded-lg text-xs"
+              >
+                <Layers size={13} />
+                Pay Prior Arrears (Excl. Current Year)
+              </Button>
+            )}
+
+            {records.length > 1 && (
+              <Button
+                type="button"
+                variant={selectedMaxIndex === records.length - 1 ? "default" : "outline"}
+                size="sm"
+                onClick={handleSelectAll}
+                className="h-8 gap-1.5 rounded-lg text-xs"
+              >
+                <Sparkles size={13} />
+                Pay All Dues ({records.length} {records.length === 1 ? 'Period' : 'Periods'})
+              </Button>
+            )}
+          </div>
+        )}
+
+        {/* Informative Subtitle for Completed Tab */}
+        {activeTab === 'COMPLETED' && (
+          <div className="pt-1 text-xs text-slate-500 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1 border-t border-slate-200/70">
+            <span>Showing settled tax liabilities ({completedRecords.length} {completedRecords.length === 1 ? 'tax year' : 'tax years'} cleared).</span>
+            <span className="font-semibold text-emerald-700">Official Municipal Receipts & Masterlist Baseline</span>
+          </div>
+        )}
       </div>
       
-      {/* Itemized Table */}
-      <div className="overflow-x-auto flex-grow">
-        <Table className="text-xs">
-          <TableHeader className="bg-slate-100/75">
-            <TableRow>
-              <TableHead className="w-12 text-center font-bold text-slate-600 uppercase tracking-wider">Select</TableHead>
-              <TableHead className="font-bold text-slate-600 uppercase tracking-wider">Tax Period</TableHead>
-              <TableHead className="font-bold text-slate-600 uppercase tracking-wider">Status</TableHead>
-              <TableHead className="text-right font-bold text-slate-600 uppercase tracking-wider">Basic Tax (1%)</TableHead>
-              <TableHead className="text-right font-bold text-slate-600 uppercase tracking-wider">SEF Tax (1%)</TableHead>
-              <TableHead className="text-right font-bold text-slate-600 uppercase tracking-wider">
-                Penalty <span className="text-slate-400 font-normal">(Rate)</span>
+      {/* Itemized Table - Scrollable container for multi-year delinquency rolls (e.g. 1971-2026) */}
+      <div className="overflow-y-auto overflow-x-hidden max-h-[560px] flex-grow relative [&>div]:overflow-x-hidden">
+        <Table className="w-full table-fixed text-sm font-sans">
+          <TableHeader className="bg-slate-100/95 backdrop-blur-xs sticky top-0 z-10 shadow-2xs">
+            <TableRow className="hover:bg-transparent border-b border-slate-200">
+              <TableHead className="w-[7%] min-w-[48px] text-center font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 pl-3 pr-2">Select</TableHead>
+              <TableHead className="w-[13%] text-left font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 pl-2 pr-1.5">Period</TableHead>
+              <TableHead className="w-[10%] text-left font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 px-1.5">Status</TableHead>
+              <TableHead className="w-[13%] text-right font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 px-1.5">Basic (1%)</TableHead>
+              <TableHead className="w-[13%] text-right font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 px-1.5">SEF (1%)</TableHead>
+              <TableHead className="w-[13%] text-right font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 px-1.5">
+                Penalty <span className="text-slate-500 font-normal text-[10px]">(Rate)</span>
               </TableHead>
-              <TableHead className="text-right font-bold text-slate-600 uppercase tracking-wider">Discount Rate</TableHead>
-              <TableHead className="text-right font-bold text-slate-600 uppercase tracking-wider">Net Amount Due</TableHead>
+              <TableHead className="w-[13%] text-right font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 px-1.5">Discount</TableHead>
+              <TableHead className="w-[18%] text-right font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 pl-2 pr-6">Net Due</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody className="divide-y divide-slate-100">
-            {records.map((record, idx) => {
-              const isSelected = idx <= selectedMaxIndex;
+            {displayedRecords.map((record, idx) => {
+              const isCleared = record.status === 'Cleared';
               const isDelinquent = record.status === 'Delinquent';
               const hasDiscount = Boolean(record.discountAmount && record.discountAmount > 0);
 
-              const isBasicOverridden = record.systemBasicTax !== undefined && record.basicTax !== record.systemBasicTax;
-              const isSefOverridden = record.systemSefTax !== undefined && record.sefTax !== record.systemSefTax;
-              const isDiscountOverridden = record.systemDiscountRate !== undefined && record.discountRate !== record.systemDiscountRate;
+              const isBasicOverridden = !isCleared && record.systemBasicTax !== undefined && record.basicTax !== record.systemBasicTax;
+              const isSefOverridden = !isCleared && record.systemSefTax !== undefined && record.sefTax !== record.systemSefTax;
+              const isDiscountOverridden = !isCleared && record.systemDiscountRate !== undefined && record.discountRate !== record.systemDiscountRate;
+
+              // Find index in outstanding records for Arrears-First sequential selection
+              const outstandingIndex = records.findIndex(r => 
+                (r.periodLabel && record.periodLabel) 
+                  ? r.periodLabel === record.periodLabel 
+                  : r.year === record.year
+              );
+              const isSelected = !isCleared && outstandingIndex !== -1 && outstandingIndex <= selectedMaxIndex;
 
               return (
                 <TableRow 
-                  key={idx} 
-                  onClick={() => handleCheckboxClick(idx)}
-                  className={`transition-colors cursor-pointer ${
-                    isSelected ? 'bg-emerald-50/40 hover:bg-emerald-50/60 font-medium' : 'opacity-40 hover:opacity-75 bg-slate-50/20'
+                  key={record.periodLabel ? `${record.year}-${record.periodLabel}-${idx}` : `${record.year}-${idx}`} 
+                  onClick={() => !isCleared && outstandingIndex !== -1 && handleCheckboxClick(outstandingIndex)}
+                  className={`transition-colors ${
+                    isCleared
+                      ? 'bg-slate-50/60 hover:bg-slate-100/60 cursor-default'
+                      : isSelected 
+                        ? 'bg-emerald-50/40 hover:bg-emerald-50/60 font-medium cursor-pointer' 
+                        : 'opacity-40 hover:opacity-75 bg-slate-50/20 cursor-pointer'
                   }`}
                 >
-                  <TableCell className="text-center">
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => handleCheckboxClick(idx)}
-                      className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600"
-                    />
+                  <TableCell className="text-center py-2.5 pl-3 pr-2">
+                    {isCleared ? (
+                      <span title={`Cleared / Settled (${record.clearanceReference || 'Official Settlement'})`}>
+                        <CheckCircle2 size={16} className="text-emerald-600 inline-block" />
+                      </span>
+                    ) : (
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => outstandingIndex !== -1 && handleCheckboxClick(outstandingIndex)}
+                        className="w-4.5 h-4.5 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600 transition-transform active:scale-95"
+                      />
+                    )}
                   </TableCell>
 
-                  <TableCell className="whitespace-nowrap font-bold text-slate-900 font-mono">
-                    <div className="flex items-center gap-1.5">
-                      <span>{record.year} {record.quarter ? `• Q${record.quarter}` : ''}</span>
+                  <TableCell className="font-bold text-slate-900 py-2.5 pl-2 pr-1.5">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className={`text-xs sm:text-sm font-extrabold tracking-tight tabular-nums ${isCleared ? 'text-slate-700' : 'text-slate-900'}`}>
+                        {record.periodLabel || record.year}
+                      </span>
+                      {record.yearsCovered && record.yearsCovered.length > 1 && (
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-200/80 text-slate-700 font-semibold tracking-tight whitespace-nowrap">
+                          {record.yearsCovered.length} Yrs
+                        </span>
+                      )}
+                      {record.quarter && !record.quarterSpan && (
+                        <span className="text-[10px] px-1 py-0.5 rounded bg-slate-100 text-slate-700 font-semibold">
+                          Q{record.quarter}
+                        </span>
+                      )}
+                      {record.receiptNo && (
+                        <Badge variant="outline" className="text-[9px] px-1 py-0 bg-emerald-50 text-emerald-800 border-emerald-300 font-bold" title={`Issued Receipt: ${record.receiptNo}`}>
+                          {record.receiptNo}
+                        </Badge>
+                      )}
                       {record.isManuallyEdited && (
-                        <Badge variant="outline" className="text-[9px] px-1 py-0 bg-amber-50 text-amber-700 border-amber-300 font-bold" title={record.editReason || 'Assessor adjusted'}>
-                          Overridden
+                        <Badge variant="outline" className="text-[9px] px-1 py-0 bg-amber-50 text-amber-800 border-amber-300 font-bold" title={record.editReason || 'Assessor adjusted'}>
+                          Adj
                         </Badge>
                       )}
                     </div>
                   </TableCell>
 
-                  <TableCell className="whitespace-nowrap">
-                    {isDelinquent ? (
-                      <Badge variant="destructive" className="text-[11px] font-semibold bg-rose-100 text-rose-700 border-rose-200">
-                        {record.status}
+                  <TableCell className="py-2.5 px-1.5">
+                    {isCleared ? (
+                      <Badge variant="secondary" className="text-[11px] font-bold px-1.5 py-0.5 bg-emerald-100 text-emerald-800 border-emerald-300">
+                        ✓ Cleared
                       </Badge>
-                    ) : record.status === 'Current' ? (
-                      <Badge variant="default" className="text-[11px] font-semibold bg-blue-100 text-blue-700 border-blue-200">
-                        {record.status}
+                    ) : isDelinquent ? (
+                      <Badge variant="destructive" className="text-[11px] font-bold px-1.5 py-0.5 bg-rose-100 text-rose-800 border-rose-300">
+                        Delq
                       </Badge>
                     ) : (
-                      <Badge variant="secondary" className="text-[11px] font-semibold bg-emerald-100 text-emerald-700 border-emerald-200">
-                        {record.status}
+                      <Badge variant="default" className="text-[11px] font-bold px-1.5 py-0.5 bg-blue-100 text-blue-800 border-blue-300">
+                        Current
                       </Badge>
                     )}
                   </TableCell>
 
                   {/* Basic Tax with Default vs Applied */}
-                  <TableCell className="whitespace-nowrap text-right font-mono">
+                  <TableCell className="text-right py-2.5 px-1.5">
                     <div className="flex flex-col items-end">
-                      <div className="flex items-center gap-1">
-                        <span className={`font-bold ${isBasicOverridden ? 'text-amber-700 underline decoration-dotted' : 'text-slate-800'}`}>
+                      <div className="flex items-center justify-end gap-1">
+                        <span className={`text-xs sm:text-sm font-bold tabular-nums ${isBasicOverridden ? 'text-amber-800 underline decoration-dotted font-black' : isCleared ? 'text-slate-700' : 'text-slate-900'}`}>
                           ₱{(record.basicTax ?? (record.baseTax / 2)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                         </span>
-                        {canEdit && (
+                        {canEdit && !isCleared && (
                           <button
                             type="button"
                             onClick={(e) => handleOpenEditModal(record, 'BASIC_TAX', e)}
-                            className="text-slate-400 hover:text-blue-600 p-0.5 rounded transition-colors"
+                            className="text-slate-400 hover:text-blue-700 p-0.5 rounded transition-colors cursor-pointer"
                             title="Manually adjust Basic Tax"
                           >
                             <Pencil size={11} />
                           </button>
                         )}
                       </div>
-                      <span className="text-[10px] text-slate-400 font-normal">
-                        Default: ₱{(record.systemBasicTax ?? (record.baseTax / 2)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      <span className="text-[10px] text-slate-400 font-normal tabular-nums truncate max-w-full">
+                        {isCleared ? 'Settled' : `Def: ₱${(record.systemBasicTax ?? (record.baseTax / 2)).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
                       </span>
                     </div>
                   </TableCell>
 
                   {/* SEF Tax with Default vs Applied */}
-                  <TableCell className="whitespace-nowrap text-right font-mono">
+                  <TableCell className="text-right py-2.5 px-1.5">
                     <div className="flex flex-col items-end">
-                      <div className="flex items-center gap-1">
-                        <span className={`font-bold ${isSefOverridden ? 'text-amber-700 underline decoration-dotted' : 'text-slate-800'}`}>
+                      <div className="flex items-center justify-end gap-1">
+                        <span className={`text-xs sm:text-sm font-bold tabular-nums ${isSefOverridden ? 'text-amber-800 underline decoration-dotted font-black' : isCleared ? 'text-slate-700' : 'text-slate-900'}`}>
                           ₱{(record.sefTax ?? (record.baseTax / 2)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                         </span>
-                        {canEdit && (
+                        {canEdit && !isCleared && (
                           <button
                             type="button"
                             onClick={(e) => handleOpenEditModal(record, 'SEF_TAX', e)}
-                            className="text-slate-400 hover:text-blue-600 p-0.5 rounded transition-colors"
+                            className="text-slate-400 hover:text-blue-700 p-0.5 rounded transition-colors cursor-pointer"
                             title="Manually adjust SEF Tax"
                           >
                             <Pencil size={11} />
                           </button>
                         )}
                       </div>
-                      <span className="text-[10px] text-slate-400 font-normal">
-                        Default: ₱{(record.systemSefTax ?? (record.baseTax / 2)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      <span className="text-[10px] text-slate-400 font-normal tabular-nums truncate max-w-full">
+                        {isCleared ? 'Settled' : `Def: ₱${(record.systemSefTax ?? (record.baseTax / 2)).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
                       </span>
                     </div>
                   </TableCell>
 
                   {/* Penalty */}
-                  <TableCell className="whitespace-nowrap text-right font-mono">
+                  <TableCell className="text-right py-2.5 px-1.5">
                     {record.penaltyAmount > 0 ? (
                       <div className="flex flex-col items-end">
-                        <span className="text-rose-600 font-semibold">
+                        <span className={`text-xs sm:text-sm font-bold tabular-nums ${isCleared ? 'text-slate-700' : 'text-rose-700'}`}>
                           +₱{record.penaltyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                         </span>
-                        <span className="text-[10px] text-slate-400">
-                          {(record.penaltyRate * 100).toFixed(0)}% ({record.monthsDelayed} mos)
+                        <span className="text-[10px] text-slate-500 font-medium tabular-nums truncate max-w-full">
+                          {(record.penaltyRate * 100).toFixed(0)}% ({record.monthsDelayed}m)
                         </span>
                       </div>
                     ) : (
-                      <span className="text-slate-400">₱0.00</span>
+                      <span className="text-slate-400 text-xs font-medium tabular-nums">₱0.00</span>
                     )}
                   </TableCell>
 
                   {/* Discount Rate & Derived Amount */}
-                  <TableCell className="whitespace-nowrap text-right font-mono">
+                  <TableCell className="text-right py-2.5 px-1.5">
                     <div className="flex flex-col items-end">
-                      <div className="flex items-center gap-1">
-                        <span className={`font-semibold flex items-center gap-0.5 ${isDiscountOverridden ? 'text-amber-700 underline decoration-dotted' : (hasDiscount ? 'text-emerald-600' : 'text-slate-400')}`}>
-                          {hasDiscount && <Tag size={10} />}
-                          {((record.discountRate ?? 0) * 100).toFixed(2)}%
+                      <div className="flex items-center justify-end gap-1">
+                        <span className={`text-xs sm:text-sm font-bold flex items-center gap-0.5 tabular-nums ${isDiscountOverridden ? 'text-amber-800 underline decoration-dotted font-black' : (hasDiscount ? 'text-emerald-700' : 'text-slate-500')}`}>
+                          {hasDiscount && <Tag size={10} className="text-emerald-600" />}
+                          {((record.discountRate ?? 0) * 100).toFixed(1)}%
                         </span>
-                        {canEdit && !isDelinquent && (
+                        {canEdit && !isDelinquent && !isCleared && (
                           <button
                             type="button"
                             onClick={(e) => handleOpenEditModal(record, 'DISCOUNT_RATE', e)}
-                            className="text-slate-400 hover:text-blue-600 p-0.5 rounded transition-colors"
+                            className="text-slate-400 hover:text-blue-700 p-0.5 rounded transition-colors cursor-pointer"
                             title="Manually adjust Discount Rate"
                           >
                             <Pencil size={11} />
                           </button>
                         )}
                       </div>
-                      <span className="text-[10px] text-slate-400 font-normal">
+                      <span className="text-[10px] text-slate-400 font-normal tabular-nums truncate max-w-full">
                         {hasDiscount 
                           ? `-₱${(record.discountAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
-                          : (isDelinquent ? '0% Delinquent' : `Default: ${((record.systemDiscountRate ?? 0) * 100).toFixed(0)}%`)}
+                          : (isCleared ? 'Settled' : isDelinquent ? '0% Delq' : `Def: ${((record.systemDiscountRate ?? 0) * 100).toFixed(0)}%`)}
                       </span>
                     </div>
                   </TableCell>
 
                   {/* Net Total Due */}
-                  <TableCell className="whitespace-nowrap text-slate-900 font-bold text-right font-mono text-sm">
+                  <TableCell className={`font-black text-right text-xs sm:text-sm tabular-nums py-2.5 pl-2 pr-6 ${isCleared ? 'text-emerald-800' : 'text-slate-950'}`}>
                     ₱{record.totalDue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </TableCell>
                 </TableRow>
@@ -452,49 +607,98 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
       </div>
 
       {/* Selected Scope Dynamic Summary Footer */}
-      <div className="bg-slate-900 text-white p-5 border-t border-slate-800">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pb-3 mb-3 border-b border-slate-800 text-xs">
-          <div>
-            <p className="text-slate-400">Selected Basic Tax:</p>
-            <p className="font-mono font-bold text-sm text-slate-200">
-              ₱{selectedBasicTax.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-            </p>
-          </div>
-          <div>
-            <p className="text-slate-400">Selected SEF (1%):</p>
-            <p className="font-mono font-bold text-sm text-slate-200">
-              ₱{selectedSefTax.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-            </p>
-          </div>
-          <div>
-            <p className="text-slate-400">Selected Penalties:</p>
-            <p className="font-mono font-bold text-sm text-rose-400">
-              +₱{selectedPenalties.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-            </p>
-          </div>
-          <div>
-            <p className="text-slate-400">Selected Discounts:</p>
-            <p className="font-mono font-bold text-sm text-emerald-400">
-              -₱{selectedDiscounts.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-            </p>
-          </div>
-        </div>
+      <div className="bg-slate-900 text-white p-5 sm:p-6 border-t border-slate-800 shrink-0">
+        {activeTab === 'COMPLETED' ? (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pb-4 mb-4 border-b border-slate-800 text-xs sm:text-sm">
+              <div>
+                <p className="text-slate-400 text-xs uppercase tracking-wider font-semibold">Cleared Basic Tax:</p>
+                <p className="font-bold text-base text-slate-100 tabular-nums mt-0.5">
+                  ₱{completedBasicTax.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-400 text-xs uppercase tracking-wider font-semibold">Cleared SEF (1%):</p>
+                <p className="font-bold text-base text-slate-100 tabular-nums mt-0.5">
+                  ₱{completedSefTax.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-400 text-xs uppercase tracking-wider font-semibold">Cleared Penalties:</p>
+                <p className="font-bold text-base text-slate-300 tabular-nums mt-0.5">
+                  ₱{completedPenalties.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-400 text-xs uppercase tracking-wider font-semibold">Cleared Discounts:</p>
+                <p className="font-bold text-base text-emerald-400 tabular-nums mt-0.5">
+                  -₱{completedDiscounts.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+            </div>
 
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-          <div>
-            <span className="text-slate-400 text-xs uppercase tracking-wider font-semibold">
-              Selected Scope Due ({selectedRecords.length} of {records.length} {records.length === 1 ? 'Year' : 'Years'})
-            </span>
-            <p className="text-[11px] text-slate-400">
-              {selectedRecords.length < records.length ? 'Partial settlement based on sequential Arrears-First order' : 'Full outstanding liability settlement'}
-            </p>
-          </div>
-          <div className="text-right">
-            <span className="text-2xl sm:text-3xl font-black font-mono text-emerald-400 tracking-tight">
-              ₱{selectedSubtotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-            </span>
-          </div>
-        </div>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+              <div>
+                <span className="text-emerald-400 text-xs sm:text-sm uppercase tracking-wider font-bold flex items-center gap-1.5">
+                  <CheckCircle2 size={16} /> Total Cleared Liabilities ({completedRecords.length} {completedRecords.length === 1 ? 'Year' : 'Years'} Settled)
+                </span>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  All obligations for these tax periods are fully settled. Outstanding balance: ₱0.00
+                </p>
+              </div>
+              <div className="text-right">
+                <span className="text-3xl sm:text-4xl font-black text-emerald-400 tracking-tight tabular-nums">
+                  ₱{completedTotalDue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pb-4 mb-4 border-b border-slate-800 text-xs sm:text-sm">
+              <div>
+                <p className="text-slate-400 text-xs uppercase tracking-wider font-semibold">Selected Basic Tax:</p>
+                <p className="font-bold text-base text-slate-100 tabular-nums mt-0.5">
+                  ₱{selectedBasicTax.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-400 text-xs uppercase tracking-wider font-semibold">Selected SEF (1%):</p>
+                <p className="font-bold text-base text-slate-100 tabular-nums mt-0.5">
+                  ₱{selectedSefTax.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-400 text-xs uppercase tracking-wider font-semibold">Selected Penalties:</p>
+                <p className="font-bold text-base text-rose-400 tabular-nums mt-0.5">
+                  +₱{selectedPenalties.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-400 text-xs uppercase tracking-wider font-semibold">Selected Discounts:</p>
+                <p className="font-bold text-base text-emerald-400 tabular-nums mt-0.5">
+                  -₱{selectedDiscounts.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+              <div>
+                <span className="text-slate-300 text-xs sm:text-sm uppercase tracking-wider font-bold">
+                  Selected Scope Due ({selectedRecords.length} of {records.length} {records.length === 1 ? 'Period' : 'Periods'})
+                </span>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {selectedRecords.length < records.length ? 'Partial settlement based on sequential Arrears-First order' : 'Full outstanding liability settlement'}
+                </p>
+              </div>
+              <div className="text-right">
+                <span className="text-3xl sm:text-4xl font-black text-emerald-400 tracking-tight tabular-nums">
+                  ₱{selectedSubtotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Authorized Assessor Override Dialog Modal */}
@@ -521,7 +725,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
             {/* Current System Calculated Value */}
             <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex justify-between items-center">
               <span className="text-slate-600 font-medium">System Calculated Default:</span>
-              <span className="font-mono font-bold text-slate-800">
+              <span className="font-bold text-slate-800 tabular-nums">
                 {editingField === 'DISCOUNT_RATE'
                   ? `${((editingRecord?.systemDiscountRate ?? 0) * 100).toFixed(2)}%`
                   : `₱${(editingField === 'BASIC_TAX' ? editingRecord?.systemBasicTax : editingRecord?.systemSefTax ?? (editingRecord?.baseTax ? editingRecord.baseTax / 2 : 0))?.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
@@ -538,7 +742,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
                 step={editingField === 'DISCOUNT_RATE' ? '0.1' : '1'}
                 value={editValue}
                 onChange={(e) => setEditValue(e.target.value)}
-                className="font-mono text-sm font-bold bg-white text-slate-900"
+                className="text-sm font-bold bg-white text-slate-900 tabular-nums"
                 autoFocus
               />
               <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">

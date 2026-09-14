@@ -12,12 +12,14 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Printer, CheckCircle2, Building, Ban, ShieldAlert, Lock, AlertTriangle } from 'lucide-react';
+import { Printer, CheckCircle2, Building, Ban, ShieldAlert, Lock, AlertTriangle, ArrowLeft, FileText } from 'lucide-react';
 
 interface ClearanceModalProps {
   isOpen?: boolean;
   receipt: OfficialReceipt | null;
   onClose: () => void;
+  onStayOnProperty?: () => void;
+  onReturnToDashboard?: () => void;
   currentUser?: User | null;
   onReceiptVoided?: (receiptNo: string) => void;
 }
@@ -26,6 +28,8 @@ const OfficialReceiptModal: React.FC<ClearanceModalProps> = ({
   isOpen = true,
   receipt,
   onClose,
+  onStayOnProperty,
+  onReturnToDashboard,
   currentUser,
   onReceiptVoided,
 }) => {
@@ -289,7 +293,7 @@ const OfficialReceiptModal: React.FC<ClearanceModalProps> = ({
                 <table className="w-full border-collapse">
                   <thead>
                     <tr className="bg-slate-200 border-b border-slate-800 text-[10px] font-black uppercase text-slate-800 tracking-wider">
-                      <th className="py-1.5 px-3 text-left border-r border-slate-800">Tax Year</th>
+                      <th className="py-1.5 px-3 text-left border-r border-slate-800">Tax Period / Year</th>
                       <th className="py-1.5 px-3 text-right border-r border-slate-800">Basic Tax (1%)</th>
                       <th className="py-1.5 px-3 text-right border-r border-slate-800">SEF Tax (1%)</th>
                       <th className="py-1.5 px-3 text-right border-r border-slate-800">Penalty (2%/mo)</th>
@@ -298,10 +302,10 @@ const OfficialReceiptModal: React.FC<ClearanceModalProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800 font-mono text-[11px]">
-                    {records.map((rec) => (
-                      <tr key={rec.year} className="hover:bg-slate-50">
+                    {records.map((rec, idx) => (
+                      <tr key={rec.periodLabel ? `${rec.periodLabel}-${idx}` : `${rec.year}-${idx}`} className="hover:bg-slate-50">
                         <td className="py-1.5 px-3 font-bold border-r border-slate-800 text-slate-900">
-                          {rec.year}
+                          {rec.periodLabel || rec.year}
                         </td>
                         <td className="py-1.5 px-3 text-right border-r border-slate-800">
                           ₱{((rec.basicTax ?? rec.baseTax / 2) || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
@@ -386,14 +390,29 @@ const OfficialReceiptModal: React.FC<ClearanceModalProps> = ({
           </div>
 
           {/* Modal Footer */}
-          <DialogFooter className="bg-slate-100 px-6 py-3 border-t border-slate-300 flex justify-end gap-2.5 no-print shrink-0">
-            <Button
-              type="button"
-              onClick={onClose}
-              className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-sm"
-            >
-              Done & Back to Masterlist
-            </Button>
+          <DialogFooter className="bg-slate-100 px-6 py-3 border-t border-slate-300 flex flex-col sm:flex-row justify-between sm:items-center gap-2.5 no-print shrink-0">
+            <p className="text-[11px] text-slate-500 font-medium text-center sm:text-left">
+              Clearance recorded. Choose your next action:
+            </p>
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onStayOnProperty || onClose}
+                className="px-4 py-2 border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <FileText size={14} className="text-emerald-700" />
+                Stay on this Property (TD)
+              </Button>
+              <Button
+                type="button"
+                onClick={onReturnToDashboard || onClose}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-sm flex items-center gap-1.5 cursor-pointer"
+              >
+                <ArrowLeft size={14} />
+                Back to Masterlist Dashboard
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
