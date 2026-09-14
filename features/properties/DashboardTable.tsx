@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Property, User } from '@/types';
-import { BARANGAYS } from '@/constants';
+import { BARANGAYS, CURRENT_YEAR } from '@/constants';
 import { calculateTaxLiability } from '@/utils/taxLogic';
 import {
   Table,
@@ -47,6 +47,18 @@ interface DashboardTableProps {
 
 const DEFAULT_PAGE_SIZE = 25;
 
+const getPropertyStatus = (property: Property): 'CLEARED' | 'PARTIAL' | 'DELINQUENT' => {
+  if (property.status) return property.status;
+  const lastPaid = Number(property.lastPaidYear) || 0;
+  if (lastPaid >= CURRENT_YEAR || property.totalDebt === 0) {
+    return 'CLEARED';
+  }
+  if (lastPaid === CURRENT_YEAR - 1) {
+    return 'PARTIAL';
+  }
+  return 'DELINQUENT';
+};
+
 const DashboardTable: React.FC<DashboardTableProps> = ({
   properties,
   currentUser,
@@ -72,7 +84,7 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
     const matchesBarangay =
       selectedBarangay === 'All' || p.barangay === selectedBarangay;
 
-    const propertyStatus = p.status || (p.totalDebt === 0 ? 'CLEARED' : 'DELINQUENT');
+    const propertyStatus = getPropertyStatus(p);
     const matchesStatus =
       selectedStatus === 'All' || propertyStatus === selectedStatus;
 
@@ -216,7 +228,7 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
                   property.totalDebt !== undefined
                     ? property.totalDebt
                     : calculateTaxLiability(property).grandTotal;
-                const status = property.status || (debt === 0 ? 'CLEARED' : 'DELINQUENT');
+                const status = getPropertyStatus(property);
 
                 return (
                   <TableRow key={property.id} className="hover:bg-emerald-50/30 transition-colors">
