@@ -44,11 +44,20 @@ $$\text{Base Tax} = \text{Assessed Value} \times 0.02 = \text{Basic Tax (1\%)} +
 ### 2.3 Delinquency Penalties (Surcharges)
 - **Accrual Rate**: `2%` per month of delay (`PENALTY_RATE_PER_MONTH = 0.02`) (RA 7160 Sec. 255).
 - **Statutory Penalty Cap**: Maximum of `36 months` (`MAX_PENALTY_MONTHS = 36`), capping modern annual surcharges at **`72%`** (`0.72`) of the delinquent base tax.
-- **Municipal Legacy Roll Schedule (Santa Rosa Treasury)**: Under Santa Rosa Treasury's official operational schedule, delinquent periods for tax years $\le 2022$ (including historical brackets `1973-79` through `2022`) are capped at a fixed municipal legacy rate of **`24%`** (`0.24`) rather than 72%. Modern years follow: `2023` (72%), `2024` (66%), `2025` (42%), `2026 1-2Q` (18%), `2026 3-4 Q` (0%), and `2027` (20% advance discount).
+- **Municipal Assessment Era Penalty Schedule (Santa Rosa Treasury)**: Under Santa Rosa Treasury's canonical spreadsheet engine:
+  - **Pre-1994 Historical Eras (`1973-79` through `1992-1993`)**: Fixed municipal legacy rate of **`24%`** (`0.24`).
+  - **1994 Revision Era through Modern Rolls (`1994-2005`, `2006-11`, and `2012` to `2023`)**: Statutory maximum cap of **`72%`** (`0.72` / 36 months).
+  - **Recent Delinquent Rolls**:
+    - `2024`: **`66%`** (`0.66` / 33 months)
+    - `2025`: **`42%`** (`0.42` / 21 months)
+    - `2026 1-2Q`: **`18%`** (`0.18` / 9 months)
+  - **Prompt & Advance Windows**:
+    - `2026 3-4 Q`: **`0%`** penalty (eligible for 10% prompt discount in Q3/Q4)
+    - `2027`: **`-20%`** advance prompt discount
 - **Accrual Start**: Past delinquent years accrue from January 1 of that tax year. Current year liabilities accrue penalty quarterly or after statutory deadlines.
 
 $$\text{Effective Delay Months} = \min(\text{Months Delayed}, 36)$$
-$$\text{Penalty Rate} = \text{Effective Delay Months} \times 0.02 \quad (\text{or } 0.24 \text{ for years } \le 2022)$$
+$$\text{Penalty Rate} = \text{Effective Delay Months} \times 0.02 \quad (\text{or } 0.24 \text{ for years } \le 1993)$$
 $$\text{Penalty Amount} = \text{Base Tax} \times \text{Penalty Rate}$$
 $$\text{Total Year Liability} = \text{Base Tax} + \text{Penalty Amount} - \text{Discounts}$$
 
@@ -145,28 +154,31 @@ To administer multi-decade delinquent arrears without document truncation, Santa
 | `2027` | Annual Advance | Advance assessment year (eligible for advance prompt discount) |
 
 #### 2.9.4 Period Columnar Computation Rules & Municipal Penalty Schedule
-For each period or aggregated bracket above, calculations are governed by the official Santa Rosa Municipal Treasurer Notice of Delinquency schedule:
+For each period or aggregated bracket above, calculations are governed by the official Santa Rosa Municipal Treasurer Notice of Delinquency schedule (matching workbook tab `SEP`):
 
-| Period / Roll Bracket | Multiplier / Span | Unpaid Taxes Formula | Municipal Penalty / Discount Rate | Net Total Delinquency |
+| Period / Roll Bracket | Multiplier / Span | Unpaid Taxes Formula (Per Fund) | Municipal Penalty / Discount Rate | Net Total Delinquency (Per Fund) |
 |---|---|---|---|---|
-| `1973-79` | 7 Years | `(Assessed Value * 0.01) * 7 * 2` | `+24%` (`0.24`) | `Unpaid Taxes + (Unpaid Taxes * 0.24)` |
-| `1980-85` | 6 Years | `(Assessed Value * 0.01) * 6 * 2` | `+24%` (`0.24`) | `Unpaid Taxes + (Unpaid Taxes * 0.24)` |
-| `1986` | 1 Year | `(Assessed Value * 0.01) * 1 * 2` | `+24%` (`0.24`) | `Unpaid Taxes + (Unpaid Taxes * 0.24)` |
-| `1987-1991` | 5 Years | `(Assessed Value * 0.01) * 5 * 2` | `+24%` (`0.24`) | `Unpaid Taxes + (Unpaid Taxes * 0.24)` |
-| `1992-1993` | 2 Years | `(Assessed Value * 0.01) * 2 * 2` | `+24%` (`0.24`) | `Unpaid Taxes + (Unpaid Taxes * 0.24)` |
-| `1994-2005` | 12 Years | `(Assessed Value * 0.01) * 12 * 2` | `+24%` (`0.24`) | `Unpaid Taxes + (Unpaid Taxes * 0.24)` |
-| `2006-11` | 6 Years | `(Assessed Value * 0.01) * 6 * 2` | `+24%` (`0.24`) | `Unpaid Taxes + (Unpaid Taxes * 0.24)` |
-| `2012` to `2022` | 1 Year each | `(Assessed Value * 0.01) * 1 * 2` | `+24%` (`0.24` per year) | `Unpaid Taxes + (Unpaid Taxes * 0.24)` |
-| `2023` | 1 Year | `(Assessed Value * 0.01) * 1 * 2` | `+72%` (`0.72` max statutory) | `Unpaid Taxes + (Unpaid Taxes * 0.72)` |
-| `2024` | 1 Year | `(Assessed Value * 0.01) * 1 * 2` | `+66%` (`0.66` / 33 months) | `Unpaid Taxes + (Unpaid Taxes * 0.66)` |
-| `2025` | 1 Year | `(Assessed Value * 0.01) * 1 * 2` | `+42%` (`0.42` / 21 months) | `Unpaid Taxes + (Unpaid Taxes * 0.42)` |
-| `2026 1-2Q` | Half Year (0.5) | `(Assessed Value * 0.01) * 0.5 * 2` | `+18%` (`0.18` / 9 months) | `Unpaid Taxes + (Unpaid Taxes * 0.18)` |
-| `2026 3-4 Q` | Half Year (0.5) | `(Assessed Value * 0.01) * 0.5 * 2` | `None` (`0%` / prompt discount) | `Unpaid Taxes - Prompt Discount` |
-| `2027` | 1 Year | `(Assessed Value * 0.01) * 1 * 2` | `-20%` (`0.20` advance discount) | `Unpaid Taxes - (Unpaid Taxes * 0.20)` |
+| `1973-79` | 7 Years | `(Assessed Value * 0.01) * 7` | `+24%` (`0.24`) | `Unpaid Taxes + (Unpaid Taxes * 0.24)` |
+| `1980-85` | 6 Years | `(Assessed Value * 0.01) * 6` | `+24%` (`0.24`) | `Unpaid Taxes + (Unpaid Taxes * 0.24)` |
+| `1986` | 1 Year | `(Assessed Value * 0.01) * 1` | `+24%` (`0.24`) | `Unpaid Taxes + (Unpaid Taxes * 0.24)` |
+| `1987-1991` | 5 Years | `(Assessed Value * 0.01) * 5` | `+24%` (`0.24`) | `Unpaid Taxes + (Unpaid Taxes * 0.24)` |
+| `1992-1993` | 2 Years | `(Assessed Value * 0.01) * 2` | `+24%` (`0.24`) | `Unpaid Taxes + (Unpaid Taxes * 0.24)` |
+| `1994-2005` | 12 Years | `(Assessed Value * 0.01) * 12` | `+72%` (`0.72` max statutory) | `Unpaid Taxes + (Unpaid Taxes * 0.72)` |
+| `2006-11` | 6 Years | `(Assessed Value * 0.01) * 6` | `+72%` (`0.72` max statutory) | `Unpaid Taxes + (Unpaid Taxes * 0.72)` |
+| `2012` to `2023` | 1 Year each | `(Assessed Value * 0.01) * 1` | `+72%` (`0.72` max per year) | `Unpaid Taxes + (Unpaid Taxes * 0.72)` |
+| `2024` | 1 Year | `(Assessed Value * 0.01) * 1` | `+66%` (`0.66` / 33 months) | `Unpaid Taxes + (Unpaid Taxes * 0.66)` |
+| `2025` | 1 Year | `(Assessed Value * 0.01) * 1` | `+42%` (`0.42` / 21 months) | `Unpaid Taxes + (Unpaid Taxes * 0.42)` |
+| `2026 1-2Q` | Half Year (0.5) | `(Assessed Value * 0.01) * 0.5` | `+18%` (`0.18` / 9 months) | `Unpaid Taxes + (Unpaid Taxes * 0.18)` |
+| `2026 3-4 Q` | Half Year (0.5) | `(Assessed Value * 0.01) * 0.5` | `None` (`0%` / prompt window) | `Unpaid Taxes - Prompt Discount` |
+| `2027` | 1 Year | `(Assessed Value * 0.01) * 1` | `-20%` (`0.20` advance discount) | `Unpaid Taxes - (Unpaid Taxes * 0.20)` |
 
 > [!IMPORTANT]
-> **Santa Rosa Municipal Delinquency Protocol**:
-> Under Santa Rosa Treasury's official spreadsheet engine, all historical roll periods from `1973-79` through `2022` are assessed at a fixed municipal legacy rate of **`24%`** (`0.24`), rather than the 72% statutory cap. Calendar years 2023, 2024, and 2025 are annual rolls (`2023` at 72%, `2024` at 66%, and `2025` at 42%). Calendar year 2026 is divided semi-annually (`2026 1-2Q` at 18% penalty and `2026 3-4 Q` eligible for prompt discount).
+> **Santa Rosa Municipal Delinquency Protocol & Fund Balancing**:
+> 1. **Table Rows (Single Fund Base)**: Each row in the Notice of Delinquency itemizes the 1% tax base ($\text{Assessed Value} \times 0.01 \times \text{Multiplier}$) and its statutory surcharge or prompt discount.
+> 2. **Accountable Totals (Rows 40–42)**:
+>    - `BASIC`: The sum of the itemized table column (`Total Tax Delinquency`), allocated to the General Fund.
+>    - `SEF`: An equal, identical amount allocated to the Special Education Fund (Local School Board).
+>    - `TOTAL`: The grand total payable by the taxpayer ($\text{BASIC} + \text{SEF} = 2 \times \text{Table Column Sum}$).
 
 #### 2.9.5 Mandatory Accountable Totals & Signatories
 - **Summary Totals**:

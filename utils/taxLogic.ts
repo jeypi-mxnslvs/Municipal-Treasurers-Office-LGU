@@ -45,7 +45,8 @@ export const CANONICAL_MUNICIPAL_BRACKETS: PeriodBracketDefinition[] = [
 
 /**
  * Santa Rosa Municipal Treasurer Notice of Delinquency Penalty Rates
- * Historical rolls (<= 2022) are capped at 24% (0.24) under municipal operational schedule
+ * Historical rolls (<= 1993) are capped at 24% (0.24) under municipal operational schedule.
+ * General revision rolls from 1994 onwards reach the 72% statutory cap.
  */
 export const SANTA_ROSA_LEGACY_PENALTY_RATE = 0.24;
 
@@ -55,19 +56,19 @@ export const SANTA_ROSA_MUNICIPAL_PENALTY_SCHEDULE: Record<string, number> = {
   '1986': 0.24,
   '1987-1991': 0.24,
   '1992-1993': 0.24,
-  '1994-2005': 0.24,
-  '2006-11': 0.24,
-  '2012': 0.24,
-  '2013': 0.24,
-  '2014': 0.24,
-  '2015': 0.24,
-  '2016': 0.24,
-  '2017': 0.24,
-  '2018': 0.24,
-  '2019': 0.24,
-  '2020': 0.24,
-  '2021': 0.24,
-  '2022': 0.24,
+  '1994-2005': 0.72,
+  '2006-11': 0.72,
+  '2012': 0.72,
+  '2013': 0.72,
+  '2014': 0.72,
+  '2015': 0.72,
+  '2016': 0.72,
+  '2017': 0.72,
+  '2018': 0.72,
+  '2019': 0.72,
+  '2020': 0.72,
+  '2021': 0.72,
+  '2022': 0.72,
   '2023': 0.72,
   '2024': 0.66,
   '2025': 0.42,
@@ -82,6 +83,7 @@ export interface TaxCalculationOptions {
   groupHistoricalBrackets?: boolean; // Default true: aggregates years < 2012 into canonical brackets
   splitCurrentYearQuarters?: boolean; // If true, splits current year into 1-2Q and 3-4 Q
   includeAdvanceYear?: boolean;        // If true, appends advance year (2027)
+  discountCurrentQuarters?: boolean;  // If true, enables prompt discount on 3-4 Q (defaults to false for Notice of Delinquency)
   completedPeriodLabels?: string[];   // Filter out already settled partial quarters/periods
   overrides?: Record<number | string, {
     basicTax?: number;
@@ -186,8 +188,8 @@ export const calculateTaxLiability = (
         // Direct rate from Santa Rosa Treasury Municipal Schedule
         penaltyRate = SANTA_ROSA_MUNICIPAL_PENALTY_SCHEDULE[periodLabel];
         monthsDelayed = Math.round(penaltyRate / PENALTY_RATE_PER_MONTH);
-      } else if (eYear <= 2022) {
-        // Historical and legacy rolls (<= 2022) capped at 24% under Santa Rosa Treasury schedule
+      } else if (eYear <= 1993) {
+        // Historical and legacy rolls (<= 1993) capped at 24% under Santa Rosa Treasury schedule
         penaltyRate = SANTA_ROSA_LEGACY_PENALTY_RATE;
         monthsDelayed = 12;
       } else if (quarterSpan === '1-2Q') {
@@ -211,6 +213,9 @@ export const calculateTaxLiability = (
       systemDiscountRate = delinquentRate; // 0%
     } else if (isAdvance) {
       systemDiscountRate = earlyDiscountRate; // 20% advance discount
+    } else if (quarterSpan === '3-4 Q') {
+      // In Notice of Delinquency schedule, 3-4 Q is at face value (0%) unless prompt discount is explicitly enabled
+      systemDiscountRate = options?.discountCurrentQuarters ? regularPromptRate : 0.00;
     } else {
       if (paymentMonth >= earlyStartMonth && paymentMonth <= earlyEndMonth) {
         systemDiscountRate = earlyDiscountRate; // 20% Jan 1 - Mar 31

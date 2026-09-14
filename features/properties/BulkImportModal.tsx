@@ -68,6 +68,64 @@ interface ParsedRow {
   error?: string;
 }
 
+/**
+ * RFC 4180 compliant CSV line parser.
+ * Handles commas inside double quotes, escaped quotes (""), and preserves empty fields (,,).
+ */
+const parseCsvLine = (line: string): string[] => {
+  const result: string[] = [];
+  let cur = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        cur += '"';
+        i++; // skip escaped quote
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (c === ',' && !inQuotes) {
+      result.push(cur.trim());
+      cur = '';
+    } else {
+      cur += c;
+    }
+  }
+  result.push(cur.trim());
+  return result;
+};
+
+/**
+ * Resilient barangay matcher for Santa Rosa's 33 official barangays.
+ * Matches exact, handles variations like "Rizal" vs "Rizal (Poblacion)", and "San Josep" vs "San Joseph".
+ */
+const matchSantaRosaBarangay = (raw: string): string | null => {
+  if (!raw) return null;
+  const clean = raw.trim().toLowerCase();
+
+  // 1. Direct exact match
+  const exact = BARANGAYS.find((b) => b.toLowerCase() === clean);
+  if (exact) return exact;
+
+  // 2. Normalized match (strip "(Poblacion)", normalize "Josep" -> "Joseph")
+  const norm = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/\s*\(poblacion\)/gi, '')
+      .replace(/\bjosep\b/gi, 'joseph')
+      .trim();
+
+  const normalized = BARANGAYS.find((b) => norm(b) === norm(clean));
+  if (normalized) return normalized;
+
+  // 3. Prefix / Substring match
+  const prefix = BARANGAYS.find(
+    (b) => b.toLowerCase().startsWith(clean) || clean.startsWith(b.toLowerCase())
+  );
+  return prefix || null;
+};
+
 const BulkImportModal: React.FC<BulkImportModalProps> = ({
   isOpen,
   onClose,
@@ -146,22 +204,45 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
 
     const lastSeenIndexByTd = new Map<string, number>();
 
+    // Parse header to map column names dynamically if present
+    const headerCols = parseCsvLine(lines[0]).map((h) =>
+      h.toLowerCase().replace(/[\s_-]+/g, '')
+    );
+
+    const findColIdx = (keywords: string[], defaultIdx: number): number => {
+      const idx = headerCols.findIndex((h) =>
+        keywords.some((k) => h === k || h.includes(k))
+      );
+      return idx !== -1 ? idx : defaultIdx;
+    };
+
+    const colTd = findColIdx(['tdnumber', 'td', 'arp'], 0);
+    const colPrevTd = findColIdx(['previoustd', 'prevtd'], 1);
+    const colPin = findColIdx(['pin'], 2);
+    const colOwner = findColIdx(['ownername', 'owner'], 3);
+    const colAddress = findColIdx(['address', 'location'], 4);
+    const colBarangay = findColIdx(['barangay', 'brgy'], 5);
+    const colClass = findColIdx(['propertyclass', 'class', 'classification'], 6);
+    const colLotArea = findColIdx(['lotareasqm', 'lotarea', 'area'], 7);
+    const colMv = findColIdx(['marketvalue', 'mv'], 8);
+    const colAv = findColIdx(['assessedvalue', 'av'], 9);
+    const colLastPaid = findColIdx(['lastpaidyear', 'lastpaid'], 10);
+
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i];
-      const cols = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || line.split(',');
-      const cleanCols = cols.map((c) => c.replace(/^"|"$/g, '').trim());
+      const cleanCols = parseCsvLine(line);
 
-      const tdNumber = cleanCols[0] || '';
-      const previousTdNumber = cleanCols[1] || '';
-      const pin = cleanCols[2] || '';
-      const ownerName = cleanCols[3] || '';
-      const address = cleanCols[4] || 'Santa Rosa, Nueva Ecija';
-      const rawBarangay = cleanCols[5] || '';
-      const rawPropertyClass = cleanCols[6] || '';
-      const lotAreaSqm = parseFloat(cleanCols[7]) || 100;
-      const marketValue = parseFloat(cleanCols[8]) || 0;
-      const assessedValue = parseFloat(cleanCols[9]) || 0;
-      const lastPaidYear = parseInt(cleanCols[10], 10) || 2025;
+      const tdNumber = cleanCols[colTd] || '';
+      const previousTdNumber = cleanCols[colPrevTd] || '';
+      const pin = cleanCols[colPin] || '';
+      const ownerName = cleanCols[colOwner] || '';
+      const address = cleanCols[colAddress] || 'Santa Rosa, Nueva Ecija';
+      const rawBarangay = cleanCols[colBarangay] || '';
+      const rawPropertyClass = cleanCols[colClass] || '';
+      const lotAreaSqm = parseFloat(cleanCols[colLotArea]) || 100;
+      const marketValue = parseFloat(cleanCols[colMv]) || 0;
+      const assessedValue = parseFloat(cleanCols[colAv]) || 0;
+      const lastPaidYear = parseInt(cleanCols[colLastPaid], 10) || 2025;
 
       const record = {
         line: i + 1,
@@ -200,11 +281,9 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
       }
 
       // Barangay validation against Santa Rosa 33 Barangays
-      let barangay = r.rawBarangay || BARANGAYS[0];
-      const matchedBrgy = BARANGAYS.find((b) => b.toLowerCase() === r.rawBarangay.toLowerCase());
-      if (matchedBrgy) {
-        barangay = matchedBrgy;
-      } else if (r.rawBarangay && !matchedBrgy) {
+      const matchedBrgy = matchSantaRosaBarangay(r.rawBarangay);
+      const barangay = matchedBrgy || r.rawBarangay || BARANGAYS[0];
+      if (!matchedBrgy && r.rawBarangay) {
         state = 'INVALID_BARANGAY';
         error = `Unrecognized Barangay: "${r.rawBarangay}" (Must be one of Santa Rosa's 33)`;
       }

@@ -39,7 +39,7 @@ describe("taxLogic - Municipal Payment-Date Policy & Assessor Overrides", () => 
     expect(result.grandTotal).toBe(0);
   });
 
-  it("enforces Santa Rosa 24% legacy rate for <=2022 and caps 2023 at 36 months / 72% penalty", () => {
+  it("enforces Santa Rosa 24% legacy rate for <=1993 and caps 1994-2023 at 36 months / 72% penalty", () => {
     const result = calculateTaxLiability({
       ...mockProperty,
       lastPaidYear: CURRENT_YEAR - 10,
@@ -49,8 +49,8 @@ describe("taxLogic - Municipal Payment-Date Policy & Assessor Overrides", () => 
     const oldestRecord = result.records[0]; // 2017
     expect(oldestRecord.year).toBe(CURRENT_YEAR - 9);
     expect(oldestRecord.status).toBe("Delinquent");
-    expect(oldestRecord.penaltyRate).toBe(0.24); // Santa Rosa Municipal schedule: 24% for <= 2022
-    expect(oldestRecord.penaltyAmount).toBe(oldestRecord.baseTax * 0.24);
+    expect(oldestRecord.penaltyRate).toBe(0.72); // 72% statutory cap for 2017
+    expect(oldestRecord.penaltyAmount).toBe(oldestRecord.baseTax * 0.72);
 
     // 2023: reaches 36 months / 72% maximum
     const record2023 = result.records.find((r) => r.year === 2023);
@@ -446,7 +446,7 @@ describe("taxLogic - Municipal Payment-Date Policy & Assessor Overrides", () => 
       expect(firstRecord.totalDue).toBe(7440);
     });
 
-    it("enforces exact Santa Rosa Municipal Penalty Schedule (24% for <=2022, 72% 2023, 66% 2024, 42% 2025, 18% 2026 1-2Q)", () => {
+    it("enforces exact Santa Rosa Municipal Penalty Schedule (24% for <=1993, 72% for 1994-2023, 66% 2024, 42% 2025, 18% 2026 1-2Q)", () => {
       const septDate = new Date(CURRENT_YEAR, 8, 15); // Sept 15 (Month 9)
       const result = calculateTaxLiability(
         { ...mockProperty, lastPaidYear: 2021 },
@@ -458,9 +458,9 @@ describe("taxLogic - Municipal Payment-Date Policy & Assessor Overrides", () => 
         }
       );
 
-      // 2022: 24%
+      // 2022: 72% (post-1993 cap)
       const r2022 = result.records.find((r) => r.periodLabel === "2022");
-      expect(r2022?.penaltyRate).toBe(0.24);
+      expect(r2022?.penaltyRate).toBe(0.72);
 
       // 2023: 72%
       const r2023 = result.records.find((r) => r.periodLabel === "2023");
@@ -497,6 +497,7 @@ describe("taxLogic - Municipal Payment-Date Policy & Assessor Overrides", () => 
         { 
           paymentDate: septDate,
           splitCurrentYearQuarters: true,
+          discountCurrentQuarters: true,
           settings: defaultSettings 
         }
       );
@@ -558,6 +559,68 @@ describe("taxLogic - Municipal Payment-Date Policy & Assessor Overrides", () => 
       // Single fund (Basic 1%) as shown in the single column of the spreadsheet:
       const basicOnlyDelinquency = r1973_79!.basicTax + (r1973_79!.basicTax * r1973_79!.penaltyRate);
       expect(basicOnlyDelinquency).toBe(8.68);
+    });
+
+    it("matches Santa Rosa Treasury official Excel workbook (tab SEP) exactly for full roll: BASIC = 82.61, SEF = 82.61, TOTAL = 165.22", () => {
+      const septDate = new Date(CURRENT_YEAR, 8, 15);
+      const result = calculateTaxLiability(
+        { ...mockProperty, assessedValue: 100, lastPaidYear: 1972 },
+        { 
+          paymentDate: septDate,
+          groupHistoricalBrackets: true,
+          splitCurrentYearQuarters: true,
+          includeAdvanceYear: true,
+          settings: defaultSettings 
+        }
+      );
+
+      // Verify each itemized single fund amount (Basic Tax 1% column in workbook):
+      // 1973-79: 8.68
+      const r73 = result.records.find(r => r.periodLabel === "1973-79")!;
+      expect(Math.round((r73.basicTax + (r73.basicTax * r73.penaltyRate)) * 100) / 100).toBe(8.68);
+
+      // 1994-2005 (12 yrs @ 1.00 = 12.00, 72% penalty = 8.64 -> 20.64):
+      const r94 = result.records.find(r => r.periodLabel === "1994-2005")!;
+      expect(r94.basicTax).toBe(12.00);
+      expect(r94.penaltyRate).toBe(0.72);
+      expect(Math.round((r94.basicTax + (r94.basicTax * r94.penaltyRate)) * 100) / 100).toBe(20.64);
+
+      // 2006-11 (6 yrs @ 1.00 = 6.00, 72% penalty = 4.32 -> 10.32):
+      const r06 = result.records.find(r => r.periodLabel === "2006-11")!;
+      expect(r06.basicTax).toBe(6.00);
+      expect(r06.penaltyRate).toBe(0.72);
+      expect(Math.round((r06.basicTax + (r06.basicTax * r06.penaltyRate)) * 100) / 100).toBe(10.32);
+
+      // 2024: 1.00 + 0.66 = 1.66
+      const r24 = result.records.find(r => r.periodLabel === "2024")!;
+      expect(Math.round((r24.basicTax + (r24.basicTax * r24.penaltyRate)) * 100) / 100).toBe(1.66);
+
+      // 2025: 1.00 + 0.42 = 1.42
+      const r25 = result.records.find(r => r.periodLabel === "2025")!;
+      expect(Math.round((r25.basicTax + (r25.basicTax * r25.penaltyRate)) * 100) / 100).toBe(1.42);
+
+      // 2026 1-2Q: 0.50 + 0.09 = 0.59
+      const r26q12 = result.records.find(r => r.periodLabel === "2026 1-2Q")!;
+      expect(Math.round((r26q12.basicTax + (r26q12.basicTax * r26q12.penaltyRate)) * 100) / 100).toBe(0.59);
+
+      // 2026 3-4 Q: 0.50 + 0.00 = 0.50
+      const r26q34 = result.records.find(r => r.periodLabel === "2026 3-4 Q")!;
+      expect(r26q34.basicTax).toBe(0.50);
+
+      // 2027: 1.00 - 0.20 = 0.80
+      const r27 = result.records.find(r => r.periodLabel === "2027")!;
+      expect(Math.round((r27.basicTax - (r27.basicTax * r27.discountRate)) * 100) / 100).toBe(0.80);
+
+      // Full workbook column sum verification:
+      // BASIC (Row 40 in spreadsheet) = 82.61
+      const singleFundSum = result.records.reduce((sum, r) => {
+        const rowBasicDue = r.basicTax + (r.basicTax * r.penaltyRate) - (r.basicTax * (r.discountRate || 0));
+        return sum + Math.round(rowBasicDue * 100) / 100;
+      }, 0);
+      expect(Math.round(singleFundSum * 100) / 100).toBe(82.61);
+
+      // TOTAL (Row 42 in spreadsheet) = 165.22
+      expect(result.grandTotal).toBe(165.22);
     });
   });
 });
