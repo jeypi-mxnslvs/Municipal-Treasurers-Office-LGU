@@ -173,7 +173,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, sessionWarning })
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="name@example.com (e.g. admin@example.com)"
+                  placeholder="Email"
                   className="h-11 pl-10 pr-10 text-sm font-normal bg-white border-slate-300/90 focus-visible:ring-emerald-600/30 focus-visible:border-emerald-600 rounded-lg transition-colors placeholder:text-slate-400"
                   required
                   autoFocus
