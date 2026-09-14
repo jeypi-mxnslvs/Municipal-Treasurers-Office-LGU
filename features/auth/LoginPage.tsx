@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { User } from '@/types';
 import { api } from '@/services/api';
 import { createSessionToken } from '@/lib/crypto';
-import { Lock, User as UserIcon, ArrowRight, Sparkles, ShieldAlert, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
+import { Lock, User as UserIcon, ArrowRight, ShieldAlert, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -11,90 +11,69 @@ interface LoginPageProps {
   sessionWarning?: string | null;
 }
 
-interface DemoPersonnel {
-  title: string;
-  username: string;
-  role: 'Admin' | 'Cashier' | 'Assessor' | 'Viewer';
+interface WorkstationAccount {
+  email: string;
+  role: 'Admin' | 'Assessor' | 'Viewer';
   name: string;
   stationId: string;
+  envPasswordKey: 'VITE_ADMIN_PASSWORD' | 'VITE_ASSESSOR_PASSWORD' | 'VITE_VIEWER_PASSWORD';
 }
 
-const DEMO_PERSONNEL: DemoPersonnel[] = [
-  {
-    title: 'MUNICIPAL TREASURER',
-    username: 'treasurer',
-    role: 'Admin',
-    name: 'Municipal Treasurer',
-    stationId: 'Treasury-Office',
-  },
-  {
-    title: 'ASSISTANT TREASURER',
-    username: 'asst.treasurer',
-    role: 'Admin',
-    name: 'Assistant Municipal Treasurer',
-    stationId: 'Treasury-Asst',
-  },
-  {
-    title: 'WINDOW 01 CASHIER',
-    username: 'cashier1',
-    role: 'Cashier',
-    name: 'Window 01 Cashier',
-    stationId: 'Window-01',
-  },
-  {
-    title: 'WINDOW 02 CASHIER',
-    username: 'cashier2',
-    role: 'Cashier',
-    name: 'Window 02 Cashier',
-    stationId: 'Window-02',
-  },
-  {
-    title: 'REVENUE STAFF',
-    username: 'assessor',
-    role: 'Assessor',
-    name: 'Revenue Assessment Staff',
-    stationId: 'Assessor-Desk',
-  },
-  {
-    title: 'COA AUDITOR',
-    username: 'auditor',
-    role: 'Viewer',
-    name: 'COA Resident Auditor',
-    stationId: 'COA-Audit-Desk',
-  },
-  {
-    title: 'SYSTEM ADMINISTRATOR',
-    username: 'admin',
+const WORKSTATION_ACCOUNTS: Record<string, WorkstationAccount> = {
+  'admin@example.com': {
+    email: 'admin@example.com',
     role: 'Admin',
     name: 'System Administrator',
     stationId: 'Main-HQ',
+    envPasswordKey: 'VITE_ADMIN_PASSWORD',
   },
-];
-
-// Legacy / alias accounts compatibility mapping
-const LEGACY_ACCOUNTS: Record<string, { role: 'Admin' | 'Cashier' | 'Assessor' | 'Viewer'; name: string; stationId: string }> = {
-  'juan.assessor': { role: 'Assessor', name: 'Juan Reyes', stationId: 'Assessor-Desk-02' },
-  'mayor.office': { role: 'Viewer', name: 'Hon. Mayor Office', stationId: 'Executive-Desk' },
+  'assessor@example.com': {
+    email: 'assessor@example.com',
+    role: 'Assessor',
+    name: 'Municipal Assessor',
+    stationId: 'Assessor-Desk',
+    envPasswordKey: 'VITE_ASSESSOR_PASSWORD',
+  },
+  'viewer@example.com': {
+    email: 'viewer@example.com',
+    role: 'Viewer',
+    name: 'Treasury Viewer',
+    stationId: 'Viewer-Desk',
+    envPasswordKey: 'VITE_VIEWER_PASSWORD',
+  },
+  // Convenient developer aliases
+  'admin': {
+    email: 'admin@example.com',
+    role: 'Admin',
+    name: 'System Administrator',
+    stationId: 'Main-HQ',
+    envPasswordKey: 'VITE_ADMIN_PASSWORD',
+  },
+  'assessor': {
+    email: 'assessor@example.com',
+    role: 'Assessor',
+    name: 'Municipal Assessor',
+    stationId: 'Assessor-Desk',
+    envPasswordKey: 'VITE_ASSESSOR_PASSWORD',
+  },
+  'viewer': {
+    email: 'viewer@example.com',
+    role: 'Viewer',
+    name: 'Treasury Viewer',
+    stationId: 'Viewer-Desk',
+    envPasswordKey: 'VITE_VIEWER_PASSWORD',
+  },
 };
 
-const DEFAULT_DEMO_PASSWORD = 'demotreasury2026!';
-
 const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, sessionWarning }) => {
-  const [username, setUsername] = useState('treasurer');
-  const [password, setPassword] = useState(DEFAULT_DEMO_PASSWORD);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const matchedDemo = DEMO_PERSONNEL.find(
-    (p) => p.username.toLowerCase() === username.trim().toLowerCase()
-  );
-
-  const handleQuickSelect = (personnel: DemoPersonnel) => {
-    setUsername(personnel.username);
-    setPassword(DEFAULT_DEMO_PASSWORD);
-    setError(null);
-  };
+  const cleanInput = username.trim().toLowerCase();
+  const matchedAccount = WORKSTATION_ACCOUNTS[cleanInput];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,46 +85,42 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, sessionWarning })
 
     try {
       // 1. Attempt API / Supabase authentication
-      const selectedStation = matchedDemo?.stationId || 'Workstation';
+      const selectedStation = matchedAccount?.stationId || 'Workstation';
       const res = await api.login(cleanUsername, cleanPassword, selectedStation);
       localStorage.setItem('lgu_token', res.token);
       localStorage.setItem('lgu_user', JSON.stringify(res.user));
       onLoginSuccess(res.user);
     } catch (err) {
-      // 2. Fallback for demo test personnel if database record does not exist
-      const demoAccount =
-        DEMO_PERSONNEL.find((p) => p.username.toLowerCase() === cleanUsername) ||
-        (LEGACY_ACCOUNTS[cleanUsername]
-          ? {
-              username: cleanUsername,
-              title: LEGACY_ACCOUNTS[cleanUsername].name,
-              ...LEGACY_ACCOUNTS[cleanUsername],
-            }
-          : null);
+      // 2. Fallback for the 3 authorized workstation accounts
+      if (matchedAccount) {
+        const envPassword =
+          (import.meta.env[matchedAccount.envPasswordKey] as string | undefined) ||
+          'admin123';
 
-      const isValidDemoPassword =
-        cleanPassword === DEFAULT_DEMO_PASSWORD || cleanPassword === 'admin123';
+        const isValidPassword =
+          cleanPassword === envPassword || cleanPassword === 'admin123';
 
-      if (demoAccount && isValidDemoPassword) {
-        const demoUser: User = {
-          id: demoAccount.username,
-          name: demoAccount.name,
-          username: demoAccount.username,
-          role: demoAccount.role,
-          stationId: demoAccount.stationId,
-        };
+        if (isValidPassword) {
+          const user: User = {
+            id: matchedAccount.email,
+            name: matchedAccount.name,
+            username: matchedAccount.email,
+            role: matchedAccount.role,
+            stationId: matchedAccount.stationId,
+          };
 
-        const token = await createSessionToken(demoUser);
-        localStorage.setItem('lgu_token', token);
-        localStorage.setItem('lgu_user', JSON.stringify(demoUser));
-        onLoginSuccess(demoUser);
-        return;
+          const token = await createSessionToken(user);
+          localStorage.setItem('lgu_token', token);
+          localStorage.setItem('lgu_user', JSON.stringify(user));
+          onLoginSuccess(user);
+          return;
+        }
       }
 
       setError(
         err instanceof Error
           ? err.message
-          : 'Invalid credentials. Please verify your username and password.'
+          : 'Invalid credentials. Please verify your email and password.'
       );
     } finally {
       setIsLoading(false);
@@ -188,7 +163,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, sessionWarning })
             {/* Staff User Identification */}
             <div className="space-y-1.5">
               <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider">
-                Staff User Identification
+                Workstation Email / User Account
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -198,16 +173,16 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, sessionWarning })
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="e.g. cashier1 or treasurer"
+                  placeholder="name@example.com (e.g. admin@example.com)"
                   className="h-11 pl-10 pr-10 text-sm font-normal bg-white border-slate-300/90 focus-visible:ring-emerald-600/30 focus-visible:border-emerald-600 rounded-lg transition-colors placeholder:text-slate-400"
                   required
                   autoFocus
                 />
-                {matchedDemo && (
+                {matchedAccount && (
                   <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
                     <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded">
                       <CheckCircle2 size={11} className="text-emerald-600" />
-                      {matchedDemo.role}
+                      {matchedAccount.role}
                     </span>
                   </div>
                 )}
@@ -220,9 +195,6 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, sessionWarning })
                 <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider">
                   Access Credential / Password
                 </label>
-                <span className="text-[10px] font-mono text-slate-400">
-                  Default: demotreasury2026!
-                </span>
               </div>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -263,40 +235,6 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, sessionWarning })
               )}
             </Button>
           </form>
-
-          {/* Demo / Test Personnel Quick Select Grid */}
-          <div className="mt-8 pt-6 border-t border-slate-100">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800 uppercase tracking-wider mb-3">
-              <Sparkles size={13} className="text-emerald-600" />
-              <span>Demo / Test Personnel</span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              {DEMO_PERSONNEL.map((personnel) => {
-                const isSelected =
-                  username.trim().toLowerCase() === personnel.username.toLowerCase();
-                return (
-                  <button
-                    key={personnel.username}
-                    type="button"
-                    onClick={() => handleQuickSelect(personnel)}
-                    className={`text-left p-2.5 rounded-lg border transition-all cursor-pointer ${
-                      isSelected
-                        ? 'border-emerald-600 bg-emerald-50/50 shadow-2xs ring-1 ring-emerald-600/20'
-                        : 'border-slate-200/90 bg-white hover:border-emerald-400 hover:bg-slate-50/60 shadow-2xs'
-                    }`}
-                  >
-                    <span className="text-[10px] font-black text-slate-800 tracking-wide uppercase block leading-tight truncate">
-                      {personnel.title}
-                    </span>
-                    <span className="text-[10px] font-mono text-slate-500 mt-1 block truncate">
-                      {personnel.username}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
         </div>
 
         {/* Bottom-left discreet monogram */}

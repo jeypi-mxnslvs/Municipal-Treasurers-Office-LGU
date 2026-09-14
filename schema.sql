@@ -395,8 +395,12 @@ $$;
 -- Seed Default Staff Accounts (Bcrypt hashed default 'admin123')
 INSERT INTO users (username, password_hash, full_name, role, station_id)
 VALUES 
-    ('juan.assessor', crypt('admin123', gen_salt('bf', 10)), 'Juan Reyes', 'Assessor', 'Assessor-Desk-02'),
+    ('admin@example.com', crypt('admin123', gen_salt('bf', 10)), 'System Administrator', 'Admin', 'Main-HQ'),
+    ('assessor@example.com', crypt('admin123', gen_salt('bf', 10)), 'Municipal Assessor', 'Assessor', 'Assessor-Desk'),
+    ('viewer@example.com', crypt('admin123', gen_salt('bf', 10)), 'Treasury Viewer', 'Viewer', 'Viewer-Desk'),
+    -- Legacy Aliases & Compatibility
     ('admin', crypt('admin123', gen_salt('bf', 10)), 'System Administrator', 'Admin', 'Main-HQ'),
+    ('juan.assessor', crypt('admin123', gen_salt('bf', 10)), 'Juan Reyes', 'Assessor', 'Assessor-Desk-02'),
     ('mayor.office', crypt('admin123', gen_salt('bf', 10)), 'Hon. Mayor Office', 'Viewer', 'Executive-Desk')
 ON CONFLICT (username) DO UPDATE
 SET password_hash = EXCLUDED.password_hash;
@@ -424,8 +428,8 @@ ON CONFLICT DO NOTHING;
 -- Seed Default AF-51 Booklets (50 Receipts per standard LGU stub)
 INSERT INTO accountable_forms (booklet_id, form_type, series_start, series_end, current_serial, assigned_to_username, status)
 VALUES 
-    ('AF51-BK-2026-001', 'AF-51', 4500001, 4500050, 4500001, 'juan.assessor', 'ACTIVE'),
-    ('AF51-BK-2026-002', 'AF-51', 4500051, 4500100, 4500051, 'admin', 'ACTIVE')
+    ('AF51-BK-2026-001', 'AF-51', 4500001, 4500050, 4500001, 'assessor@example.com', 'ACTIVE'),
+    ('AF51-BK-2026-002', 'AF-51', 4500051, 4500100, 4500051, 'admin@example.com', 'ACTIVE')
 ON CONFLICT (booklet_id) DO NOTHING;
 
 -- =========================================================
