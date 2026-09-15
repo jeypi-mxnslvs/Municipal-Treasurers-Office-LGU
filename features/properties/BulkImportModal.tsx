@@ -199,7 +199,7 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
       lotAreaSqm: number;
       marketValue: number;
       assessedValue: number;
-      lastPaidYear: number;
+      rawLastPaid: string;
     }> = [];
 
     const lastSeenIndexByTd = new Map<string, number>();
@@ -242,7 +242,7 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
       const lotAreaSqm = parseFloat(cleanCols[colLotArea]) || 100;
       const marketValue = parseFloat(cleanCols[colMv]) || 0;
       const assessedValue = parseFloat(cleanCols[colAv]) || 0;
-      const lastPaidYear = parseInt(cleanCols[colLastPaid], 10) || 2025;
+      const rawLastPaid = cleanCols[colLastPaid]?.trim() || '';
 
       const record = {
         line: i + 1,
@@ -256,7 +256,7 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
         lotAreaSqm,
         marketValue,
         assessedValue,
-        lastPaidYear,
+        rawLastPaid,
       };
 
       rawParsed.push(record);
@@ -389,6 +389,20 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
         }
       }
 
+      // Statutory Last Paid Year Validation (DEBT-DOM-05 Protection against unverified debt amnesty)
+      let resolvedLastPaidYear: number;
+      if (existingProperty) {
+        // Protect existing financial ledger: ingestion never alters existing payment history
+        resolvedLastPaidYear = existingProperty.lastPaidYear;
+      } else {
+        const parsedYear = r.rawLastPaid ? parseInt(r.rawLastPaid, 10) : NaN;
+        if (isNaN(parsedYear) || parsedYear < 1970 || parsedYear > 2026) {
+          state = 'INVALID_NUMERIC_VALUE';
+          error = `Missing or invalid Last Paid Year ("${r.rawLastPaid || 'omitted'}"). Explicit statutory year (1970–2026) is required for new parcels to prevent unverified debt amnesty.`;
+        }
+        resolvedLastPaidYear = !isNaN(parsedYear) ? parsedYear : 1973;
+      }
+
       const isShell = r.assessedValue === 0;
 
       rows.push({
@@ -403,12 +417,12 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
         lotAreaSqm: r.lotAreaSqm,
         marketValue: r.marketValue,
         assessedValue: r.assessedValue,
-        lastPaidYear: r.lastPaidYear,
+        lastPaidYear: resolvedLastPaidYear,
         state,
         isShell,
         existingProperty,
         diffs,
-        error,
+        error: error || undefined,
       });
     }
 
