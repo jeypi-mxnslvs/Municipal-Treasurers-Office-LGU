@@ -1,5 +1,6 @@
 import { ITreasuryRepository } from './ITreasuryRepository';
 import { SupabaseRepository } from './SupabaseRepository';
+import { LocalHttpRepository } from './LocalHttpRepository';
 import {
   Property,
   CalculationResult,
@@ -16,12 +17,18 @@ import {
 } from '@/types';
 
 /**
- * Pluggable Repository Driver Instance
+ * Pluggable Repository Driver Factory
  *
- * Defaults to SupabaseRepository. In an air-gapped or on-premise deployment,
- * this can be swapped with LocalHttpRepository without touching the React UI.
+ * Supports both Cloud (Supabase PostgREST) and Local On-Premise Municipal Hall (LocalHttpRepository).
+ * Controlled seamlessly via VITE_BACKEND_DRIVER environment variable.
  */
-export const treasuryRepository: ITreasuryRepository = new SupabaseRepository();
+const backendDriver = import.meta.env.VITE_BACKEND_DRIVER || 'supabase';
+const localBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+
+export const treasuryRepository: ITreasuryRepository =
+  backendDriver === 'local-http'
+    ? new LocalHttpRepository(localBaseUrl)
+    : new SupabaseRepository();
 
 /**
  * Application-facing facade (`api`).
