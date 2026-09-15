@@ -8,7 +8,8 @@ import { DashboardTable, PropertyCard, RptarModal, BulkImportModal } from '@/fea
 import { DelinquencyTable } from '@/features/assessment';
 import { OfficialReceiptModal, BookletManagerModal } from '@/features/collections';
 import { AuditLogModal } from '@/features/audit';
-import { Printer, ArrowLeft, CheckCircle2, ShieldCheck, CheckCircle, RefreshCw, Bell } from 'lucide-react';
+import { NoticeOfDelinquencyModal, BlgfForm3Modal } from '@/features/reports';
+import { Printer, ArrowLeft, CheckCircle2, ShieldCheck, CheckCircle, RefreshCw, Bell, FileText } from 'lucide-react';
 import { verifySessionToken, DEFAULT_SESSION_TIMEOUT_MS } from './lib/crypto';
 
 const App: React.FC = () => {
@@ -33,6 +34,9 @@ const App: React.FC = () => {
   const [auditTargetProperty, setAuditTargetProperty] = useState<Property | null>(null);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [propertyPendingDeletion, setPropertyPendingDeletion] = useState<string | null>(null);
+  const [isNoticeModalOpen, setIsNoticeModalOpen] = useState(false);
+  const [isBlgfModalOpen, setIsBlgfModalOpen] = useState(false);
+  const [noticeProperties, setNoticeProperties] = useState<Property[]>([]);
 
   // Live Multi-Assessor Sync State & Notification Toast
   const [syncToast, setSyncToast] = useState<{ message: string; author: string } | null>(null);
@@ -338,6 +342,12 @@ const App: React.FC = () => {
         onLogout={() => handleLogout()}
         onOpenUserManagement={() => setIsUserManagementModalOpen(true)}
         onOpenBooklets={() => setIsBookletModalOpen(true)}
+        onOpenBlgfForm3={() => setIsBlgfModalOpen(true)}
+        onOpenBatchNotices={() => {
+          const delinquents = properties.filter(p => p.lastPaidYear < 2026 && !p.isShellRecord);
+          setNoticeProperties(delinquents);
+          setIsNoticeModalOpen(true);
+        }}
       />
 
       {/* Live Sync Toast Notification */}
@@ -405,6 +415,18 @@ const App: React.FC = () => {
                 >
                   <Printer size={15} />
                   Print Statement of Account (SOA)
+                </button>
+
+                <button 
+                  onClick={() => {
+                    setNoticeProperties(selectedProperty ? [selectedProperty] : []);
+                    setIsNoticeModalOpen(true);
+                  }}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-amber-700 hover:bg-amber-600 text-white text-xs font-bold rounded-xl shadow-sm transition-all"
+                  title="Generate Official Notice of Delinquency under RA 7160 Sec. 254"
+                >
+                  <FileText size={15} />
+                  Notice of Delinquency (Sec. 254)
                 </button>
               </div>
             </div>
@@ -566,6 +588,24 @@ const App: React.FC = () => {
         destructiveActionLabel="Permanently Delete Record"
         onConfirm={confirmDeleteProperty}
         onClose={() => setPropertyPendingDeletion(null)}
+      />
+
+      {/* Notice of Delinquency Demand Modal (RA 7160 Sec. 254) */}
+      <NoticeOfDelinquencyModal
+        isOpen={isNoticeModalOpen}
+        onClose={() => {
+          setIsNoticeModalOpen(false);
+          setNoticeProperties([]);
+        }}
+        properties={noticeProperties.length > 0 ? noticeProperties : (selectedProperty ? [selectedProperty] : [])}
+      />
+
+      {/* BLGF Form 3 Consolidated Monthly Report Modal */}
+      <BlgfForm3Modal
+        isOpen={isBlgfModalOpen}
+        onClose={() => setIsBlgfModalOpen(false)}
+        properties={properties}
+        stats={stats}
       />
     </div>
   );

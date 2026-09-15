@@ -1,5 +1,5 @@
 import React from 'react';
-import { UserCircle, LogOut, Users, BookOpen, WifiOff, RefreshCw } from 'lucide-react';
+import { UserCircle, LogOut, Users, BookOpen, WifiOff, RefreshCw, FileSpreadsheet, FileText } from 'lucide-react';
 import { User } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -10,6 +10,8 @@ interface HeaderProps {
   onLogout: () => void;
   onOpenUserManagement: () => void;
   onOpenBooklets?: () => void;
+  onOpenBlgfForm3?: () => void;
+  onOpenBatchNotices?: () => void;
 }
 
 const Header: React.FC<HeaderProps> = ({
@@ -17,6 +19,8 @@ const Header: React.FC<HeaderProps> = ({
   onLogout,
   onOpenUserManagement,
   onOpenBooklets,
+  onOpenBlgfForm3,
+  onOpenBatchNotices,
 }) => {
   const [isOnline, setIsOnline] = React.useState<boolean>(
     typeof navigator !== 'undefined' ? navigator.onLine : true
@@ -123,6 +127,36 @@ const Header: React.FC<HeaderProps> = ({
             >
               <BookOpen size={14} />
               <span className="hidden md:inline">AF-51 Register</span>
+            </Button>
+          )}
+
+          {/* BLGF Form 3 Report Button */}
+          {user.role !== 'Viewer' && onOpenBlgfForm3 && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onOpenBlgfForm3}
+              className="bg-emerald-800/30 hover:bg-emerald-700 text-emerald-200 hover:text-white border-emerald-600/40 text-xs font-bold gap-1.5"
+              title="Bureau of Local Government Finance (BLGF) Form 3 Monthly Collections Report"
+            >
+              <FileSpreadsheet size={14} />
+              <span className="hidden lg:inline">BLGF Form 3</span>
+            </Button>
+          )}
+
+          {/* Batch Delinquency Notices Button */}
+          {user.role !== 'Viewer' && onOpenBatchNotices && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onOpenBatchNotices}
+              className="bg-amber-900/30 hover:bg-amber-800 text-amber-200 hover:text-white border-amber-600/40 text-xs font-bold gap-1.5"
+              title="Batch Notice of Delinquency Generator (RA 7160 Sec. 254)"
+            >
+              <FileText size={14} />
+              <span className="hidden lg:inline">Demand Notices</span>
             </Button>
           )}
 
