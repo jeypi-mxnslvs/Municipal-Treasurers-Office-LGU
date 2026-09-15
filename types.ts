@@ -97,6 +97,8 @@ export interface OfficialReceipt {
   voidedBy?: string;
   voidedAt?: string;
   bookletId?: string;
+  isOffline?: boolean;
+  offlineSyncStatus?: 'PENDING' | 'SYNCING' | 'SYNCED' | 'CONFLICT' | 'FAILED';
   property: {
     id: string | number;
     tdNumber: string;
@@ -219,4 +221,44 @@ export interface ParsedPenaltySchedule {
   scheduleLabel: string;
   rates: Record<string, number>;
   sourceMode: 'EVALUATED_NUMBERS' | 'STATUTORY_CALCULATED';
+}
+
+export type OfflineSyncStatus = 'PENDING' | 'SYNCING' | 'SYNCED' | 'CONFLICT' | 'FAILED';
+
+export interface OfflineBookletSeries {
+  bookletId: string;
+  stationId: string;
+  seriesStart: number;
+  seriesEnd: number;
+  currentSerial: number;
+  assignedCashier: string;
+  isActive: boolean;
+}
+
+export interface OfflinePaymentItem {
+  id: string;
+  propertyId: string | number;
+  receiptNo: string;
+  bookletId: string;
+  paidRecords: TaxYearRecord[];
+  totalPaid: number;
+  tenderType: string;
+  tenderReference?: string;
+  postedBy: string;
+  stationId: string;
+  userId?: number;
+  createdAt: string;
+  syncStatus: OfflineSyncStatus;
+  syncError?: string;
+  syncedAt?: string;
+  serverReceiptNo?: string;
+  receiptSnapshot: OfficialReceipt;
+}
+
+export interface OfflineSyncResult {
+  total: number;
+  synced: number;
+  conflicts: number;
+  failed: number;
+  errors: Array<{ id: string; error: string; receiptNo: string }>;
 }

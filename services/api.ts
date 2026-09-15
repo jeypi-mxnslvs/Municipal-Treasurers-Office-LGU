@@ -1,6 +1,9 @@
 import { ITreasuryRepository } from './ITreasuryRepository';
 import { SupabaseRepository } from './SupabaseRepository';
 import { LocalHttpRepository } from './LocalHttpRepository';
+import { OfflineTreasuryRepository } from './offline/OfflineTreasuryRepository';
+import { offlineStorage } from './offline/OfflineStorage';
+import { offlineSyncService } from './offline/OfflineSyncService';
 import {
   Property,
   CalculationResult,
@@ -16,19 +19,24 @@ import {
   CsvImportBatch
 } from '@/types';
 
+export { offlineStorage, offlineSyncService };
+
 /**
  * Pluggable Repository Driver Factory
  *
- * Supports both Cloud (Supabase PostgREST) and Local On-Premise Municipal Hall (LocalHttpRepository).
+ * Supports Cloud (Supabase), Local On-Premise (LocalHttpRepository),
+ * and Offline Mobile Tellering Outbox (OfflineTreasuryRepository).
  * Controlled seamlessly via VITE_BACKEND_DRIVER environment variable.
  */
 const backendDriver = import.meta.env.VITE_BACKEND_DRIVER || 'supabase';
 const localBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
 
-export const treasuryRepository: ITreasuryRepository =
+const baseDriver: ITreasuryRepository =
   backendDriver === 'local-http'
     ? new LocalHttpRepository(localBaseUrl)
     : new SupabaseRepository();
+
+export const treasuryRepository: ITreasuryRepository = new OfflineTreasuryRepository(baseDriver);
 
 /**
  * Application-facing facade (`api`).
