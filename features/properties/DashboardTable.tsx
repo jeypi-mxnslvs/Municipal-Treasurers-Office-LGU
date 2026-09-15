@@ -50,8 +50,15 @@ const DEFAULT_PAGE_SIZE = 25;
 const getPropertyStatus = (property: Property): 'CLEARED' | 'PARTIAL' | 'DELINQUENT' => {
   if (property.status) return property.status;
   const lastPaid = Number(property.lastPaidYear) || 0;
-  if (lastPaid >= CURRENT_YEAR || property.totalDebt === 0) {
+  const lastQuarter = property.lastPaidQuarter !== undefined && property.lastPaidQuarter !== null
+    ? Number(property.lastPaidQuarter)
+    : 4;
+
+  if (lastPaid > CURRENT_YEAR || (lastPaid === CURRENT_YEAR && lastQuarter >= 4) || property.totalDebt === 0) {
     return 'CLEARED';
+  }
+  if (lastPaid === CURRENT_YEAR && lastQuarter < 4) {
+    return 'PARTIAL';
   }
   if (lastPaid === CURRENT_YEAR - 1) {
     return 'PARTIAL';

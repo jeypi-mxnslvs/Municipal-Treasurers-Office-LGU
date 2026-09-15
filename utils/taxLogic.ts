@@ -129,7 +129,14 @@ export const calculateTaxLiability = (
   const splitCurrentYear = options?.splitCurrentYearQuarters ?? false;
   const includeAdvance = options?.includeAdvanceYear ?? false;
 
-  const startYear = property.lastPaidYear + 1;
+  // If lastPaidYear === CURRENT_YEAR, lastPaidQuarter defines how many quarters of CURRENT_YEAR are settled.
+  // If lastPaidYear < CURRENT_YEAR, 0 quarters of CURRENT_YEAR are settled.
+  const currentYearPaidQuarter = property.lastPaidYear === CURRENT_YEAR
+    ? (property.lastPaidQuarter !== undefined && property.lastPaidQuarter !== null ? Number(property.lastPaidQuarter) : 4)
+    : 0;
+
+  const isCurrentYearPartial = property.lastPaidYear === CURRENT_YEAR && currentYearPaidQuarter < 4;
+  const startYear = isCurrentYearPartial ? CURRENT_YEAR : property.lastPaidYear + 1;
   const endYear = CURRENT_YEAR;
 
   if (startYear > endYear && !includeAdvance) {
@@ -367,44 +374,56 @@ export const calculateTaxLiability = (
 
   // 3. Process Current Operational Year (2026)
   if (startYear <= CURRENT_YEAR && endYear >= CURRENT_YEAR) {
-    if (splitCurrentYear) {
-      // 2026 1-2Q: Overdue / delinquent quarters
-      createRecord({
-        year: CURRENT_YEAR,
-        periodLabel: `${CURRENT_YEAR} 1-2Q`,
-        startYear: CURRENT_YEAR,
-        endYear: CURRENT_YEAR,
-        yearsCovered: [CURRENT_YEAR],
-        quarterSpan: '1-2Q',
-        isDelinquent: paymentMonth > 6, // Delinquent if paying in Q3/Q4 (after June 30)
-        isCurrentYear: true,
-        multiplier: 0.5,
-      });
+    const isFirstHalfPaid = currentYearPaidQuarter >= 2;
+    const isSecondHalfPaid = currentYearPaidQuarter >= 4;
 
-      // 2026 3-4 Q: Current / prompt settlement window
-      createRecord({
-        year: CURRENT_YEAR,
-        periodLabel: `${CURRENT_YEAR} 3-4 Q`,
-        startYear: CURRENT_YEAR,
-        endYear: CURRENT_YEAR,
-        yearsCovered: [CURRENT_YEAR],
-        quarterSpan: '3-4 Q',
-        isDelinquent: false,
-        isCurrentYear: true,
-        multiplier: 0.5,
-      });
+    if (splitCurrentYear) {
+      // 2026 1-2Q: Overdue / delinquent quarters (only if not already settled)
+      if (!isFirstHalfPaid) {
+        createRecord({
+          year: CURRENT_YEAR,
+          periodLabel: `${CURRENT_YEAR} 1-2Q`,
+          startYear: CURRENT_YEAR,
+          endYear: CURRENT_YEAR,
+          yearsCovered: [CURRENT_YEAR],
+          quarterSpan: '1-2Q',
+          isDelinquent: paymentMonth > 6, // Delinquent if paying in Q3/Q4 (after June 30)
+          isCurrentYear: true,
+          multiplier: 0.5,
+        });
+      }
+
+      // 2026 3-4 Q: Current / prompt settlement window (only if Q3/Q4 not already settled)
+      if (!isSecondHalfPaid) {
+        createRecord({
+          year: CURRENT_YEAR,
+          periodLabel: `${CURRENT_YEAR} 3-4 Q`,
+          startYear: CURRENT_YEAR,
+          endYear: CURRENT_YEAR,
+          yearsCovered: [CURRENT_YEAR],
+          quarterSpan: '3-4 Q',
+          isDelinquent: false,
+          isCurrentYear: true,
+          multiplier: 0.5,
+        });
+      }
     } else {
       // Standard annual current year record
-      createRecord({
-        year: CURRENT_YEAR,
-        periodLabel: String(CURRENT_YEAR),
-        startYear: CURRENT_YEAR,
-        endYear: CURRENT_YEAR,
-        yearsCovered: [CURRENT_YEAR],
-        isDelinquent: false,
-        isCurrentYear: true,
-        multiplier: 1,
-      });
+      const remainingQuarters = 4 - currentYearPaidQuarter;
+      if (remainingQuarters > 0) {
+        const mult = remainingQuarters / 4;
+        createRecord({
+          year: CURRENT_YEAR,
+          periodLabel: mult === 1 ? String(CURRENT_YEAR) : `${CURRENT_YEAR} ${currentYearPaidQuarter + 1}-4Q`,
+          startYear: CURRENT_YEAR,
+          endYear: CURRENT_YEAR,
+          yearsCovered: [CURRENT_YEAR],
+          quarterSpan: mult === 0.5 ? '3-4 Q' : undefined,
+          isDelinquent: false,
+          isCurrentYear: true,
+          multiplier: mult,
+        });
+      }
     }
   }
 

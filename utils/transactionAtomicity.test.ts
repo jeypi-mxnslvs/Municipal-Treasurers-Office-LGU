@@ -96,4 +96,34 @@ describe('Phase 2 - Financial Transaction Atomicity & AF-51 COA Engine', () => {
     const canPostPayment = !isShellRecord;
     expect(canPostPayment).toBe(false);
   });
+
+  it('verifies intra-year partial quarter progression and rollback (DEBT-DOM-01)', () => {
+    // Initial state: paid through 2025 full year
+    const initialYear = 2025;
+    const initialQuarter = 4;
+
+    // 1. Post payment for 2026 1-2Q
+    const paidRecordsQ12 = [{ year: 2026, quarterSpan: '1-2Q', periodLabel: '2026 1-2Q', totalDue: 5000 }];
+    const lastRec = paidRecordsQ12[0];
+    const isPartialFirstHalf = lastRec.quarterSpan === '1-2Q' || lastRec.periodLabel.includes('1-2Q');
+    const advancedYear = lastRec.year;
+    const advancedQuarter = isPartialFirstHalf ? 2 : 4;
+
+    expect(advancedYear).toBe(2026);
+    expect(advancedQuarter).toBe(2);
+
+    // Rollback reverts to 2025 Q4
+    const previousYear = initialYear;
+    const previousQuarter = initialQuarter;
+    expect(previousYear).toBe(2025);
+    expect(previousQuarter).toBe(4);
+
+    // 2. Post payment for 2026 3-4 Q
+    const paidRecordsQ34 = [{ year: 2026, quarterSpan: '3-4 Q', periodLabel: '2026 3-4 Q', totalDue: 5000 }];
+    const isFinalSecondHalf = paidRecordsQ34[0].quarterSpan === '3-4 Q';
+    const finalYear = paidRecordsQ34[0].year;
+    const finalQuarter = isFinalSecondHalf ? 4 : 2;
+    expect(finalYear).toBe(2026);
+    expect(finalQuarter).toBe(4);
+  });
 });

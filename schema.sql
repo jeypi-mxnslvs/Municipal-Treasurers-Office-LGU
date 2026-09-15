@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS properties (
     market_value NUMERIC NOT NULL DEFAULT 0,
     assessed_value NUMERIC NOT NULL DEFAULT 0,
     last_paid_year INT NOT NULL DEFAULT 2025,
+    last_paid_quarter INT NOT NULL DEFAULT 4,
     is_shell_record BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
@@ -75,6 +76,7 @@ CREATE TABLE IF NOT EXISTS payment_postings (
     voided_by TEXT,
     voided_at TIMESTAMP WITH TIME ZONE,
     previous_last_paid_year INT,
+    previous_last_paid_quarter INT,
     booklet_id TEXT REFERENCES accountable_forms(booklet_id),
     posted_by TEXT NOT NULL,
     posted_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
@@ -223,7 +225,12 @@ DECLARE
     v_receipt_no TEXT;
     v_payment payment_postings%ROWTYPE;
     v_highest_year INT;
+    v_highest_quarter INT;
     v_item JSONB;
+    v_item_year INT;
+    v_quarter_span TEXT;
+    v_period_label TEXT;
+    v_item_quarter INT;
 BEGIN
     -- 1. Lock and fetch property
     SELECT * INTO v_property
@@ -280,18 +287,34 @@ BEGIN
         WHERE id = v_booklet.id;
     END IF;
 
-    -- 4. Calculate new highest last_paid_year from paid_records
+    -- 4. Calculate new highest last_paid_year and last_paid_quarter from paid_records
     v_highest_year := v_property.last_paid_year;
+    v_highest_quarter := COALESCE(v_property.last_paid_quarter, 4);
+
     FOR v_item IN SELECT * FROM jsonb_array_elements(p_paid_records)
     LOOP
-        IF (v_item->>'year')::INT > v_highest_year THEN
-            v_highest_year := (v_item->>'year')::INT;
+        v_item_year := (v_item->>'year')::INT;
+        v_quarter_span := COALESCE(v_item->>'quarterSpan', '');
+        v_period_label := COALESCE(v_item->>'periodLabel', '');
+
+        IF v_quarter_span = '1-2Q' OR v_period_label LIKE '%1-2Q%' THEN
+            v_item_quarter := 2;
+        ELSE
+            v_item_quarter := 4;
+        END IF;
+
+        IF v_item_year > v_highest_year THEN
+            v_highest_year := v_item_year;
+            v_highest_quarter := v_item_quarter;
+        ELSIF v_item_year = v_highest_year AND v_item_quarter > v_highest_quarter THEN
+            v_highest_quarter := v_item_quarter;
         END IF;
     END LOOP;
 
-    -- 5. Advance property last_paid_year
+    -- 5. Advance property last_paid_year and last_paid_quarter
     UPDATE properties
     SET last_paid_year = v_highest_year,
+        last_paid_quarter = v_highest_quarter,
         updated_at = timezone('utc'::text, now())
     WHERE id = v_property.id;
 
@@ -307,6 +330,7 @@ BEGIN
         posted_by,
         posted_at,
         previous_last_paid_year,
+        previous_last_paid_quarter,
         booklet_id
     )
     VALUES (
@@ -320,6 +344,7 @@ BEGIN
         p_posted_by,
         timezone('utc'::text, now()),
         v_property.last_paid_year,
+        COALESCE(v_property.last_paid_quarter, 4),
         v_booklet.booklet_id
     )
     RETURNING * INTO v_payment;
@@ -339,7 +364,7 @@ BEGIN
         'DUES_CLEARED',
         p_posted_by,
         p_station_id,
-        'Issued Official Receipt ' || v_receipt_no || ' for ₱' || TO_CHAR(p_total_paid, 'FM999,999,990.00') || ' (Advanced last paid year from ' || v_property.last_paid_year || ' to ' || v_highest_year || ')'
+        'Issued Official Receipt ' || v_receipt_no || ' for ₱' || TO_CHAR(p_total_paid, 'FM999,999,990.00') || ' (Advanced last paid year from ' || v_property.last_paid_year || ' Q' || COALESCE(v_property.last_paid_quarter, 4) || ' to ' || v_highest_year || ' Q' || v_highest_quarter || ')'
     );
 
     RETURN v_payment;
@@ -385,10 +410,11 @@ BEGIN
     WHERE id = v_payment.property_id
     FOR UPDATE;
 
-    -- 3. Roll back property last_paid_year to pre-payment state
+    -- 3. Roll back property last_paid_year and last_paid_quarter to pre-payment state
     IF v_property.id IS NOT NULL AND v_payment.previous_last_paid_year IS NOT NULL THEN
         UPDATE properties
         SET last_paid_year = v_payment.previous_last_paid_year,
+            last_paid_quarter = COALESCE(v_payment.previous_last_paid_quarter, 4),
             updated_at = timezone('utc'::text, now())
         WHERE id = v_property.id;
     END IF;
@@ -417,7 +443,7 @@ BEGIN
         'UPDATED',
         p_authorized_by,
         p_station_id,
-        'COA VOID: Official Receipt ' || p_receipt_no || ' VOIDED by ' || p_authorized_by || '. Reason: ' || p_reason || '. Reverted last paid year to ' || COALESCE(v_payment.previous_last_paid_year::TEXT, 'original')
+        'COA VOID: Official Receipt ' || p_receipt_no || ' VOIDED by ' || p_authorized_by || '. Reason: ' || p_reason || '. Reverted last paid year to ' || COALESCE(v_payment.previous_last_paid_year::TEXT, 'original') || ' Q' || COALESCE(v_payment.previous_last_paid_quarter::TEXT, '4')
     );
 
     RETURN v_payment;
@@ -454,12 +480,12 @@ VALUES
 ON CONFLICT DO NOTHING;
 
 -- Seed Initial Properties
-INSERT INTO properties (td_number, previous_td_number, owner_name, address, barangay, assessed_value, last_paid_year, property_class, is_shell_record)
+INSERT INTO properties (td_number, previous_td_number, owner_name, address, barangay, assessed_value, last_paid_year, last_paid_quarter, property_class, is_shell_record)
 VALUES
-    ('TD-99-001-2234', 'TD-92-001-1100', 'Juan Dela Cruz', 'Lot 4 Blk 5, Acacia St.', 'Acacia', 500000, 2023, 'Residential', false),
-    ('TD-99-002-5567', 'TD-85-004-9922', 'Clara Batumbakal', 'KM 5 National Highway', 'San Jose', 1200000, 2025, 'Commercial', false),
-    ('TD-CSV-888', '', 'Prospective Taxpayer Inc.', 'Block 2, Industrial Zone', 'Industrial Zone', 0, 2020, 'Industrial', true),
-    ('TD-99-004-9901', 'TD-91-001-0001', 'Ricardo Dalisay', 'Poblacion Proper', 'Poblacion', 350000, 2024, 'Residential', false)
+    ('TD-99-001-2234', 'TD-92-001-1100', 'Juan Dela Cruz', 'Lot 4 Blk 5, Acacia St.', 'Acacia', 500000, 2023, 4, 'Residential', false),
+    ('TD-99-002-5567', 'TD-85-004-9922', 'Clara Batumbakal', 'KM 5 National Highway', 'San Jose', 1200000, 2025, 4, 'Commercial', false),
+    ('TD-CSV-888', '', 'Prospective Taxpayer Inc.', 'Block 2, Industrial Zone', 'Industrial Zone', 0, 2020, 4, 'Industrial', true),
+    ('TD-99-004-9901', 'TD-91-001-0001', 'Ricardo Dalisay', 'Poblacion Proper', 'Poblacion', 350000, 2024, 4, 'Residential', false)
 ON CONFLICT DO NOTHING;
 
 -- Seed Default AF-51 Booklets (50 Receipts per standard LGU stub)

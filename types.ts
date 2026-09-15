@@ -11,6 +11,7 @@ export interface Property {
   marketValue?: number;
   assessedValue: number;
   lastPaidYear: number;
+  lastPaidQuarter?: number; // Last settled quarter: 1, 2, 3, or 4 (default 4 for full year)
   isShellRecord: boolean;
   totalDebt?: number;
   status?: 'CLEARED' | 'PARTIAL' | 'DELINQUENT';

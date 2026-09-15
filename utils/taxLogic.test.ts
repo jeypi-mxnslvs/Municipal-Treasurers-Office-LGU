@@ -623,5 +623,118 @@ describe("taxLogic - Municipal Payment-Date Policy & Assessor Overrides", () => 
       expect(result.grandTotal).toBe(165.22);
     });
   });
+
+  describe("DEBT-DOM-01: Intra-Year Partial Quarter Settlement & lastPaidQuarter Engine", () => {
+    it("preserves and generates 2026 3-4 Q when 2026 1-2Q is settled (lastPaidYear: 2026, lastPaidQuarter: 2)", () => {
+      const property: Property = {
+        id: "prop-partial-2026",
+        tdNumber: "TD-2026-PARTIAL",
+        previousTdNumber: "",
+        ownerName: "Partial Settled Taxpayer",
+        address: "Santa Rosa Proper",
+        barangay: "Poblacion",
+        propertyClass: "Residential",
+        assessedValue: 500000,
+        lastPaidYear: 2026,
+        lastPaidQuarter: 2,
+        isShellRecord: false,
+      };
+
+      const result = calculateTaxLiability(property, {
+        splitCurrentYearQuarters: true,
+        paymentDate: new Date(2026, 8, 15), // September 15, 2026
+      });
+
+      expect(result.records).toHaveLength(1);
+      const q34 = result.records[0];
+      expect(q34.periodLabel).toBe("2026 3-4 Q");
+      expect(q34.quarterSpan).toBe("3-4 Q");
+      expect(q34.status).toBe("Current");
+      expect(q34.basicTax).toBe(2500);
+      expect(q34.sefTax).toBe(2500);
+      expect(q34.baseTax).toBe(5000);
+      expect(q34.penaltyAmount).toBe(0);
+      expect(result.records.find((r) => r.periodLabel === "2026 1-2Q")).toBeUndefined();
+      expect(result.grandTotal).toBe(5000);
+    });
+
+    it("returns zero records and zero liability when full current year is settled (lastPaidYear: 2026, lastPaidQuarter: 4)", () => {
+      const property: Property = {
+        id: "prop-cleared-2026",
+        tdNumber: "TD-2026-CLEARED",
+        previousTdNumber: "",
+        ownerName: "Fully Cleared Taxpayer",
+        address: "Santa Rosa Proper",
+        barangay: "Poblacion",
+        propertyClass: "Residential",
+        assessedValue: 500000,
+        lastPaidYear: 2026,
+        lastPaidQuarter: 4,
+        isShellRecord: false,
+      };
+
+      const result = calculateTaxLiability(property, {
+        splitCurrentYearQuarters: true,
+        paymentDate: new Date(2026, 8, 15),
+      });
+
+      expect(result.records).toHaveLength(0);
+      expect(result.grandTotal).toBe(0);
+    });
+
+    it("generates both 1-2Q and 3-4 Q when prior year is settled but current year is untouched (lastPaidYear: 2025, lastPaidQuarter: 4)", () => {
+      const property: Property = {
+        id: "prop-untouched-2026",
+        tdNumber: "TD-2026-UNTOUCHED",
+        previousTdNumber: "",
+        ownerName: "Untouched Current Year Taxpayer",
+        address: "Santa Rosa Proper",
+        barangay: "Poblacion",
+        propertyClass: "Residential",
+        assessedValue: 500000,
+        lastPaidYear: 2025,
+        lastPaidQuarter: 4,
+        isShellRecord: false,
+      };
+
+      const result = calculateTaxLiability(property, {
+        splitCurrentYearQuarters: true,
+        paymentDate: new Date(2026, 8, 15),
+      });
+
+      expect(result.records).toHaveLength(2);
+      expect(result.records[0].periodLabel).toBe("2026 1-2Q");
+      expect(result.records[1].periodLabel).toBe("2026 3-4 Q");
+    });
+
+    it("correctly assesses partial annual liability when splitCurrentYearQuarters is false and lastPaidQuarter is 2", () => {
+      const property: Property = {
+        id: "prop-partial-annual",
+        tdNumber: "TD-2026-PARTIAL-ANNUAL",
+        previousTdNumber: "",
+        ownerName: "Partial Annual Taxpayer",
+        address: "Santa Rosa Proper",
+        barangay: "Poblacion",
+        propertyClass: "Residential",
+        assessedValue: 500000,
+        lastPaidYear: 2026,
+        lastPaidQuarter: 2,
+        isShellRecord: false,
+      };
+
+      const result = calculateTaxLiability(property, {
+        splitCurrentYearQuarters: false,
+        paymentDate: new Date(2026, 8, 15),
+      });
+
+      expect(result.records).toHaveLength(1);
+      expect(result.records[0].periodLabel).toBe("2026 3-4Q");
+      expect(result.records[0].basicTax).toBe(2500);
+      expect(result.records[0].sefTax).toBe(2500);
+      expect(result.records[0].baseTax).toBe(5000);
+      expect(result.grandTotal).toBe(5000);
+    });
+  });
 });
+
 

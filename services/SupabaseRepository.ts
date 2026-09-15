@@ -51,6 +51,7 @@ export class SupabaseRepository implements ITreasuryRepository {
       marketValue: Number(row.market_value) || 0,
       assessedValue: Number(row.assessed_value) || 0,
       lastPaidYear: Number(row.last_paid_year) || 2025,
+      lastPaidQuarter: row.last_paid_quarter !== undefined && row.last_paid_quarter !== null ? Number(row.last_paid_quarter) : 4,
       isShellRecord: Boolean(row.is_shell_record)
     }));
   }
@@ -82,6 +83,7 @@ export class SupabaseRepository implements ITreasuryRepository {
         barangay: data.barangay,
         assessedValue: Number(data.assessed_value),
         lastPaidYear: Number(data.last_paid_year),
+        lastPaidQuarter: data.last_paid_quarter !== undefined && data.last_paid_quarter !== null ? Number(data.last_paid_quarter) : 4,
         propertyClass: data.property_class,
         isShellRecord: Boolean(data.is_shell_record)
       };
@@ -199,6 +201,7 @@ export class SupabaseRepository implements ITreasuryRepository {
       property_class: propertyData.propertyClass,
       assessed_value: propertyData.assessedValue,
       last_paid_year: propertyData.lastPaidYear,
+      last_paid_quarter: propertyData.lastPaidQuarter !== undefined && propertyData.lastPaidQuarter !== null ? propertyData.lastPaidQuarter : 4,
       is_shell_record: propertyData.isShellRecord,
       updated_at: new Date().toISOString()
     };
@@ -243,6 +246,7 @@ export class SupabaseRepository implements ITreasuryRepository {
       propertyClass: resultData.property_class,
       assessedValue: Number(resultData.assessed_value),
       lastPaidYear: Number(resultData.last_paid_year),
+      lastPaidQuarter: resultData.last_paid_quarter !== undefined && resultData.last_paid_quarter !== null ? Number(resultData.last_paid_quarter) : 4,
       isShellRecord: Boolean(resultData.is_shell_record)
     };
   }
@@ -340,36 +344,52 @@ export class SupabaseRepository implements ITreasuryRepository {
 
       receiptNo = `AF51-${String(serialNumber).padStart(7, '0')}`;
 
-      // Advance property last paid year
+      // Advance property last paid year and last paid quarter
       if (payload.paidRecords.length > 0) {
         const lastRec = payload.paidRecords[payload.paidRecords.length - 1];
-        const isPartialFirstHalf = lastRec.quarterSpan === '1-2Q';
-        const highestYear = isPartialFirstHalf 
-          ? (lastRec.year - 1) 
-          : Math.max(...payload.paidRecords.map(r => r.endYear || r.year || 0));
+        const isPartialFirstHalf = lastRec.quarterSpan === '1-2Q' || (lastRec.periodLabel || '').includes('1-2Q');
+        const highestYear = Math.max(...payload.paidRecords.map(r => r.endYear || r.year || 0));
+        const highestQuarter = isPartialFirstHalf ? 2 : 4;
+
+        // Fetch current property to capture previous state for COA rollback
+        const { data: currentProp } = await supabase
+          .from('properties')
+          .select('last_paid_year, last_paid_quarter')
+          .eq('id', payload.propertyId)
+          .single();
+
+        const prevYear = currentProp ? currentProp.last_paid_year : payload.paidRecords[0].year - 1;
+        const prevQuarter = currentProp && currentProp.last_paid_quarter !== null && currentProp.last_paid_quarter !== undefined ? currentProp.last_paid_quarter : 4;
+
         await supabase
           .from('properties')
-          .update({ last_paid_year: highestYear, updated_at: new Date().toISOString() })
+          .update({
+            last_paid_year: highestYear,
+            last_paid_quarter: highestQuarter,
+            updated_at: new Date().toISOString()
+          })
           .eq('id', payload.propertyId);
-      }
 
-      // Save payment record with full immutable snapshot
-      await supabase.from('payment_postings').insert({
-        receipt_no: receiptNo,
-        property_id: payload.propertyId,
-        paid_records: payload.paidRecords,
-        total_paid: totalPaid,
-        basic_tax: basicTax,
-        sef_tax: sefTax,
-        penalty_amount: penalty,
-        discount_amount: discount,
-        discount_rate: payload.paidRecords[0]?.discountRate || 0,
-        tender_type: payload.tenderType,
-        tender_reference: payload.tenderReference,
-        status: 'ISSUED',
-        posted_by: payload.postedBy,
-        booklet_id: bookletId
-      });
+        // Save payment record with full immutable snapshot
+        await supabase.from('payment_postings').insert({
+          receipt_no: receiptNo,
+          property_id: payload.propertyId,
+          paid_records: payload.paidRecords,
+          total_paid: totalPaid,
+          basic_tax: basicTax,
+          sef_tax: sefTax,
+          penalty_amount: penalty,
+          discount_amount: discount,
+          discount_rate: payload.paidRecords[0]?.discountRate || 0,
+          tender_type: payload.tenderType,
+          tender_reference: payload.tenderReference,
+          status: 'ISSUED',
+          posted_by: payload.postedBy,
+          previous_last_paid_year: prevYear,
+          previous_last_paid_quarter: prevQuarter,
+          booklet_id: bookletId
+        });
+      }
     }
 
     const { data: prop } = await supabase.from('properties').select('*').eq('id', payload.propertyId).single();
@@ -436,7 +456,11 @@ export class SupabaseRepository implements ITreasuryRepository {
     if (posting.previous_last_paid_year !== null && posting.previous_last_paid_year !== undefined) {
       await supabase
         .from('properties')
-        .update({ last_paid_year: posting.previous_last_paid_year, updated_at: new Date().toISOString() })
+        .update({
+          last_paid_year: posting.previous_last_paid_year,
+          last_paid_quarter: posting.previous_last_paid_quarter !== null && posting.previous_last_paid_quarter !== undefined ? posting.previous_last_paid_quarter : 4,
+          updated_at: new Date().toISOString()
+        })
         .eq('id', posting.property_id);
     }
 
@@ -564,15 +588,15 @@ export class SupabaseRepository implements ITreasuryRepository {
 
     const totalProperties = list.length;
     const shellRecordsCount = list.filter(p => p.is_shell_record).length;
-    const clearedCount = list.filter(p => !p.is_shell_record && (p.last_paid_year || 0) >= 2026).length;
-    const delinquentCount = list.filter(p => !p.is_shell_record && (p.last_paid_year || 0) < 2026).length;
+    const clearedCount = list.filter(p => !p.is_shell_record && (p.last_paid_year || 0) >= 2026 && (p.last_paid_quarter === null || p.last_paid_quarter === undefined || p.last_paid_quarter >= 4)).length;
+    const delinquentCount = list.filter(p => !p.is_shell_record && ((p.last_paid_year || 0) < 2026 || (p.last_paid_year === 2026 && (p.last_paid_quarter || 4) < 4))).length;
 
     let totalDelinquentDebt = 0;
     const barangayMap = new Map<string, { properties: number; outstandingDebt: number }>();
 
     for (const p of list) {
       const bgy = p.barangay || 'Unassigned';
-      const isDelinquent = !p.is_shell_record && (p.last_paid_year || 0) < 2026;
+      const isDelinquent = !p.is_shell_record && ((p.last_paid_year || 0) < 2026 || (p.last_paid_year === 2026 && (p.last_paid_quarter || 4) < 4));
       let debt = 0;
 
       if (!p.is_shell_record) {
@@ -588,6 +612,7 @@ export class SupabaseRepository implements ITreasuryRepository {
           assessedValue: Number(p.assessed_value) || 0,
           marketValue: Number(p.market_value) || 0,
           lastPaidYear: p.last_paid_year || 2020,
+          lastPaidQuarter: p.last_paid_quarter !== null && p.last_paid_quarter !== undefined ? Number(p.last_paid_quarter) : 4,
           isShellRecord: p.is_shell_record || false
         };
         debt = localCalculateTaxLiability(mappedProperty).grandTotal;
@@ -1149,6 +1174,7 @@ export class SupabaseRepository implements ITreasuryRepository {
           market_value: Number(p.marketValue) || 0,
           assessed_value: Number(p.assessedValue) || 0,
           last_paid_year: Number(p.lastPaidYear) || 2025,
+          last_paid_quarter: p.lastPaidQuarter !== undefined && p.lastPaidQuarter !== null ? Number(p.lastPaidQuarter) : 4,
           is_shell_record: Boolean(p.isShellRecord),
           updated_at: new Date().toISOString()
         });
