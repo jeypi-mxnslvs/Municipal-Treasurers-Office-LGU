@@ -6,13 +6,13 @@
 -- Enable Cryptographic Extension for Bcrypt Password Hashing
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- 1. USERS TABLE (3 Unified Roles: Admin, Assessor, Viewer)
+-- 1. USERS TABLE (4 Roles: Admin, Assessor, Cashier, Viewer)
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     username TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     full_name TEXT NOT NULL,
-    role TEXT NOT NULL CHECK (role IN ('Admin', 'Assessor', 'Viewer')),
+    role TEXT NOT NULL CHECK (role IN ('Admin', 'Assessor', 'Cashier', 'Viewer')),
     station_id TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS payment_postings (
     property_id INT REFERENCES properties(id) ON DELETE CASCADE,
     paid_records JSONB NOT NULL DEFAULT '[]'::jsonb,
     total_paid NUMERIC NOT NULL,
+    discount_rate NUMERIC DEFAULT 0.00,
     tender_type TEXT NOT NULL DEFAULT 'CASH',
     tender_reference TEXT,
     status TEXT NOT NULL DEFAULT 'ISSUED' CHECK (status IN ('ISSUED', 'VOIDED')),
@@ -88,10 +89,18 @@ CREATE TABLE IF NOT EXISTS rptar_audit_logs (
     assessor_name TEXT NOT NULL,
     station_id TEXT,
     details TEXT,
+    tax_year INT,
+    field_changed TEXT,
+    original_value NUMERIC,
+    new_value NUMERIC,
+    difference NUMERIC,
+    reason TEXT,
+    user_id INT,
+    user_role TEXT,
     timestamp TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
 
--- 6. SECURITY AUDIT LOGS (Immutable Authentication & Security Events)
+-- 7. SECURITY AUDIT LOGS (Immutable Authentication & Security Events)
 CREATE TABLE IF NOT EXISTS security_audit_logs (
     id SERIAL PRIMARY KEY,
     event_type TEXT NOT NULL, -- 'LOGIN_SUCCESS', 'LOGIN_FAILURE', 'USER_CREATED', 'ROLE_CHANGED', 'PASSWORD_RESET', 'USER_DELETED', 'ACCESS_DENIED'
@@ -100,6 +109,33 @@ CREATE TABLE IF NOT EXISTS security_audit_logs (
     station_id TEXT,
     ip_address TEXT,
     details TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+
+-- 8. MUNICIPAL TAX POLICY SETTINGS TABLE (Configurable Discount Schedule)
+CREATE TABLE IF NOT EXISTS municipal_tax_settings (
+    id SERIAL PRIMARY KEY,
+    early_payment_discount_rate NUMERIC NOT NULL DEFAULT 0.20,
+    early_payment_start_month INT NOT NULL DEFAULT 1,
+    early_payment_end_month INT NOT NULL DEFAULT 3,
+    regular_prompt_discount_rate NUMERIC NOT NULL DEFAULT 0.10,
+    delinquent_discount_rate NUMERIC NOT NULL DEFAULT 0.00,
+    effective_year INT NOT NULL DEFAULT 2026,
+    updated_by TEXT DEFAULT 'admin',
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+
+-- 9. CSV IMPORT BATCHES TABLE (Assessor Staging & Ingestion Tracking)
+CREATE TABLE IF NOT EXISTS csv_import_batches (
+    id SERIAL PRIMARY KEY,
+    batch_name TEXT NOT NULL,
+    barangay TEXT NOT NULL,
+    filename TEXT NOT NULL,
+    total_rows INT NOT NULL DEFAULT 0,
+    inserted_rows INT NOT NULL DEFAULT 0,
+    updated_rows INT NOT NULL DEFAULT 0,
+    unchanged_rows INT NOT NULL DEFAULT 0,
+    imported_by TEXT NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
 
@@ -397,6 +433,7 @@ INSERT INTO users (username, password_hash, full_name, role, station_id)
 VALUES 
     ('admin@example.com', crypt('admin123', gen_salt('bf', 10)), 'System Administrator', 'Admin', 'Main-HQ'),
     ('assessor@example.com', crypt('admin123', gen_salt('bf', 10)), 'Municipal Assessor', 'Assessor', 'Assessor-Desk'),
+    ('cashier@example.com', crypt('admin123', gen_salt('bf', 10)), 'Treasury Cashier', 'Cashier', 'Window-01'),
     ('viewer@example.com', crypt('admin123', gen_salt('bf', 10)), 'Treasury Viewer', 'Viewer', 'Viewer-Desk'),
     -- Legacy Aliases & Compatibility
     ('admin', crypt('admin123', gen_salt('bf', 10)), 'System Administrator', 'Admin', 'Main-HQ'),
@@ -432,6 +469,19 @@ VALUES
     ('AF51-BK-2026-002', 'AF-51', 4500051, 4500100, 4500051, 'admin@example.com', 'ACTIVE')
 ON CONFLICT (booklet_id) DO NOTHING;
 
+-- Seed Default Santa Rosa Municipal Tax Policy (Jan-Mar 20%, Apr-Dec 10%, Delinquent 0%)
+INSERT INTO municipal_tax_settings (
+    early_payment_discount_rate,
+    early_payment_start_month,
+    early_payment_end_month,
+    regular_prompt_discount_rate,
+    delinquent_discount_rate,
+    effective_year,
+    updated_by
+)
+SELECT 0.20, 1, 3, 0.10, 0.00, 2026, 'System Administrator'
+WHERE NOT EXISTS (SELECT 1 FROM municipal_tax_settings);
+
 -- =========================================================
 -- PERMISSIONS & ROW LEVEL SECURITY (RLS)
 -- =========================================================
@@ -457,6 +507,8 @@ ALTER TABLE public.accountable_forms ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.payment_postings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.rptar_audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.security_audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.municipal_tax_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.csv_import_batches ENABLE ROW LEVEL SECURITY;
 
 -- Restrictive policies
 CREATE POLICY "Allow authenticated read users" ON public.users FOR SELECT TO authenticated USING (true);
@@ -471,5 +523,7 @@ CREATE POLICY "Allow authenticated all payments" ON public.payment_postings FOR 
 CREATE POLICY "Allow authenticated all audit_logs" ON public.rptar_audit_logs FOR ALL TO authenticated USING (true);
 CREATE POLICY "Allow anon and auth insert security logs" ON public.security_audit_logs FOR INSERT TO anon, authenticated WITH CHECK (true);
 CREATE POLICY "Allow authenticated read security logs" ON public.security_audit_logs FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Allow all on municipal_tax_settings" ON public.municipal_tax_settings FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all on csv_import_batches" ON public.csv_import_batches FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 
 NOTIFY pgrst, 'reload schema';

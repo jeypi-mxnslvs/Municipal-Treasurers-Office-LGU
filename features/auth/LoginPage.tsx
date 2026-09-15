@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { User } from '@/types';
 import { api } from '@/services/api';
-import { createSessionToken } from '@/lib/crypto';
 import { Lock, User as UserIcon, ArrowRight, ShieldAlert, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,7 +15,6 @@ interface WorkstationAccount {
   role: 'Admin' | 'Assessor' | 'Viewer';
   name: string;
   stationId: string;
-  envPasswordKey: 'VITE_ADMIN_PASSWORD' | 'VITE_ASSESSOR_PASSWORD' | 'VITE_VIEWER_PASSWORD';
 }
 
 const WORKSTATION_ACCOUNTS: Record<string, WorkstationAccount> = {
@@ -25,21 +23,18 @@ const WORKSTATION_ACCOUNTS: Record<string, WorkstationAccount> = {
     role: 'Admin',
     name: 'System Administrator',
     stationId: 'Main-HQ',
-    envPasswordKey: 'VITE_ADMIN_PASSWORD',
   },
   'assessor@example.com': {
     email: 'assessor@example.com',
     role: 'Assessor',
     name: 'Municipal Assessor',
     stationId: 'Assessor-Desk',
-    envPasswordKey: 'VITE_ASSESSOR_PASSWORD',
   },
   'viewer@example.com': {
     email: 'viewer@example.com',
     role: 'Viewer',
     name: 'Treasury Viewer',
     stationId: 'Viewer-Desk',
-    envPasswordKey: 'VITE_VIEWER_PASSWORD',
   },
   // Convenient developer aliases
   'admin': {
@@ -47,21 +42,18 @@ const WORKSTATION_ACCOUNTS: Record<string, WorkstationAccount> = {
     role: 'Admin',
     name: 'System Administrator',
     stationId: 'Main-HQ',
-    envPasswordKey: 'VITE_ADMIN_PASSWORD',
   },
   'assessor': {
     email: 'assessor@example.com',
     role: 'Assessor',
     name: 'Municipal Assessor',
     stationId: 'Assessor-Desk',
-    envPasswordKey: 'VITE_ASSESSOR_PASSWORD',
   },
   'viewer': {
     email: 'viewer@example.com',
     role: 'Viewer',
     name: 'Treasury Viewer',
     stationId: 'Viewer-Desk',
-    envPasswordKey: 'VITE_VIEWER_PASSWORD',
   },
 };
 
@@ -83,44 +75,24 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, sessionWarning })
     const cleanUsername = username.trim().toLowerCase();
     const cleanPassword = password.trim();
 
+    if (!cleanUsername || !cleanPassword) {
+      setError('Please enter both your workstation account and password.');
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      // 1. Attempt API / Supabase authentication
+      // Authenticate strictly via API / database authentication engine
       const selectedStation = matchedAccount?.stationId || 'Workstation';
       const res = await api.login(cleanUsername, cleanPassword, selectedStation);
       localStorage.setItem('lgu_token', res.token);
       localStorage.setItem('lgu_user', JSON.stringify(res.user));
       onLoginSuccess(res.user);
     } catch (err) {
-      // 2. Fallback for the 3 authorized workstation accounts
-      if (matchedAccount) {
-        const envPassword =
-          (import.meta.env[matchedAccount.envPasswordKey] as string | undefined) ||
-          'admin123';
-
-        const isValidPassword =
-          cleanPassword === envPassword || cleanPassword === 'admin123';
-
-        if (isValidPassword) {
-          const user: User = {
-            id: matchedAccount.email,
-            name: matchedAccount.name,
-            username: matchedAccount.email,
-            role: matchedAccount.role,
-            stationId: matchedAccount.stationId,
-          };
-
-          const token = await createSessionToken(user);
-          localStorage.setItem('lgu_token', token);
-          localStorage.setItem('lgu_user', JSON.stringify(user));
-          onLoginSuccess(user);
-          return;
-        }
-      }
-
       setError(
         err instanceof Error
           ? err.message
-          : 'Invalid credentials. Please verify your email and password.'
+          : 'Invalid credentials. Please verify your workstation email and password.'
       );
     } finally {
       setIsLoading(false);

@@ -45,7 +45,7 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
   const [users, setUsers] = useState<User[]>([]);
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('admin123');
+  const [password, setPassword] = useState('');
   const [role, setRole] = useState<'Assessor' | 'Admin' | 'Viewer'>('Assessor');
   const [stationId, setStationId] = useState('Assessor-Desk-03');
   const [statusMessage, setStatusMessage] = useState<{
@@ -81,6 +81,15 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setStatusMessage(null);
+
+    if (!password || password.length < 6) {
+      setStatusMessage({
+        type: 'error',
+        text: 'Initial password must be at least 6 characters long.',
+      });
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -98,7 +107,7 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
       });
       setFullName('');
       setUsername('');
-      setPassword('admin123');
+      setPassword('');
       await fetchUsersList();
     } catch (err) {
       setStatusMessage({
@@ -150,6 +159,14 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
   const handleExecutePasswordReset = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!resetTargetUser || !newPasswordInput) return;
+
+    if (newPasswordInput.length < 6) {
+      setStatusMessage({
+        type: 'error',
+        text: 'New password must be at least 6 characters long.',
+      });
+      return;
+    }
 
     try {
       await api.resetUserPassword(resetTargetUser.id, newPasswordInput);

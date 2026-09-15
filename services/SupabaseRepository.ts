@@ -464,11 +464,57 @@ export class SupabaseRepository implements ITreasuryRepository {
 
   // 3. Accountable Forms (AF-51)
   async getActiveBooklet(username?: string): Promise<AccountableFormBooklet | null> {
-    let query = supabase.from('accountable_forms').select('*').eq('status', 'ACTIVE');
-    if (username) {
-      query = query.or(`assigned_to_username.ilike.${username},assigned_to_username.is.null`);
+    const cleanUser = username?.trim().toLowerCase();
+
+    // 1. Try matching specifically assigned active booklet for this user
+    if (cleanUser) {
+      // Clean up composite name if passed like "Name (Role • Station)"
+      const simpleUser = cleanUser.includes('(') ? cleanUser.split('(')[0].trim() : cleanUser;
+
+      const { data: userBooklet } = await supabase
+        .from('accountable_forms')
+        .select('*')
+        .eq('status', 'ACTIVE')
+        .ilike('assigned_to_username', `%${simpleUser}%`)
+        .order('id', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (userBooklet) {
+        return {
+          id: userBooklet.id,
+          bookletId: userBooklet.booklet_id,
+          formType: userBooklet.form_type,
+          seriesStart: userBooklet.series_start,
+          seriesEnd: userBooklet.series_end,
+          currentSerial: userBooklet.current_serial,
+          assignedToUserId: userBooklet.assigned_to_user_id,
+          assignedToUsername: userBooklet.assigned_to_username,
+          status: userBooklet.status,
+          createdAt: userBooklet.created_at
+        };
+      }
     }
-    const { data } = await query.order('id', { ascending: true }).limit(1).maybeSingle();
+
+    // 2. Fallback to unassigned active booklet or first active booklet
+    const { data: unassignedBooklet } = await supabase
+      .from('accountable_forms')
+      .select('*')
+      .eq('status', 'ACTIVE')
+      .is('assigned_to_username', null)
+      .order('id', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    const data = unassignedBooklet || (await supabase
+      .from('accountable_forms')
+      .select('*')
+      .eq('status', 'ACTIVE')
+      .order('id', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+    ).data;
+
     if (!data) return null;
     return {
       id: data.id,
@@ -675,24 +721,32 @@ export class SupabaseRepository implements ITreasuryRepository {
           p_station_id: stationId
         });
 
-      if (!rpcError && Array.isArray(rpcData) && rpcData.length > 0) {
-        const match = rpcData[0];
-        const verifiedUser: User = {
-          id: String(match.id),
-          name: match.full_name,
-          username: match.username,
-          role: match.role,
-          stationId: match.station_id
-        };
+      if (!rpcError) {
+        if (Array.isArray(rpcData) && rpcData.length > 0) {
+          const match = rpcData[0];
+          const verifiedUser: User = {
+            id: String(match.id),
+            name: match.full_name,
+            username: match.username,
+            role: match.role,
+            stationId: match.station_id
+          };
 
-        const token = await createSessionToken(verifiedUser);
-        return { token, user: verifiedUser };
+          const token = await createSessionToken(verifiedUser);
+          return { token, user: verifiedUser };
+        } else {
+          // RPC executed, but credentials failed Bcrypt verification
+          throw new Error('Invalid credentials. Please verify your username and password.');
+        }
       }
-    } catch {
-      // Fall through to direct verification if RPC is not registered
+    } catch (rpcCatchErr) {
+      if (rpcCatchErr instanceof Error && rpcCatchErr.message.includes('Invalid credentials')) {
+        throw rpcCatchErr;
+      }
+      // Fall through only if RPC itself failed to execute (e.g. unmigrated database)
     }
 
-    // 2. Direct verification fallback
+    // 2. Direct verification fallback (for environments without RPC installed)
     const { data: user, error } = await supabase
       .from('users')
       .select('id, full_name, username, role, station_id, password_hash')
@@ -709,6 +763,19 @@ export class SupabaseRepository implements ITreasuryRepository {
       throw new Error('Invalid credentials. Staff account not found.');
     }
 
+    // Reject plaintext comparison if database hash is a salted Bcrypt hash ($2a/$2b)
+    const isBcrypt = Boolean(user.password_hash && user.password_hash.startsWith('$2'));
+    if (isBcrypt) {
+      await this.logSecurityEvent({
+        eventType: 'LOGIN_FAILURE',
+        username: cleanUsername,
+        userId: user.id,
+        stationId,
+        details: 'RPC authenticate_user unavailable for Bcrypt verification'
+      });
+      throw new Error('Authentication service temporarily unavailable. Please contact the administrator.');
+    }
+
     const isValid = user.password_hash ? user.password_hash === password : false;
     if (!isValid) {
       await this.logSecurityEvent({
@@ -718,7 +785,7 @@ export class SupabaseRepository implements ITreasuryRepository {
         stationId,
         details: 'Invalid password'
       });
-      throw new Error('Invalid credentials. (Default password is "admin123")');
+      throw new Error('Invalid credentials. Please verify your username and password.');
     }
 
     const authenticatedUser: User = {
@@ -734,7 +801,7 @@ export class SupabaseRepository implements ITreasuryRepository {
       username: authenticatedUser.username || cleanUsername,
       userId: Number(authenticatedUser.id),
       stationId,
-      details: 'Authenticated via fallback'
+      details: 'Authenticated via legacy fallback'
     });
 
     const token = await createSessionToken(authenticatedUser);
@@ -749,8 +816,8 @@ export class SupabaseRepository implements ITreasuryRepository {
         p_password: password,
         p_station_id: 'Security-Reauth'
       });
-      if (!error && Array.isArray(data) && data.length > 0) {
-        return true;
+      if (!error) {
+        return Array.isArray(data) && data.length > 0;
       }
     } catch {
       // Fallback check
@@ -762,7 +829,11 @@ export class SupabaseRepository implements ITreasuryRepository {
       .eq('username', cleanUsername)
       .single();
 
-    return Boolean(user?.password_hash && user.password_hash === password);
+    if (!user || !user.password_hash) return false;
+    if (user.password_hash.startsWith('$2')) {
+      return false;
+    }
+    return user.password_hash === password;
   }
 
   async registerUser(userData: {

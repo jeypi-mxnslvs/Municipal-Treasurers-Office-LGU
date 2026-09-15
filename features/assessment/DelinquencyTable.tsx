@@ -239,8 +239,12 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
       editReason: editReason.trim(),
     };
 
-    // Update state
-    setRecords(prev => prev.map(r => r.year === editingRecord.year ? updatedRecord : r));
+    // Update state using composite period key to avoid collision on split-quarter periods (e.g. 2026 1-2Q vs 2026 3-4 Q)
+    const targetKey = editingRecord.periodLabel || String(editingRecord.year);
+    setRecords(prev => prev.map(r => {
+      const recordKey = r.periodLabel || String(r.year);
+      return recordKey === targetKey ? updatedRecord : r;
+    }));
 
     // Log individual field-level audit record
     if (property?.tdNumber) {
@@ -248,7 +252,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
         propertyId: property.id,
         tdNumber: property.tdNumber,
         taxYear: editingRecord.year,
-        fieldChanged: editingField,
+        fieldChanged: editingRecord.periodLabel ? `${editingField} (${editingRecord.periodLabel})` : editingField,
         originalValue,
         newValue,
         reason: editReason.trim(),
@@ -707,7 +711,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
           <DialogHeader>
             <DialogTitle className="text-base font-bold flex items-center gap-2 text-slate-900">
               <Pencil size={18} className="text-blue-600" />
-              Authorized Assessor Adjustment (Year {editingRecord?.year})
+              Authorized Assessor Adjustment ({editingRecord?.periodLabel ? `Period: ${editingRecord.periodLabel}` : `Year ${editingRecord?.year}`})
             </DialogTitle>
             <DialogDescription className="text-xs text-slate-500">
               Manually modify populated {editingField === 'BASIC_TAX' ? 'Basic Tax' : editingField === 'SEF_TAX' ? 'SEF Tax' : 'Discount Rate'}. Totals will recalculate immediately and a field-level audit record will be logged.
