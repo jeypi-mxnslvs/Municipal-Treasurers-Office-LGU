@@ -36,7 +36,6 @@ const App: React.FC = () => {
 
   // Live Multi-Assessor Sync State & Notification Toast
   const [syncToast, setSyncToast] = useState<{ message: string; author: string } | null>(null);
-  const lastMutationTimeRef = useRef<string | null>(null);
 
   // Clearance & Assessment View State
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
@@ -78,35 +77,23 @@ const App: React.FC = () => {
     }
   }, [currentUser, loadData]);
 
-  // Live Multi-Assessor Background Synchronization
+  // Live Multi-Assessor Background Synchronization via Realtime WebSockets
   useEffect(() => {
     if (!currentUser) return;
 
-    const interval = setInterval(async () => {
-      try {
-        const sync = await api.getSyncStatus();
-        if (sync && sync.latestMutation) {
-          const { timestamp, author, action, tdNumber } = sync.latestMutation;
-          
-          if (lastMutationTimeRef.current && lastMutationTimeRef.current !== timestamp) {
-            // Live update happened from another counter/session!
-            loadData(true);
-            setSyncToast({
-              message: `RPTAR record (${tdNumber || 'Masterlist'}) was updated [${action}]`,
-              author
-            });
+    const unsubscribe = api.subscribeToMutations((mutation) => {
+      loadData(true);
+      setSyncToast({
+        message: `RPTAR record (${mutation.tdNumber || 'Masterlist'}) was updated [${mutation.action}]`,
+        author: mutation.author,
+      });
 
-            setTimeout(() => setSyncToast(null), 5000);
-          }
+      setTimeout(() => setSyncToast(null), 5000);
+    });
 
-          lastMutationTimeRef.current = timestamp;
-        }
-      } catch {
-        // Ignore polling errors
-      }
-    }, 7000);
-
-    return () => clearInterval(interval);
+    return () => {
+      unsubscribe();
+    };
   }, [currentUser, loadData]);
 
   const initialRestoredRef = useRef(false);

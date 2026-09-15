@@ -85,6 +85,7 @@ export interface TaxCalculationOptions {
   includeAdvanceYear?: boolean;        // If true, appends advance year (2027)
   discountCurrentQuarters?: boolean;  // If true, enables prompt discount on 3-4 Q (defaults to false for Notice of Delinquency)
   completedPeriodLabels?: string[];   // Filter out already settled partial quarters/periods
+  penaltyScheduleOverride?: Record<string, number>; // Dynamic municipal penalty schedule override
   overrides?: Record<number | string, {
     basicTax?: number;
     sefTax?: number;
@@ -190,10 +191,12 @@ export const calculateTaxLiability = (
     let penaltyRate: number;
     let penaltyAmount: number;
 
+    const activePenaltySchedule = options?.penaltyScheduleOverride || SANTA_ROSA_MUNICIPAL_PENALTY_SCHEDULE;
+
     if (isDelinquent) {
-      if (periodLabel && SANTA_ROSA_MUNICIPAL_PENALTY_SCHEDULE[periodLabel] !== undefined) {
-        // Direct rate from Santa Rosa Treasury Municipal Schedule
-        penaltyRate = SANTA_ROSA_MUNICIPAL_PENALTY_SCHEDULE[periodLabel];
+      if (periodLabel && activePenaltySchedule[periodLabel] !== undefined) {
+        // Direct rate from active Santa Rosa Treasury Municipal Schedule
+        penaltyRate = activePenaltySchedule[periodLabel];
         monthsDelayed = Math.round(penaltyRate / PENALTY_RATE_PER_MONTH);
       } else if (eYear <= 1993) {
         // Historical and legacy rolls (<= 1993) capped at 24% under Santa Rosa Treasury schedule

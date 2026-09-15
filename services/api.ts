@@ -101,6 +101,10 @@ export const api = {
     return treasuryRepository.getSyncStatus();
   },
 
+  subscribeToMutations(onMutation: (mutation: { timestamp: string; author: string; action: string; tdNumber?: string }) => void): () => void {
+    return treasuryRepository.subscribeToMutations(onMutation);
+  },
+
   // 5. User Management & Authentication
   getUsers(): Promise<User[]> {
     return treasuryRepository.getUsers();

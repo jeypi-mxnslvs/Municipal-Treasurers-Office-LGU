@@ -594,6 +594,36 @@ export class SupabaseRepository implements ITreasuryRepository {
     };
   }
 
+  subscribeToMutations(onMutation: (mutation: { timestamp: string; author: string; action: string; tdNumber?: string }) => void): () => void {
+    const channel = supabase
+      .channel('rptar_live_mutations')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'rptar_audit_logs' },
+        (payload) => {
+          const newLog = payload.new as {
+            created_at?: string;
+            assessor_name?: string;
+            action_type?: string;
+            td_number?: string;
+          };
+          if (newLog) {
+            onMutation({
+              timestamp: newLog.created_at || new Date().toISOString(),
+              author: newLog.assessor_name || 'Counter Staff',
+              action: newLog.action_type || 'MUTATION',
+              tdNumber: newLog.td_number || 'Masterlist'
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }
+
   // 5. User Management & Authentication (Isolated PostgREST / RPC implementation)
   async getUsers(): Promise<User[]> {
     const { data, error } = await supabase.from('users').select('id, full_name, username, role, station_id');
@@ -1045,31 +1075,11 @@ export class SupabaseRepository implements ITreasuryRepository {
     let unchangedCount = 0;
     const errors: unknown[] = [];
 
-    const toInsert: Array<Record<string, unknown>> = [];
-
+    // Calculate unchanged rows prior to mutation
     for (const p of validRows) {
       const cleanTd = String(p.tdNumber).trim();
       const existing = existingMap.get(cleanTd);
-
-      if (!existing) {
-        toInsert.push({
-          td_number: cleanTd,
-          previous_td_number: p.previousTdNumber || '',
-          pin: p.pin || '',
-          owner_name: p.ownerName || 'Unnamed Taxpayer',
-          address: p.address || 'Santa Rosa, Nueva Ecija',
-          barangay: p.barangay || 'Poblacion',
-          property_class: p.propertyClass || 'Residential',
-          lot_area_sqm: Number(p.lotAreaSqm) || 100,
-          market_value: Number(p.marketValue) || 0,
-          assessed_value: Number(p.assessedValue) || 0,
-          last_paid_year: Number(p.lastPaidYear) || 2025,
-          last_paid_quarter: p.lastPaidQuarter !== undefined && p.lastPaidQuarter !== null ? Number(p.lastPaidQuarter) : 4,
-          is_shell_record: Boolean(p.isShellRecord),
-          updated_at: new Date().toISOString()
-        });
-        insertedCount++;
-      } else {
+      if (existing) {
         const isIdentical =
           String(existing.owner_name).trim() === String(p.ownerName || '').trim() &&
           String(existing.address).trim() === String(p.address || '').trim() &&
@@ -1080,38 +1090,110 @@ export class SupabaseRepository implements ITreasuryRepository {
 
         if (isIdentical) {
           unchangedCount++;
-        } else {
-          try {
-            await supabase
-              .from('properties')
-              .update({
-                previous_td_number: p.previousTdNumber || existing.previous_td_number,
-                pin: p.pin || existing.pin,
-                owner_name: p.ownerName || existing.owner_name,
-                address: p.address || existing.address,
-                barangay: p.barangay || existing.barangay,
-                property_class: p.propertyClass || existing.property_class,
-                lot_area_sqm: p.lotAreaSqm !== undefined ? Number(p.lotAreaSqm) : existing.lot_area_sqm,
-                market_value: p.marketValue !== undefined ? Number(p.marketValue) : existing.market_value,
-                assessed_value: p.assessedValue !== undefined ? Number(p.assessedValue) : existing.assessed_value,
-                is_shell_record: p.isShellRecord !== undefined ? Boolean(p.isShellRecord) : existing.is_shell_record,
-                updated_at: new Date().toISOString()
-              })
-              .eq('td_number', cleanTd);
-
-            updatedCount++;
-          } catch (updateErr) {
-            errors.push(updateErr);
-          }
         }
       }
     }
 
-    if (toInsert.length > 0) {
-      const { error: insertError } = await supabase.from('properties').insert(toInsert);
-      if (insertError) {
-        errors.push(insertError);
-        insertedCount = 0;
+    // 1. Attempt Atomic PostgreSQL Batch Upsert (Single Roundtrip)
+    const rowsToUpsert = validRows.map((p) => ({
+      td_number: String(p.tdNumber).trim(),
+      previous_td_number: p.previousTdNumber || '',
+      pin: p.pin || '',
+      owner_name: p.ownerName || 'Unnamed Taxpayer',
+      address: p.address || 'Santa Rosa, Nueva Ecija',
+      barangay: p.barangay || 'Poblacion',
+      property_class: p.propertyClass || 'Residential',
+      lot_area_sqm: Number(p.lotAreaSqm) || 100,
+      market_value: Number(p.marketValue) || 0,
+      assessed_value: Number(p.assessedValue) || 0,
+      last_paid_year: p.lastPaidYear !== undefined && !isNaN(Number(p.lastPaidYear)) ? Number(p.lastPaidYear) : 1973,
+      last_paid_quarter: p.lastPaidQuarter !== undefined && p.lastPaidQuarter !== null ? Number(p.lastPaidQuarter) : 4,
+      is_shell_record: Boolean(p.isShellRecord),
+    }));
+
+    let batchHandled = false;
+    try {
+      const { data: rpcResult, error: rpcError } = await supabase.rpc('batch_upsert_properties', {
+        p_properties: rowsToUpsert,
+      });
+
+      if (!rpcError && rpcResult) {
+        insertedCount = Number(rpcResult.inserted) || 0;
+        const totalTouchedUpdates = Number(rpcResult.updated) || 0;
+        updatedCount = Math.max(0, totalTouchedUpdates - unchangedCount);
+        batchHandled = true;
+      }
+    } catch {
+      // Fallback below if RPC is not registered
+    }
+
+    if (!batchHandled) {
+      const toInsert: Array<Record<string, unknown>> = [];
+
+      for (const p of validRows) {
+        const cleanTd = String(p.tdNumber).trim();
+        const existing = existingMap.get(cleanTd);
+
+        if (!existing) {
+          toInsert.push({
+            td_number: cleanTd,
+            previous_td_number: p.previousTdNumber || '',
+            pin: p.pin || '',
+            owner_name: p.ownerName || 'Unnamed Taxpayer',
+            address: p.address || 'Santa Rosa, Nueva Ecija',
+            barangay: p.barangay || 'Poblacion',
+            property_class: p.propertyClass || 'Residential',
+            lot_area_sqm: Number(p.lotAreaSqm) || 100,
+            market_value: Number(p.marketValue) || 0,
+            assessed_value: Number(p.assessedValue) || 0,
+            last_paid_year: p.lastPaidYear !== undefined && !isNaN(Number(p.lastPaidYear)) ? Number(p.lastPaidYear) : 1973,
+            last_paid_quarter: p.lastPaidQuarter !== undefined && p.lastPaidQuarter !== null ? Number(p.lastPaidQuarter) : 4,
+            is_shell_record: Boolean(p.isShellRecord),
+            updated_at: new Date().toISOString(),
+          });
+          insertedCount++;
+        } else {
+          const isIdentical =
+            String(existing.owner_name).trim() === String(p.ownerName || '').trim() &&
+            String(existing.address).trim() === String(p.address || '').trim() &&
+            String(existing.barangay).trim() === String(p.barangay || '').trim() &&
+            String(existing.property_class).trim() === String(p.propertyClass || '').trim() &&
+            Number(existing.assessed_value) === Number(p.assessedValue || 0) &&
+            Number(existing.market_value) === Number(p.marketValue || 0);
+
+          if (!isIdentical) {
+            try {
+              await supabase
+                .from('properties')
+                .update({
+                  previous_td_number: p.previousTdNumber || existing.previous_td_number,
+                  pin: p.pin || existing.pin,
+                  owner_name: p.ownerName || existing.owner_name,
+                  address: p.address || existing.address,
+                  barangay: p.barangay || existing.barangay,
+                  property_class: p.propertyClass || existing.property_class,
+                  lot_area_sqm: p.lotAreaSqm !== undefined ? Number(p.lotAreaSqm) : existing.lot_area_sqm,
+                  market_value: p.marketValue !== undefined ? Number(p.marketValue) : existing.market_value,
+                  assessed_value: p.assessedValue !== undefined ? Number(p.assessedValue) : existing.assessed_value,
+                  is_shell_record: p.isShellRecord !== undefined ? Boolean(p.isShellRecord) : existing.is_shell_record,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('td_number', cleanTd);
+
+              updatedCount++;
+            } catch (updateErr) {
+              errors.push(updateErr);
+            }
+          }
+        }
+      }
+
+      if (toInsert.length > 0) {
+        const { error: insertError } = await supabase.from('properties').insert(toInsert);
+        if (insertError) {
+          errors.push(insertError);
+          insertedCount = 0;
+        }
       }
     }
 

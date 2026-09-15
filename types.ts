@@ -211,3 +211,12 @@ export interface SecurityAuditLog {
   details?: string;
   created_at: string;
 }
+
+export interface ParsedPenaltySchedule {
+  effectiveYear: number;
+  effectiveMonth: number;
+  effectiveMonthName: string;
+  scheduleLabel: string;
+  rates: Record<string, number>;
+  sourceMode: 'EVALUATED_NUMBERS' | 'STATUTORY_CALCULATED';
+}

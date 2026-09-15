@@ -57,6 +57,7 @@ export interface ITreasuryRepository {
   // 4. Reporting, Analytics & Live Multi-Assessor Sync
   getDashboardStats(): Promise<DashboardStatsData>;
   getSyncStatus(): Promise<SyncStatusData>;
+  subscribeToMutations(onMutation: (mutation: { timestamp: string; author: string; action: string; tdNumber?: string }) => void): () => void;
 
   // 5. User Management & Authentication
   getUsers(): Promise<User[]>;

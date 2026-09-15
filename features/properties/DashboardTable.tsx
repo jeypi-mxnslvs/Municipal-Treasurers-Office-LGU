@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Property, User } from '@/types';
 import { BARANGAYS, CURRENT_YEAR } from '@/constants';
 import { calculateTaxLiability } from '@/utils/taxLogic';
@@ -77,34 +77,47 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
   onOpenBulkModal,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedBarangay, setSelectedBarangay] = useState<string>('All');
   const [selectedStatus, setSelectedStatus] = useState<string>('All');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
-  const filteredProperties = properties.filter((p) => {
-    const matchesSearch =
-      p.ownerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.tdNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (p.pin && p.pin.toLowerCase().includes(searchTerm.toLowerCase()));
+  // 300ms search input debounce to prevent UI freezes on large parcel masterlists
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+      setCurrentPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
-    const matchesBarangay =
-      selectedBarangay === 'All' || p.barangay === selectedBarangay;
+  const filteredProperties = useMemo(() => {
+    const term = debouncedSearch.trim().toLowerCase();
+    return properties.filter((p) => {
+      const matchesSearch =
+        !term ||
+        p.ownerName.toLowerCase().includes(term) ||
+        p.tdNumber.toLowerCase().includes(term) ||
+        (p.pin && p.pin.toLowerCase().includes(term));
 
-    const propertyStatus = getPropertyStatus(p);
-    const matchesStatus =
-      selectedStatus === 'All' || propertyStatus === selectedStatus;
+      const matchesBarangay =
+        selectedBarangay === 'All' || p.barangay === selectedBarangay;
 
-    return matchesSearch && matchesBarangay && matchesStatus;
-  });
+      const propertyStatus = getPropertyStatus(p);
+      const matchesStatus =
+        selectedStatus === 'All' || propertyStatus === selectedStatus;
+
+      return matchesSearch && matchesBarangay && matchesStatus;
+    });
+  }, [properties, debouncedSearch, selectedBarangay, selectedStatus]);
 
   // Pagination Math
   const totalPages = Math.ceil(filteredProperties.length / pageSize) || 1;
   const startIndex = (currentPage - 1) * pageSize;
-  const paginatedProperties = filteredProperties.slice(
-    startIndex,
-    startIndex + pageSize
-  );
+  const paginatedProperties = useMemo(() => {
+    return filteredProperties.slice(startIndex, startIndex + pageSize);
+  }, [filteredProperties, startIndex, pageSize]);
 
   const handlePageChange = (page: number) => {
     if (page >= 1 && page <= totalPages) {
