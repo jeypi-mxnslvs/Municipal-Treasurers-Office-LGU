@@ -85,6 +85,20 @@
   }
   body {
     background-color: #ffffff !important;
+    color: #000000 !important;
+  }
+  @page {
+    size: auto;
+    margin: 10mm;
+  }
+  .print-page-break {
+    page-break-after: always;
+    break-after: page;
+  }
+  .print-avoid-break {
+    page-break-inside: avoid;
+    break-inside: avoid;
   }
 }
+
 
