@@ -186,7 +186,7 @@ const OfficialReceiptModal: React.FC<ClearanceModalProps> = ({
                 className="bg-slate-800 hover:bg-slate-700 text-white border-slate-700 text-xs font-bold rounded-xl shadow-sm gap-1.5 cursor-pointer"
                 title="Export Microsoft Word (.doc) format"
               >
-                <FileDown className="h-4 w-4 text-blue-400" />
+                <FileText className="h-4 w-4 text-blue-400" />
                 Export Word (.doc)
               </Button>
               <Button
