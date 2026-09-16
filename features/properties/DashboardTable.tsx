@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Property, User } from '@/types';
 import { BARANGAYS, CURRENT_YEAR } from '@/constants';
 import { calculateTaxLiability } from '@/utils/taxLogic';
+import { sortPropertiesWithManualFirst, isManualProperty } from '@/utils/encoderAttribution';
 import {
   Table,
   TableHeader,
@@ -94,12 +95,13 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
 
   const filteredProperties = useMemo(() => {
     const term = debouncedSearch.trim().toLowerCase();
-    return properties.filter((p) => {
+    const matched = properties.filter((p) => {
       const matchesSearch =
         !term ||
         p.ownerName.toLowerCase().includes(term) ||
         p.tdNumber.toLowerCase().includes(term) ||
-        (p.pin && p.pin.toLowerCase().includes(term));
+        (p.pin && p.pin.toLowerCase().includes(term)) ||
+        (p.encoderLabel && p.encoderLabel.toLowerCase().includes(term));
 
       const matchesBarangay =
         selectedBarangay === 'All' || p.barangay === selectedBarangay;
@@ -110,6 +112,8 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
 
       return matchesSearch && matchesBarangay && matchesStatus;
     });
+
+    return sortPropertiesWithManualFirst(matched);
   }, [properties, debouncedSearch, selectedBarangay, selectedStatus]);
 
   // Pagination Math
@@ -311,10 +315,19 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
                       </DropdownMenu>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-xs font-bold text-slate-800 font-mono">
                           {property.tdNumber}
                         </span>
+                        {isManualProperty(property) && (
+                          <Badge
+                            variant="outline"
+                            className="text-[9px] px-1.5 py-0 bg-emerald-50 text-emerald-800 border-emerald-300 font-bold"
+                            title="Manually Encoded Record — Priority #1 in Masterlist"
+                          >
+                            Manual #1
+                          </Badge>
+                        )}
                         {property.isShellRecord && (
                           <Badge variant="warning" className="text-[10px] px-1.5 py-0">
                             Shell
@@ -323,6 +336,15 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
                       </div>
                       {property.pin && (
                         <p className="text-[10px] text-slate-400 font-mono">PIN: {property.pin}</p>
+                      )}
+                      {property.encoderLabel && (
+                        <p
+                          className="text-[10px] text-slate-500 font-sans truncate max-w-[200px] mt-0.5"
+                          title={`Provenance Trail: ${property.encoderLabel}`}
+                        >
+                          <span className="text-slate-400">By:</span>{' '}
+                          <span className="font-medium text-slate-700">{property.encoderLabel}</span>
+                        </p>
                       )}
                     </TableCell>
                     <TableCell className="font-semibold text-slate-800 uppercase">
