@@ -161,12 +161,12 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
                 setSelectedBarangay(e.target.value);
                 setCurrentPage(1);
               }}
-              className="flex h-9 w-full sm:w-40 rounded-md border border-input bg-white pl-8 pr-4 py-1 text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring font-medium text-slate-800"
+              className="flex h-9 w-full sm:w-48 rounded-md border border-input bg-white pl-8 pr-4 py-1 text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring font-medium text-slate-800"
             >
               <option value="All">All Barangays</option>
-              {BARANGAYS.map((brgy) => (
+              {BARANGAYS.map((brgy, idx) => (
                 <option key={brgy} value={brgy}>
-                  {brgy}
+                  {idx + 1}. {brgy}
                 </option>
               ))}
             </select>
