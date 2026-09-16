@@ -2,6 +2,10 @@ import { describe, it, expect } from "vitest";
 import { calculateTaxLiability } from "./taxLogic";
 import { Property, MunicipalTaxSettings, OfficialReceipt } from "../types";
 import { CURRENT_YEAR, MAX_PENALTY_MONTHS } from "../constants";
+import {
+  FIXTURE_MULTI_ERA_PROPERTY,
+  FIXTURE_MISSING_VALUATION_PROPERTY,
+} from "../fixtures/mockAssessmentFixtures";
 
 describe("taxLogic - Municipal Payment-Date Policy & Assessor Overrides", () => {
   const mockProperty: Property = {
@@ -864,6 +868,22 @@ describe("taxLogic - Municipal Payment-Date Policy & Assessor Overrides", () => 
       expect(r24!.isMissingValuation).toBe(false);
       expect(r24!.basicTax).toBe(500);
       expect(r24!.sefTax).toBe(500);
+    });
+
+    it("automatically resolves valuations from property.assessmentPeriods when options are omitted", () => {
+      const result = calculateTaxLiability(FIXTURE_MULTI_ERA_PROPERTY);
+      const b87 = result.records.find((r) => r.periodLabel === "1987-1991");
+      expect(b87).toBeDefined();
+      expect(b87!.assessedValue).toBe(10000);
+      expect(b87!.baseTax).toBe(1000);
+      expect(b87!.isMissingValuation).toBe(false);
+
+      const missingResult = calculateTaxLiability(FIXTURE_MISSING_VALUATION_PROPERTY);
+      const missingRec = missingResult.records.find((r) => r.periodLabel === "1987-1991");
+      expect(missingRec).toBeDefined();
+      expect(missingRec!.isMissingValuation).toBe(true);
+      expect(missingRec!.totalDue).toBe(0);
+      expect(missingRec!.isPayable).toBe(false);
     });
   });
 });

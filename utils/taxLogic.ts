@@ -204,9 +204,13 @@ export const calculateTaxLiability = (
       }
     }
 
-    // 2. Overlapping match in options.assessmentPeriods
-    if (options?.assessmentPeriods && options.assessmentPeriods.length > 0) {
-      const matched = options.assessmentPeriods.find(p => 
+    // 2. Overlapping match in options.assessmentPeriods or property.assessmentPeriods
+    const activeAssessmentPeriods = (options?.assessmentPeriods && options.assessmentPeriods.length > 0)
+      ? options.assessmentPeriods
+      : property.assessmentPeriods;
+
+    if (activeAssessmentPeriods && activeAssessmentPeriods.length > 0) {
+      const matched = activeAssessmentPeriods.find(p => 
         (p.startYear <= sYear && p.endYear >= eYear) ||
         (p.startYear <= year && p.endYear >= year) ||
         (sYear <= p.endYear && eYear >= p.startYear)

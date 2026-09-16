@@ -1,31 +1,5 @@
 import { Property, TaxYearRecord, PropertyAssessmentPeriod } from '@/types';
 
-/**
- * SCENARIO 1: Multi-Era Property with Historical Assessed Values
- * Real-world case: Juan Dela Cruz owns land dating back to 1987.
- * - 1987-1991: AV was ₱10,000.00 (PD 464, 24% penalty cap)
- * - 1992-1993: AV was ₱15,000.00 (RA 7160 early transition, 24% cap)
- * - 1994-2005: AV was ₱25,000.00 (1994 General Revision, 72% cap)
- * - 2006-2011: AV was ₱40,000.00 (2006 General Revision, 72% cap)
- * - 2012-2025: Current SMV ₱40,000.00
- */
-export const FIXTURE_MULTI_ERA_PROPERTY: Property = {
-  id: 'prop-fixture-01',
-  tdNumber: '03-0001-00101',
-  previousTdNumber: 'PREV-87-0101',
-  pin: '033-18-001-02-005',
-  ownerName: 'Juan Dela Cruz',
-  address: '124 Rizal St.',
-  barangay: 'Poblacion',
-  propertyClass: 'Residential',
-  lotAreaSqm: 240,
-  marketValue: 200000,
-  assessedValue: 40000, // Latest current valuation
-  lastPaidYear: 1986,   // Multi-decade arrears
-  lastPaidQuarter: 4,
-  isShellRecord: false,
-};
-
 export const FIXTURE_MULTI_ERA_PERIODS: PropertyAssessmentPeriod[] = [
   {
     id: 101,
@@ -75,6 +49,33 @@ export const FIXTURE_MULTI_ERA_PERIODS: PropertyAssessmentPeriod[] = [
     isMissing: false,
   },
 ];
+
+/**
+ * SCENARIO 1: Multi-Era Property with Historical Assessed Values
+ * Real-world case: Juan Dela Cruz owns land dating back to 1987.
+ * - 1987-1991: AV was ₱10,000.00 (PD 464, 24% penalty cap)
+ * - 1992-1993: AV was ₱15,000.00 (RA 7160 early transition, 24% cap)
+ * - 1994-2005: AV was ₱25,000.00 (1994 General Revision, 72% cap)
+ * - 2006-2011: AV was ₱40,000.00 (2006 General Revision, 72% cap)
+ * - 2012-2025: Current SMV ₱40,000.00
+ */
+export const FIXTURE_MULTI_ERA_PROPERTY: Property = {
+  id: 'prop-fixture-01',
+  tdNumber: '03-0001-00101',
+  previousTdNumber: 'PREV-87-0101',
+  pin: '033-18-001-02-005',
+  ownerName: 'Juan Dela Cruz',
+  address: '124 Rizal St.',
+  barangay: 'Poblacion',
+  propertyClass: 'Residential',
+  lotAreaSqm: 240,
+  marketValue: 200000,
+  assessedValue: 40000, // Latest current valuation
+  lastPaidYear: 1986,   // Multi-decade arrears
+  lastPaidQuarter: 4,
+  isShellRecord: false,
+  assessmentPeriods: FIXTURE_MULTI_ERA_PERIODS,
+};
 
 export const FIXTURE_MULTI_ERA_RECORDS: TaxYearRecord[] = [
   {
@@ -169,6 +170,78 @@ export const FIXTURE_MULTI_ERA_RECORDS: TaxYearRecord[] = [
     isPayable: true,
   },
 ];
+
+export const FIXTURE_MISSING_VALUATION_PERIODS: PropertyAssessmentPeriod[] = [
+  {
+    id: 201,
+    propertyId: 'prop-fixture-missing',
+    tdNumber: '03-0001-00102',
+    startYear: 1987,
+    endYear: 1991,
+    assessedValue: 0,
+    source: 'PHYSICAL_RPTAR',
+    remarks: 'Awaiting Assessor Physical RPTAR Retrieval',
+    status: 'MISSING',
+    isMissing: true,
+  },
+  {
+    id: 202,
+    propertyId: 'prop-fixture-missing',
+    tdNumber: '03-0001-00102',
+    startYear: 1992,
+    endYear: 2005,
+    assessedValue: 25000,
+    source: 'PHYSICAL_RPTAR',
+    status: 'VALID',
+    isMissing: false,
+  },
+  {
+    id: 203,
+    propertyId: 'prop-fixture-missing',
+    tdNumber: '03-0001-00102',
+    startYear: 2006,
+    endYear: 2011,
+    assessedValue: 40000,
+    source: 'CSV_IMPORT',
+    status: 'VALID',
+    isMissing: false,
+  },
+];
+
+export const FIXTURE_MISSING_VALUATION_PROPERTY: Property = {
+  id: 'prop-fixture-missing',
+  tdNumber: '03-0001-00102',
+  previousTdNumber: 'PREV-87-0102',
+  pin: '033-18-001-02-006',
+  ownerName: 'Maria Clara Delos Santos',
+  address: '45 Bonifacio St.',
+  barangay: 'Poblacion',
+  propertyClass: 'Residential',
+  lotAreaSqm: 180,
+  marketValue: 150000,
+  assessedValue: 40000,
+  lastPaidYear: 1986,
+  lastPaidQuarter: 4,
+  isShellRecord: false,
+  assessmentPeriods: FIXTURE_MISSING_VALUATION_PERIODS,
+};
+
+export const FIXTURE_MODERN_PROPERTY: Property = {
+  id: 'prop-fixture-modern',
+  tdNumber: '03-0001-00200',
+  previousTdNumber: '',
+  pin: '033-18-002-01-001',
+  ownerName: 'Modern Taxpayer Corp',
+  address: 'Zone 4, San Joseph',
+  barangay: 'San Joseph',
+  propertyClass: 'Commercial',
+  lotAreaSqm: 500,
+  marketValue: 1000000,
+  assessedValue: 50000,
+  lastPaidYear: 2023,
+  lastPaidQuarter: 4,
+  isShellRecord: false,
+};
 
 /**
  * SCENARIO 2: Legacy Property with MISSING Historical Assessed Value

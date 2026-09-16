@@ -15,6 +15,7 @@ export interface Property {
   isShellRecord: boolean;
   totalDebt?: number;
   status?: 'CLEARED' | 'PARTIAL' | 'DELINQUENT';
+  assessmentPeriods?: PropertyAssessmentPeriod[];
 }
 
 export interface TaxYearRecord {
