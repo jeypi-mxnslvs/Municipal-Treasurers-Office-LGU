@@ -22,6 +22,12 @@ BEGIN
         WHERE password_hash IS NULL;
         
         ALTER TABLE public.users ALTER COLUMN password_hash SET NOT NULL;
+        IF EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'users' AND column_name = 'password'
+        ) THEN
+            ALTER TABLE public.users ALTER COLUMN password DROP NOT NULL;
+        END IF;
     END IF;
 END $$;
 
@@ -53,7 +59,9 @@ BEGIN
     ) THEN
         IF NEW.password IS NOT NULL AND (TG_OP = 'INSERT' OR NEW.password IS DISTINCT FROM OLD.password) THEN
             NEW.password_hash := crypt(NEW.password, gen_salt('bf', 10));
-            NEW.password := NULL;
+            IF (SELECT is_nullable FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'password') = 'YES' THEN
+                NEW.password := NULL;
+            END IF;
         END IF;
     END IF;
 
@@ -118,13 +126,24 @@ ALTER TABLE public.rptar_audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.security_audit_logs ENABLE ROW LEVEL SECURITY;
 
 -- Security audit logs policies
-CREATE POLICY "Allow anon and auth insert security logs" 
-    ON public.security_audit_logs FOR INSERT 
-    TO anon, authenticated WITH CHECK (true);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies WHERE tablename = 'security_audit_logs' AND policyname = 'Allow anon and auth insert security logs'
+    ) THEN
+        CREATE POLICY "Allow anon and auth insert security logs" 
+            ON public.security_audit_logs FOR INSERT 
+            TO anon, authenticated WITH CHECK (true);
+    END IF;
 
-CREATE POLICY "Allow authenticated read security logs" 
-    ON public.security_audit_logs FOR SELECT 
-    TO authenticated USING (true);
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies WHERE tablename = 'security_audit_logs' AND policyname = 'Allow authenticated read security logs'
+    ) THEN
+        CREATE POLICY "Allow authenticated read security logs" 
+            ON public.security_audit_logs FOR SELECT 
+            TO authenticated USING (true);
+    END IF;
+END $$;
 
 -- Grant execution to anon and authenticated roles
 GRANT EXECUTE ON FUNCTION authenticate_user(TEXT, TEXT, TEXT) TO anon, authenticated, service_role;

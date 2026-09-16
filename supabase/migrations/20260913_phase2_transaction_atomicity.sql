@@ -288,13 +288,24 @@ $$;
 -- 6. Enable Row Level Security & Permissions
 ALTER TABLE public.accountable_forms ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Allow public select accountable_forms" 
-    ON public.accountable_forms FOR SELECT 
-    TO anon, authenticated USING (true);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies WHERE tablename = 'accountable_forms' AND policyname = 'Allow public select accountable_forms'
+    ) THEN
+        CREATE POLICY "Allow public select accountable_forms" 
+            ON public.accountable_forms FOR SELECT 
+            TO anon, authenticated USING (true);
+    END IF;
 
-CREATE POLICY "Allow authenticated modify accountable_forms" 
-    ON public.accountable_forms FOR ALL 
-    TO authenticated USING (true);
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies WHERE tablename = 'accountable_forms' AND policyname = 'Allow authenticated modify accountable_forms'
+    ) THEN
+        CREATE POLICY "Allow authenticated modify accountable_forms" 
+            ON public.accountable_forms FOR ALL 
+            TO authenticated USING (true);
+    END IF;
+END $$;
 
 -- Grant RPC execution
 GRANT EXECUTE ON FUNCTION process_rpt_payment(INT, JSONB, NUMERIC, TEXT, TEXT, TEXT, TEXT, INT) TO anon, authenticated, service_role;
