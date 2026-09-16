@@ -289,9 +289,9 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
         <Table>
           <TableHeader className="bg-slate-100/75 select-none">
             <TableRow>
-              <TableHead className="w-16">Action</TableHead>
+              <TableHead className="w-14 pl-5 text-center">Action</TableHead>
               <TableHead
-                className="cursor-pointer group hover:text-slate-900 transition-colors"
+                className="w-[20%] min-w-[170px] cursor-pointer group hover:text-slate-900 transition-colors py-3"
                 onClick={() => handleSort('tdNumber')}
                 title="Click to sort by ARP / TD Number"
               >
@@ -301,7 +301,7 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
                 </div>
               </TableHead>
               <TableHead
-                className="cursor-pointer group hover:text-slate-900 transition-colors"
+                className="w-[26%] min-w-[180px] cursor-pointer group hover:text-slate-900 transition-colors py-3"
                 onClick={() => handleSort('ownerName')}
                 title="Click to sort by Owner's Name (A–Z / Z–A)"
               >
@@ -311,7 +311,7 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
                 </div>
               </TableHead>
               <TableHead
-                className="cursor-pointer group hover:text-slate-900 transition-colors"
+                className="w-[20%] min-w-[160px] cursor-pointer group hover:text-slate-900 transition-colors py-3"
                 onClick={() => handleSort('barangay')}
                 title="Click to sort by Barangay (A–Z / Z–A)"
               >
@@ -320,8 +320,12 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
                   {renderSortIcon('barangay')}
                 </div>
               </TableHead>
-              <TableHead className="text-right">Assessed Value</TableHead>
-              <TableHead className="text-right">Payment Status</TableHead>
+              <TableHead className="w-[16%] min-w-[130px] text-right pr-6 py-3 font-semibold">
+                Assessed Value
+              </TableHead>
+              <TableHead className="w-[18%] min-w-[150px] text-right pr-6 py-3 font-semibold">
+                Payment Status
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody className="bg-white text-xs">
@@ -335,7 +339,7 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
 
                 return (
                   <TableRow key={property.id} className="hover:bg-emerald-50/30 transition-colors">
-                    <TableCell>
+                    <TableCell className="pl-5 text-center py-3.5">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button
@@ -393,7 +397,7 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="py-3.5">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-xs font-bold text-slate-800 font-mono">
                           {property.tdNumber}
@@ -426,17 +430,17 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
                         </p>
                       )}
                     </TableCell>
-                    <TableCell className="font-semibold text-slate-800 uppercase">
+                    <TableCell className="font-semibold text-slate-800 uppercase py-3.5">
                       {property.ownerName}
                     </TableCell>
-                    <TableCell className="text-slate-600">
+                    <TableCell className="text-slate-600 py-3.5">
                       <p className="font-medium text-slate-800">{property.barangay}</p>
                       <p className="text-[11px] text-slate-400">{property.propertyClass}</p>
                     </TableCell>
-                    <TableCell className="text-right font-mono font-medium text-slate-700">
+                    <TableCell className="text-right font-mono font-medium text-slate-700 pr-6 py-3.5">
                       ₱{property.assessedValue.toLocaleString()}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right pr-6 py-3.5">
                       {status === 'CLEARED' ? (
                         <Badge variant="success" className="text-[11px] font-bold">
                           Cleared (2026)
