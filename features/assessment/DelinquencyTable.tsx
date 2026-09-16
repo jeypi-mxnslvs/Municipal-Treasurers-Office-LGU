@@ -331,9 +331,9 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
   };
 
   return (
-    <Card className="border-slate-200 shadow-sm overflow-hidden flex flex-col h-full animate-fade-in-up">
+    <Card className="border-slate-200 shadow-sm overflow-hidden flex flex-col h-full animate-fade-in-up print:border-none print:shadow-none print:rounded-none">
       {/* Header & Sequential Scope Selector */}
-      <div className="p-4 border-b border-slate-200 bg-slate-50/80 space-y-3 shrink-0">
+      <div className="p-4 border-b border-slate-200 bg-slate-50/80 space-y-3 shrink-0 no-print">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
           <div className="flex items-center gap-2">
             <AlertCircle size={18} className="text-emerald-600" />
@@ -486,7 +486,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
 
       {/* Historical Ledger Collapsible Header (if >= 3 unverified records) */}
       {unverifiedRecords.length >= 3 && activeTab !== 'COMPLETED' && (
-        <div className="px-4 py-2 bg-amber-50/70 border-b border-amber-200/80 flex items-center justify-between text-xs">
+        <div className="px-4 py-2 bg-amber-50/70 border-b border-amber-200/80 flex items-center justify-between text-xs no-print">
           <div className="flex items-center gap-2">
             <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-300 text-[10px] font-bold">
               Archive Roll
@@ -521,20 +521,20 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
       )}
       
       {/* Itemized Table - Scrollable container for multi-year delinquency rolls (e.g. 1971-2026) */}
-      <div className="overflow-y-auto overflow-x-auto max-h-[560px] flex-grow relative">
-        <Table className="w-full min-w-[780px] table-fixed text-sm font-sans">
-          <TableHeader className="bg-slate-100/95 backdrop-blur-xs sticky top-0 z-10 shadow-2xs">
-            <TableRow className="hover:bg-transparent border-b border-slate-200">
-              <TableHead className="w-[4%] min-w-[36px] text-center font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 pl-3 pr-2">Select</TableHead>
-              <TableHead className="w-[14%] min-w-[125px] text-left font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 pl-2 pr-1.5">Period & Status</TableHead>
-              <TableHead className="w-[13%] min-w-[105px] text-right font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 px-1.5">Assessed Value</TableHead>
-              <TableHead className="w-[13%] min-w-[100px] text-right font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 px-1.5">Basic (1%)</TableHead>
-              <TableHead className="w-[13%] min-w-[100px] text-right font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 px-1.5">SEF (1%)</TableHead>
-              <TableHead className="w-[14%] min-w-[100px] text-right font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 px-1.5">
-                Penalty <span className="text-slate-500 font-normal text-[10px]">(Rate)</span>
+      <div className="overflow-y-auto overflow-x-auto max-h-[560px] print:max-h-none print:overflow-visible flex-grow relative">
+        <Table className="w-full min-w-[780px] print:min-w-full table-fixed text-sm font-sans border-collapse print:border print:border-black">
+          <TableHeader className="bg-slate-100/95 print:bg-white backdrop-blur-xs sticky top-0 z-10 shadow-2xs">
+            <TableRow className="hover:bg-transparent border-b border-slate-200 print:border-black">
+              <TableHead className="w-[4%] min-w-[36px] text-center font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 pl-3 pr-2 no-print">Select</TableHead>
+              <TableHead className="w-[14%] min-w-[125px] text-left font-bold text-slate-700 print:text-black uppercase tracking-wider text-[11px] py-3 pl-2 pr-1.5 print:border print:border-black">Period & Status</TableHead>
+              <TableHead className="w-[13%] min-w-[105px] text-right font-bold text-slate-700 print:text-black uppercase tracking-wider text-[11px] py-3 px-1.5 print:border print:border-black">Assessed Value</TableHead>
+              <TableHead className="w-[13%] min-w-[100px] text-right font-bold text-slate-700 print:text-black uppercase tracking-wider text-[11px] py-3 px-1.5 print:border print:border-black">Basic (1%)</TableHead>
+              <TableHead className="w-[13%] min-w-[100px] text-right font-bold text-slate-700 print:text-black uppercase tracking-wider text-[11px] py-3 px-1.5 print:border print:border-black">SEF (1%)</TableHead>
+              <TableHead className="w-[14%] min-w-[100px] text-right font-bold text-slate-700 print:text-black uppercase tracking-wider text-[11px] py-3 px-1.5 print:border print:border-black">
+                Penalty <span className="text-slate-500 print:text-black font-normal text-[10px]">(Rate)</span>
               </TableHead>
-              <TableHead className="w-[11%] min-w-[80px] text-right font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 px-1.5">Discount</TableHead>
-              <TableHead className="w-[18%] min-w-[130px] text-right font-bold text-slate-800 uppercase tracking-wider text-[11px] py-3 pl-2 pr-6">Net Due</TableHead>
+              <TableHead className="w-[11%] min-w-[80px] text-right font-bold text-slate-700 print:text-black uppercase tracking-wider text-[11px] py-3 px-1.5 print:border print:border-black">Discount</TableHead>
+              <TableHead className="w-[18%] min-w-[130px] text-right font-bold text-slate-800 print:text-black uppercase tracking-wider text-[11px] py-3 pl-2 pr-6 print:border print:border-black">Net Due</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody className="divide-y divide-slate-100">
@@ -571,7 +571,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
                   }`}
                 >
                   {/* 1. Selection Checkbox */}
-                  <TableCell className="text-center py-2.5 pl-3 pr-2">
+                  <TableCell className="text-center py-2.5 pl-3 pr-2 no-print">
                     {isCleared ? (
                       <span title={`Cleared / Settled (${record.clearanceReference || 'Official Settlement'})`}>
                         <CheckCircle2 size={16} className="text-emerald-600 inline-block" />
@@ -651,7 +651,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
                             variant="outline"
                             size="sm"
                             onClick={(e) => handleOpenEditModal(record, 'ASSESSED_VALUE', e)}
-                            className="h-6 px-1.5 text-[10px] bg-amber-600 hover:bg-amber-700 text-white font-bold rounded shadow-xs cursor-pointer"
+                            className="h-6 px-1.5 text-[10px] bg-amber-600 hover:bg-amber-700 text-white font-bold rounded shadow-xs cursor-pointer no-print"
                             title="Input historical Assessed Value from Physical RPTAR"
                           >
                             + AV
@@ -668,7 +668,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
                             <button
                               type="button"
                               onClick={(e) => handleOpenEditModal(record, 'ASSESSED_VALUE', e)}
-                              className="text-slate-400 hover:text-blue-700 p-0.5 rounded transition-colors cursor-pointer"
+                              className="text-slate-400 hover:text-blue-700 p-0.5 rounded transition-colors cursor-pointer no-print"
                               title="Adjust Assessed Value (Physical RPTAR)"
                             >
                               <Pencil size={11} />
@@ -698,7 +698,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
                             <button
                               type="button"
                               onClick={(e) => handleOpenEditModal(record, 'BASIC_TAX', e)}
-                              className="text-slate-400 hover:text-blue-700 p-0.5 rounded transition-colors cursor-pointer"
+                              className="text-slate-400 hover:text-blue-700 p-0.5 rounded transition-colors cursor-pointer no-print"
                               title="Manually adjust Basic Tax"
                             >
                               <Pencil size={11} />
@@ -713,7 +713,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
                   </TableCell>
 
                   {/* 5. SEF Tax (1%) */}
-                  <TableCell className="text-right py-2.5 px-1.5">
+                  <TableCell className="text-right py-2.5 px-1.5 print:border print:border-black">
                     {isUnassessed ? (
                       <span className="text-slate-400 font-mono italic text-xs">Pending AV</span>
                     ) : (
@@ -726,7 +726,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
                             <button
                               type="button"
                               onClick={(e) => handleOpenEditModal(record, 'SEF_TAX', e)}
-                              className="text-slate-400 hover:text-blue-700 p-0.5 rounded transition-colors cursor-pointer"
+                              className="text-slate-400 hover:text-blue-700 p-0.5 rounded transition-colors cursor-pointer no-print"
                               title="Manually adjust SEF Tax"
                             >
                               <Pencil size={11} />
@@ -807,7 +807,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
       </div>
 
       {/* Selected Scope Dynamic Summary Footer */}
-      <div className="bg-slate-900 text-white p-5 sm:p-6 border-t border-slate-800 shrink-0">
+      <div className="bg-slate-900 print:bg-white text-white print:text-black p-5 sm:p-6 border-t border-slate-800 print:border-t-2 print:border-black shrink-0">
         {activeTab === 'COMPLETED' ? (
           <>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pb-4 mb-4 border-b border-slate-800 text-xs sm:text-sm">

@@ -2,6 +2,11 @@ import React, { useState, useMemo } from 'react';
 import { Property, TaxYearRecord } from '@/types';
 import { calculateTaxLiability } from '@/utils/taxLogic';
 import {
+  generateNoticeOfDelinquencyCsv,
+  downloadCsvFile,
+  downloadWordDoc,
+} from '@/utils/documentExport';
+import {
   Dialog,
   DialogContent,
 } from '@/components/ui/dialog';
@@ -81,55 +86,21 @@ export const NoticeOfDelinquencyModal: React.FC<NoticeOfDelinquencyModalProps> =
 
   const handleExportCsv = () => {
     if (!activeProperty || !assessmentResult) return;
+    const csvContent = generateNoticeOfDelinquencyCsv(activeProperty, itemizedRows, totals);
+    downloadCsvFile(csvContent, `Notice_of_Delinquency_${activeProperty.tdNumber}.csv`);
+  };
 
-    const lines: string[] = [];
-    lines.push('REPUBLIC OF THE PHILIPPINES,,,,,,,,,,,,,,,,,');
-    lines.push('PROVINCE OF NUEVA ECIJA,,,,,,,,,,,,,,,,,');
-    lines.push('Office of the Treasurer - Municipality of Santa Rosa,,,,,,,,,,,,,,,,,');
-    lines.push(',,,,,,,,,,,,,,,,,');
-    lines.push('NOTICE OF DELINQUENCY IN THE PAYMENT OF REAL PROPERTY TAX (RA 7160 SEC. 254),,,,,,,,,,,,,,,,,');
-    lines.push(',,,,,,,,,,,,,,,,,');
-    lines.push(`,,,,,,,OR#,,,,,,Date:,"${new Date().toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}",,,`);
-    lines.push(',,,,,,,,,,,,,,,,,');
-    lines.push(`,,,,,,LAST PAYMENT:,${activeProperty.lastPaidYear} (Q${activeProperty.lastPaidQuarter || 4}),,,,,,,,,,`);
-    lines.push(',"Notice is hereby served pursuant to the provision of Section 254, Republic Act No. 7160 (Local Government Code of 1991) the Real Property Tax for Calendar",,,,,,,,,,,,,,,,');
-    lines.push(`"year ${activeProperty.lastPaidYear + 1} and the previous years, has been delinquent with respect to the figures below.",,,,,,,,,,,,,,,,,`);
-    lines.push(',,,,,,,,,,,,,,,,,');
-    lines.push('Tax Declaration No.,,Area,Assessed Value,Location,,Kind of Property,,,,Year,Unpaid Taxes,,Penalties/Discount,,Total Tax Delinquency,,');
-
-    itemizedRows.forEach((r: TaxYearRecord) => {
-      const yearLabel = r.periodLabel || String(r.year);
-      const isPending = Boolean(r.isMissingValuation || r.isUnverifiedHistorical || r.totalDue === null);
-      const unpaidTaxes = isPending || r.baseTax === null ? 'Pending RPTAR' : (r.baseTax / 2).toFixed(2);
-      const penaltyOrDiscount = isPending || r.penaltyAmount === null ? 'Pending RPTAR' : ((r.penaltyAmount - (r.discountAmount || 0)) / 2).toFixed(2);
-      const totalDelinquency = isPending || r.totalDue === null ? 'Pending RPTAR' : (r.totalDue / 2).toFixed(2);
-      const assessedValStr = isPending
-        ? 'Pending RPTAR'
-        : (r.assessedValue ?? activeProperty.assessedValue).toFixed(2);
-
-      lines.push(
-        `"${activeProperty.tdNumber}",,"${activeProperty.lotAreaSqm || 'N/A'}","${assessedValStr}","${activeProperty.barangay}, Santa Rosa",,"${activeProperty.propertyClass}",,,,${yearLabel},${unpaidTaxes},,${penaltyOrDiscount},,${totalDelinquency},,`
-      );
+  const handleExportWord = () => {
+    if (!activeProperty || !assessmentResult) return;
+    downloadWordDoc({
+      documentTitle: 'Notice of Delinquency in the Payment of Real Property Tax',
+      subTitle: 'Pursuant to Section 254, Republic Act No. 7160 (Local Government Code of 1991)',
+      property: activeProperty,
+      records: itemizedRows,
+      totals,
+      filename: `Notice_of_Delinquency_${activeProperty.tdNumber}.doc`,
+      isNoticeOfDelinquency: true,
     });
-
-    lines.push(',,,,,,,,,,,,,,,,,');
-    lines.push(`,,,,,,,,,,,,,BASIC,,${totals.basic.toFixed(2)},,`);
-    lines.push(`,,,,,,,,,,,,,SEF,,${totals.sef.toFixed(2)},,`);
-    lines.push(`,,,,,,,,,,,,,TOTAL,,${totals.grandTotal.toFixed(2)},,`);
-    lines.push(',,,,,,,,,,,,,,,,,');
-    lines.push('Prepared by:,,,,,,,Received by:,,,,,,Approved by:,,,');
-    lines.push('Revenue Collection Clerk,,,,,,,Signature over printed name & Date,,,,,,Myra V. Cunanan,,,');
-    lines.push(',,,,,,,,,,,,,Municipal Treasurer,,,');
-
-    const csvContent = lines.join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `Notice_of_Delinquency_${activeProperty.tdNumber}_${Date.now()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   };
 
   if (!isOpen || !activeProperty) return null;
@@ -187,6 +158,16 @@ export const NoticeOfDelinquencyModal: React.FC<NoticeOfDelinquencyModalProps> =
             </Button>
             <Button
               type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleExportWord}
+              className="h-8 px-3 bg-slate-800 border-slate-700 text-white hover:bg-slate-700 gap-1 text-xs"
+            >
+              <FileText size={14} className="text-blue-400" />
+              Export Word (.doc)
+            </Button>
+            <Button
+              type="button"
               size="sm"
               onClick={handlePrint}
               className="h-8 px-3 bg-emerald-600 text-white hover:bg-emerald-500 gap-1 text-xs shadow-sm"
@@ -207,41 +188,41 @@ export const NoticeOfDelinquencyModal: React.FC<NoticeOfDelinquencyModalProps> =
         </div>
 
         {/* Printable Notice Sheet (Styled strictly after LGU Santa Rosa AF Form) */}
-        <div id="printable-notice" className="p-8 sm:p-12 print:p-6 bg-white max-w-[850px] mx-auto text-slate-900 leading-tight">
+        <div id="printable-notice" className="p-8 sm:p-12 print:p-0 bg-white max-w-[850px] mx-auto text-slate-900 leading-tight">
           {/* Header */}
-          <div className="text-center border-b-2 border-slate-900 pb-4 mb-4">
-            <p className="text-[11px] uppercase tracking-widest text-slate-600 font-semibold font-sans">Republic of the Philippines</p>
-            <p className="text-[11px] uppercase tracking-widest text-slate-600 font-semibold font-sans">Province of Nueva Ecija</p>
-            <h1 className="text-base font-extrabold tracking-tight uppercase text-slate-900 mt-0.5">
+          <div className="text-center border-b-2 border-black pb-3 mb-3">
+            <p className="text-[11px] uppercase tracking-widest text-slate-700 font-semibold font-sans">Republic of the Philippines</p>
+            <p className="text-[11px] uppercase tracking-widest text-slate-700 font-semibold font-sans">Province of Nueva Ecija</p>
+            <h1 className="text-base font-extrabold tracking-tight uppercase text-black mt-0.5">
               Municipality of Santa Rosa
             </h1>
-            <p className="text-xs font-bold uppercase tracking-wider text-emerald-800 mt-0.5">
+            <p className="text-xs font-bold uppercase tracking-wider text-emerald-900 print:text-black mt-0.5">
               Office of the Municipal Treasurer
             </p>
-            <div className="mt-3 inline-block bg-slate-900 text-white px-4 py-1 text-xs font-bold uppercase tracking-widest rounded-sm">
+            <div className="mt-2.5 inline-block bg-slate-900 print:bg-white text-white print:text-black border border-black px-4 py-1 text-xs font-bold uppercase tracking-widest rounded-none">
               Notice of Delinquency in the Payment of Real Property Tax
             </div>
-            <p className="text-[10px] text-slate-500 mt-1 italic">
+            <p className="text-[10px] text-slate-600 print:text-black mt-1 italic">
               Pursuant to Section 254, Republic Act No. 7160 (Local Government Code of 1991)
             </p>
           </div>
 
           {/* Date and Reference Bar */}
-          <div className="flex justify-between items-center text-xs font-sans my-3 text-slate-700">
+          <div className="flex justify-between items-center text-xs font-sans my-2.5 text-slate-800 print:text-black">
             <div>
-              <span className="font-bold text-slate-900">Notice Ref Date: </span>
+              <span className="font-bold text-black">Notice Ref Date: </span>
               {new Date().toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
             </div>
             <div>
-              <span className="font-bold text-slate-900">Last Recorded Payment: </span>
-              <span className="font-mono font-semibold text-emerald-900">
+              <span className="font-bold text-black">Last Recorded Payment: </span>
+              <span className="font-mono font-bold text-emerald-950 print:text-black">
                 {activeProperty.lastPaidYear} (Quarter {activeProperty.lastPaidQuarter || 4})
               </span>
             </div>
           </div>
 
           {/* Statutory Formal Notice Salutation */}
-          <div className="my-3 text-xs leading-relaxed text-slate-800 font-sans text-justify">
+          <div className="my-2.5 text-xs leading-relaxed text-black font-sans text-justify">
             <p>
               <strong>NOTICE IS HEREBY SERVED</strong> that pursuant to the provisions of Section 254 of Republic Act No. 7160,
               otherwise known as the <em>Local Government Code of 1991</em>, the Real Property Tax due and payable for calendar
@@ -251,52 +232,51 @@ export const NoticeOfDelinquencyModal: React.FC<NoticeOfDelinquencyModalProps> =
           </div>
 
           {/* Property Assessment Summary Card */}
-          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs font-sans grid grid-cols-2 sm:grid-cols-4 gap-3 my-2">
+          <div className="border border-black p-3 text-xs font-sans grid grid-cols-2 sm:grid-cols-4 gap-2.5 my-2.5 bg-slate-50/50 print:bg-white">
             <div>
-              <p className="text-[10px] text-slate-500 uppercase font-bold">Tax Declaration No.</p>
-              <p className="font-mono font-bold text-slate-900">{activeProperty.tdNumber}</p>
+              <p className="text-[9.5pt] text-slate-600 print:text-black uppercase font-bold text-[9px]">Tax Declaration No.</p>
+              <p className="font-mono font-bold text-black text-xs">{activeProperty.tdNumber}</p>
             </div>
             <div>
-              <p className="text-[10px] text-slate-500 uppercase font-bold">PIN / Cadastral Lot</p>
-              <p className="font-mono text-slate-800">{activeProperty.pin || 'Cadastral Lot Verified'}</p>
+              <p className="text-[9.5pt] text-slate-600 print:text-black uppercase font-bold text-[9px]">PIN / Cadastral Lot</p>
+              <p className="font-mono text-black text-xs">{activeProperty.pin || 'Cadastral Lot Verified'}</p>
             </div>
             <div>
-              <p className="text-[10px] text-slate-500 uppercase font-bold">Kind / Class</p>
-              <p className="font-semibold text-slate-800">{activeProperty.propertyClass}</p>
+              <p className="text-[9.5pt] text-slate-600 print:text-black uppercase font-bold text-[9px]">Kind / Class</p>
+              <p className="font-semibold text-black text-xs">{activeProperty.propertyClass}</p>
             </div>
             <div>
-              <p className="text-[10px] text-slate-500 uppercase font-bold">Base Assessed Value</p>
-              <p className="font-mono font-bold text-emerald-900">
+              <p className="text-[9.5pt] text-slate-600 print:text-black uppercase font-bold text-[9px]">Base Assessed Value</p>
+              <p className="font-mono font-bold text-emerald-950 print:text-black text-xs">
                 ₱{activeProperty.assessedValue.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
               </p>
             </div>
 
             <div className="sm:col-span-2">
-              <p className="text-[10px] text-slate-500 uppercase font-bold">Declared Owner</p>
-              <p className="font-bold text-slate-900">{activeProperty.ownerName}</p>
+              <p className="text-[9.5pt] text-slate-600 print:text-black uppercase font-bold text-[9px]">Declared Owner</p>
+              <p className="font-bold text-black text-xs">{activeProperty.ownerName}</p>
             </div>
             <div className="sm:col-span-2">
-              <p className="text-[10px] text-slate-500 uppercase font-bold">Location</p>
-              <p className="text-slate-800">{activeProperty.address}, {activeProperty.barangay}, Santa Rosa, N.E.</p>
+              <p className="text-[9.5pt] text-slate-600 print:text-black uppercase font-bold text-[9px]">Location</p>
+              <p className="text-black text-xs">{activeProperty.address}, {activeProperty.barangay}, Santa Rosa, N.E.</p>
             </div>
           </div>
 
           {/* Itemized Delinquency Roll Table */}
-          <div className="my-4 border border-slate-300 rounded-lg overflow-hidden text-xs font-sans">
-            <table className="w-full text-left border-collapse">
+          <div className="my-3 border border-black overflow-hidden text-xs font-sans">
+            <table className="w-full text-left border-collapse border border-black">
               <thead>
-                <tr className="bg-slate-100 text-slate-800 font-bold border-b border-slate-300 text-[11px]">
-                  <th className="py-2 px-3">Assessment Era / Roll Period</th>
-                  <th className="py-2 px-3 text-right">Assessed Value (AV)</th>
-                  <th className="py-2 px-3 text-right">Unpaid Taxes (1% Fund Base)</th>
-                  <th className="py-2 px-3 text-right">Penalties / Discounts</th>
-                  <th className="py-2 px-3 text-right">Total Delinquency (Per Fund)</th>
+                <tr className="bg-slate-100 print:bg-white text-black font-bold border-b border-black text-[11px]">
+                  <th className="py-1.5 px-2.5 border border-black">Assessment Era / Roll Period</th>
+                  <th className="py-1.5 px-2.5 text-right border border-black">Assessed Value (AV)</th>
+                  <th className="py-1.5 px-2.5 text-right border border-black">Unpaid Taxes (1% Fund Base)</th>
+                  <th className="py-1.5 px-2.5 text-right border border-black">Penalties / Discounts</th>
+                  <th className="py-1.5 px-2.5 text-right border border-black">Total Delinquency (Per Fund)</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200">
+              <tbody>
                 {itemizedRows.map((r: TaxYearRecord, idx: number) => {
                   const label = r.periodLabel || String(r.year);
-                  const isDelinquent = r.status === 'Delinquent';
                   const isCleared = r.status === 'Cleared';
                   const isPending = Boolean(r.isMissingValuation || r.isUnverifiedHistorical || r.totalDue === null);
                   const unpaidTaxes = isCleared || isPending || r.baseTax === null ? undefined : r.baseTax / 2;
@@ -304,40 +284,40 @@ export const NoticeOfDelinquencyModal: React.FC<NoticeOfDelinquencyModalProps> =
                   const totalDelinquency = isCleared || isPending || r.totalDue === null ? undefined : r.totalDue / 2;
 
                   return (
-                    <tr key={idx} className={isDelinquent ? 'bg-amber-50/40' : ''}>
-                      <td className="py-1.5 px-3 font-semibold text-slate-800">
+                    <tr key={idx} className={idx % 2 === 1 ? 'bg-slate-50/50 print:bg-white' : 'bg-white'}>
+                      <td className="py-1.5 px-2.5 font-semibold text-black border border-black">
                         {label}
                         {r.status === 'Cleared' && (
-                          <span className="ml-2 text-[10px] font-normal text-emerald-600 font-sans">(Cleared)</span>
+                          <span className="ml-2 text-[10px] font-normal text-slate-600 print:text-black font-sans">(Cleared)</span>
                         )}
                         {r.isMissingValuation && (
-                          <span className="ml-2 text-[10px] font-semibold text-amber-700 font-sans bg-amber-100 px-1 py-0.5 rounded">
-                            {r.isUnverifiedHistorical ? '⚠️ Prior Historical (RPTAR)' : '⚠️ RPTAR Req.'}
+                          <span className="ml-2 text-[10px] font-semibold text-amber-900 print:text-black font-sans">
+                            {r.isUnverifiedHistorical ? '[Prior Historical]' : '[RPTAR Req.]'}
                           </span>
                         )}
                       </td>
-                      <td className="py-1.5 px-3 text-right font-mono text-slate-700">
+                      <td className="py-1.5 px-2.5 text-right font-mono text-black border border-black">
                         {r.isMissingValuation ? (
-                          <span className="text-amber-700 italic font-sans text-[10px]">Pending RPTAR</span>
+                          <span className="text-slate-600 print:text-black italic font-sans text-[10px]">Pending RPTAR</span>
                         ) : (
                           formatCurrency(r.assessedValue ?? activeProperty.assessedValue)
                         )}
                       </td>
-                      <td className="py-1.5 px-3 text-right font-mono text-slate-700">
+                      <td className="py-1.5 px-2.5 text-right font-mono text-black border border-black">
                         {r.isMissingValuation ? (
                           <span className="text-slate-400 italic text-[10px]">--</span>
                         ) : (
                           formatCurrency(unpaidTaxes)
                         )}
                       </td>
-                      <td className="py-1.5 px-3 text-right font-mono text-slate-700">
+                      <td className="py-1.5 px-2.5 text-right font-mono text-black border border-black">
                         {r.isMissingValuation ? (
                           <span className="text-slate-400 italic text-[10px]">--</span>
                         ) : (
                           formatCurrency(penaltyOrDiscount)
                         )}
                       </td>
-                      <td className="py-1.5 px-3 text-right font-mono font-bold text-slate-900">
+                      <td className="py-1.5 px-2.5 text-right font-mono font-bold text-black border border-black">
                         {r.isMissingValuation ? (
                           <span className="text-slate-400 italic text-[10px]">--</span>
                         ) : (
@@ -348,28 +328,28 @@ export const NoticeOfDelinquencyModal: React.FC<NoticeOfDelinquencyModalProps> =
                   );
                 })}
               </tbody>
-              <tfoot className="border-t-2 border-slate-800 bg-slate-100/80 font-bold text-slate-900">
+              <tfoot className="border-t-2 border-black bg-slate-100/80 print:bg-white font-bold text-black">
                 <tr>
-                  <td colSpan={4} className="py-2 px-3 text-right uppercase tracking-wider text-[11px]">
+                  <td colSpan={4} className="py-1.5 px-2.5 text-right uppercase tracking-wider text-[11px] border border-black">
                     Basic Real Property Tax (1% General Fund):
                   </td>
-                  <td className="py-2 px-3 text-right font-mono text-sm font-bold text-slate-900">
+                  <td className="py-1.5 px-2.5 text-right font-mono text-xs font-bold text-black border border-black">
                     {formatCurrency(totals.basic)}
                   </td>
                 </tr>
                 <tr>
-                  <td colSpan={4} className="py-1.5 px-3 text-right uppercase tracking-wider text-[11px]">
+                  <td colSpan={4} className="py-1.5 px-2.5 text-right uppercase tracking-wider text-[11px] border border-black">
                     Special Education Fund (1% Local School Board):
                   </td>
-                  <td className="py-1.5 px-3 text-right font-mono text-sm font-bold text-slate-900">
+                  <td className="py-1.5 px-2.5 text-right font-mono text-xs font-bold text-black border border-black">
                     {formatCurrency(totals.sef)}
                   </td>
                 </tr>
-                <tr className="bg-emerald-100/70 text-emerald-950 text-sm border-t border-emerald-300">
-                  <td colSpan={4} className="py-2.5 px-3 text-right uppercase tracking-wider font-extrabold">
+                <tr className="bg-slate-200/90 print:bg-white text-black text-xs border-t-2 border-black">
+                  <td colSpan={4} className="py-2 px-2.5 text-right uppercase tracking-wider font-extrabold border border-black">
                     Grand Total Tax Delinquency Payable:
                   </td>
-                  <td className="py-2.5 px-3 text-right font-mono font-extrabold text-base text-emerald-950">
+                  <td className="py-2 px-2.5 text-right font-mono font-extrabold text-sm text-black border border-black">
                     ₱{totals.grandTotal.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </td>
                 </tr>
@@ -378,12 +358,12 @@ export const NoticeOfDelinquencyModal: React.FC<NoticeOfDelinquencyModalProps> =
           </div>
 
           {/* Statutory Legal Remedies Clause (RA 7160 Sec. 254 / 256) */}
-          <div className="p-3.5 my-4 bg-slate-50 border border-slate-300 rounded-xl text-[11px] text-justify space-y-1.5">
-            <div className="flex items-center gap-1.5 font-bold text-slate-800 font-sans">
-              <ShieldAlert size={14} className="text-amber-700 shrink-0" />
+          <div className="p-3 my-3 border border-black text-[10px] text-justify space-y-1 bg-slate-50/50 print:bg-white">
+            <div className="flex items-center gap-1.5 font-bold text-black font-sans">
+              <ShieldAlert size={13} className="text-black shrink-0" />
               <span>STATUTORY REMEDIES FOR COLLECTION OF REAL PROPERTY TAX (RA 7160)</span>
             </div>
-            <p className="text-slate-700 leading-normal font-sans">
+            <p className="text-black leading-normal font-sans">
               Pursuant to <strong>Sections 254 and 256 of Title II, Book II of Republic Act No. 7160</strong>, notice is hereby
               given that failure to pay the delinquent tax and surcharge within the statutory demand period will compel the
               Municipal Treasurer to enforce remedies simultaneously or consecutively, including:
@@ -394,28 +374,28 @@ export const NoticeOfDelinquencyModal: React.FC<NoticeOfDelinquencyModalProps> =
           </div>
 
           {/* Official Signatories Section (SSOT 2.9.5) */}
-          <div className="pt-8 grid grid-cols-3 gap-6 text-center font-sans text-xs">
+          <div className="pt-6 grid grid-cols-3 gap-6 text-center font-sans text-xs">
             <div>
-              <p className="text-slate-500 text-[10px] uppercase font-bold mb-8">Prepared by:</p>
-              <div className="border-t border-slate-700 pt-1">
-                <p className="font-bold text-slate-900 uppercase">Revenue Collection Clerk</p>
-                <p className="text-[10px] text-slate-500">Municipal Treasurer's Office</p>
+              <p className="text-slate-700 print:text-black text-[10px] uppercase font-bold mb-6">Prepared by:</p>
+              <div className="border-t border-black pt-1">
+                <p className="font-bold text-black uppercase">Revenue Collection Clerk</p>
+                <p className="text-[10px] text-slate-600 print:text-black">Municipal Treasurer's Office</p>
               </div>
             </div>
 
             <div>
-              <p className="text-slate-500 text-[10px] uppercase font-bold mb-8">Received by:</p>
-              <div className="border-t border-slate-700 pt-1">
-                <p className="font-bold text-slate-900 uppercase">Taxpayer / Authorized Rep.</p>
-                <p className="text-[10px] text-slate-500">Signature over printed name & Date</p>
+              <p className="text-slate-700 print:text-black text-[10px] uppercase font-bold mb-6">Received by:</p>
+              <div className="border-t border-black pt-1">
+                <p className="font-bold text-black uppercase">Taxpayer / Authorized Rep.</p>
+                <p className="text-[10px] text-slate-600 print:text-black">Signature over printed name & Date</p>
               </div>
             </div>
 
             <div>
-              <p className="text-slate-500 text-[10px] uppercase font-bold mb-8">Approved by:</p>
-              <div className="border-t border-slate-700 pt-1">
-                <p className="font-black text-slate-900 uppercase">Myra V. Cunanan</p>
-                <p className="text-[10px] font-bold text-emerald-900 uppercase">Municipal Treasurer</p>
+              <p className="text-slate-700 print:text-black text-[10px] uppercase font-bold mb-6">Approved by:</p>
+              <div className="border-t border-black pt-1">
+                <p className="font-black text-black uppercase">Myra V. Cunanan</p>
+                <p className="text-[10px] font-bold text-black uppercase">Municipal Treasurer</p>
               </div>
             </div>
           </div>

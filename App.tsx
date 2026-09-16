@@ -15,6 +15,7 @@ import { NoticeOfDelinquencyModal, BlgfForm3Modal } from '@/features/reports';
 import { Printer, ArrowLeft, CheckCircle2, ShieldCheck, CheckCircle, RefreshCw, FileText } from 'lucide-react';
 import { verifySessionToken, DEFAULT_SESSION_TIMEOUT_MS } from './lib/crypto';
 import { mergeEncoderLabel } from './utils/encoderAttribution';
+import { downloadWordDoc } from '@/utils/documentExport';
 
 const App: React.FC = () => {
   // Authentication State
@@ -385,6 +386,23 @@ const App: React.FC = () => {
     );
   }
 
+  const handleExportSoaWord = () => {
+    if (!selectedProperty) return;
+    downloadWordDoc({
+      documentTitle: 'STATEMENT OF ACCOUNT (REAL PROPERTY TAX)',
+      subTitle: 'Official Assessment Ledger — Municipality of Santa Rosa, Nueva Ecija',
+      property: selectedProperty,
+      records: taxRecords,
+      totals: {
+        basic: taxSummary?.totalBasicTax || 0,
+        sef: taxSummary?.totalSefTax || 0,
+        grandTotal: grandTotal || 0,
+      },
+      filename: `Statement_of_Account_${selectedProperty.tdNumber}.doc`,
+      isNoticeOfDelinquency: false,
+    });
+  };
+
   const canClearDues = currentUser.role === 'Assessor' || currentUser.role === 'Admin' || currentUser.role === 'Cashier';
 
   return (
@@ -454,6 +472,15 @@ const App: React.FC = () => {
                 </button>
 
                 <button 
+                  onClick={handleExportSoaWord}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold border border-slate-300 rounded-xl transition-all"
+                  title="Export Statement of Account to Microsoft Word (.doc)"
+                >
+                  <FileText size={14} className="text-blue-600" />
+                  Export SOA (Word)
+                </button>
+
+                <button 
                   onClick={() => window.print()}
                   className="flex items-center gap-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all"
                 >
@@ -477,8 +504,49 @@ const App: React.FC = () => {
 
             {selectedProperty && (
               <div className="space-y-6">
-                {/* Top Section: Property Information Banner & Sequential Dues Clearance Card */}
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+                {/* Official Printable Statement of Account (SOA) Header (Print Only) */}
+                <div className="print-only mb-4 text-center border-b-2 border-black pb-3">
+                  <p className="text-[11px] uppercase tracking-widest text-black font-semibold">Republic of the Philippines</p>
+                  <p className="text-[11px] uppercase tracking-widest text-black font-semibold">Province of Nueva Ecija</p>
+                  <h1 className="text-base font-extrabold tracking-tight uppercase text-black mt-0.5">
+                    Municipality of Santa Rosa
+                  </h1>
+                  <p className="text-xs font-bold uppercase tracking-wider text-black mt-0.5">
+                    Office of the Municipal Treasurer
+                  </p>
+                  <div className="mt-2.5 inline-block bg-white text-black border border-black px-4 py-1 text-xs font-bold uppercase tracking-widest">
+                    Statement of Account — Real Property Tax (RA 7160)
+                  </div>
+                  <div className="mt-3 text-left border border-black p-2.5 text-xs grid grid-cols-4 gap-2 bg-white">
+                    <div>
+                      <span className="text-[9px] uppercase font-bold block text-slate-700">Tax Declaration No.</span>
+                      <span className="font-mono font-bold text-black text-xs">{selectedProperty.tdNumber}</span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] uppercase font-bold block text-slate-700">PIN / Cadastral Lot</span>
+                      <span className="font-mono text-black text-xs">{selectedProperty.pin || 'Cadastral Verified'}</span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] uppercase font-bold block text-slate-700">Classification</span>
+                      <span className="font-semibold text-black text-xs">{selectedProperty.propertyClass}</span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] uppercase font-bold block text-slate-700">Assessed Valuation</span>
+                      <span className="font-mono font-bold text-black text-xs">₱{selectedProperty.assessedValue.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="text-[9px] uppercase font-bold block text-slate-700">Declared Owner</span>
+                      <span className="font-bold text-black text-xs">{selectedProperty.ownerName}</span>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="text-[9px] uppercase font-bold block text-slate-700">Location</span>
+                      <span className="text-black text-xs">{selectedProperty.address}, Brgy. {selectedProperty.barangay}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Top Section: Property Information Banner & Sequential Dues Clearance Card (Screen Only) */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch no-print">
                   {/* Property Master Info Card */}
                   <div className="lg:col-span-7 xl:col-span-8 flex flex-col">
                     <PropertyCard 
@@ -488,7 +556,7 @@ const App: React.FC = () => {
                   </div>
 
                   {/* Sequential Dues Clearance Action Box */}
-                  <div className="lg:col-span-5 xl:col-span-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between space-y-4 no-print">
+                  <div className="lg:col-span-5 xl:col-span-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between space-y-4">
                     <div>
                       <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
                         <ShieldCheck size={18} className="text-emerald-600" />
@@ -562,6 +630,31 @@ const App: React.FC = () => {
                     currentUser={currentUser}
                     onSelectionChange={handleSelectionChange}
                   />
+                </div>
+
+                {/* Official Signatories Section (Print Only) */}
+                <div className="print-only pt-8 grid grid-cols-3 gap-6 text-center text-xs">
+                  <div>
+                    <p className="text-slate-700 text-[10px] uppercase font-bold mb-8">Prepared by:</p>
+                    <div className="border-t border-black pt-1">
+                      <p className="font-bold text-black uppercase">{currentUser?.name || 'Revenue Collection Clerk'}</p>
+                      <p className="text-[10px] text-slate-600">Municipal Treasurer's Office</p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-slate-700 text-[10px] uppercase font-bold mb-8">Received by:</p>
+                    <div className="border-t border-black pt-1">
+                      <p className="font-bold text-black uppercase">{selectedProperty.ownerName || 'Taxpayer / Representative'}</p>
+                      <p className="text-[10px] text-slate-600">Signature over printed name & Date</p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-slate-700 text-[10px] uppercase font-bold mb-8">Approved by:</p>
+                    <div className="border-t border-black pt-1">
+                      <p className="font-black text-black uppercase">Myra V. Cunanan</p>
+                      <p className="text-[10px] font-bold text-black uppercase">Municipal Treasurer</p>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

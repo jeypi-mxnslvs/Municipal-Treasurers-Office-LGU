@@ -79,17 +79,28 @@
   }
 }
 
+/* Screen-only helper for print-only elements */
+.print-only {
+  display: none !important;
+}
+
 @media print {
   .no-print {
     display: none !important;
   }
+  .print-only {
+    display: block !important;
+  }
   body {
     background-color: #ffffff !important;
     color: #000000 !important;
+    font-size: 9.5pt !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
   @page {
-    size: auto;
-    margin: 10mm;
+    size: portrait;
+    margin: 10mm 12mm;
   }
   .print-page-break {
     page-break-after: always;
@@ -98,6 +109,38 @@
   .print-avoid-break {
     page-break-inside: avoid;
     break-inside: avoid;
+  }
+  thead {
+    display: table-header-group;
+  }
+  tfoot {
+    display: table-footer-group;
+  }
+  tr {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  /* Remove modal/dialog chrome when printing from inside Radix dialog */
+  [role="dialog"], [data-radix-portal] {
+    position: static !important;
+    overflow: visible !important;
+    max-height: none !important;
+    max-width: 100% !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: #ffffff !important;
+    padding: 0 !important;
+  }
+  /* Hide dialog backdrop */
+  div[data-state="open"][class*="fixed inset-0"] {
+    display: none !important;
+  }
+  /* Remove rounded borders and shadows for all print containers */
+  .rounded-xl, .rounded-2xl, .rounded-lg {
+    border-radius: 0 !important;
+  }
+  .shadow-sm, .shadow-md, .shadow-lg, .shadow-xl, .shadow-2xl {
+    box-shadow: none !important;
   }
 }
 
