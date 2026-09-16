@@ -11,6 +11,7 @@ import { AuditLogModal } from '@/features/audit';
 import { NoticeOfDelinquencyModal, BlgfForm3Modal } from '@/features/reports';
 import { Printer, ArrowLeft, CheckCircle2, ShieldCheck, CheckCircle, RefreshCw, Bell, FileText } from 'lucide-react';
 import { verifySessionToken, DEFAULT_SESSION_TIMEOUT_MS } from './lib/crypto';
+import { mergeEncoderLabel } from './utils/encoderAttribution';
 
 const App: React.FC = () => {
   // Authentication State
@@ -204,9 +205,18 @@ const App: React.FC = () => {
 
   const handleSaveProperty = async (data: Partial<Property>) => {
     try {
+      const assessor = currentUser?.name || 'Juan Reyes';
+      const mergedEncoderLabel = mergeEncoderLabel(
+        data.encoderLabel,
+        assessor,
+        true
+      );
+
       const payload = {
         ...data,
-        assessorName: currentUser?.name || 'Juan Reyes',
+        entryType: 'MANUAL' as const,
+        encoderLabel: mergedEncoderLabel,
+        assessorName: assessor,
         stationId: currentUser?.stationId || 'Assessor-Desk-02'
       };
 
@@ -529,6 +539,7 @@ const App: React.FC = () => {
         onClose={() => setIsModalOpen(false)}
         onSave={handleSaveProperty}
         initialData={modalInitialData}
+        currentUser={currentUser || undefined}
       />
 
       {/* Clearance Certificate Modal (Official receipt format) */}
