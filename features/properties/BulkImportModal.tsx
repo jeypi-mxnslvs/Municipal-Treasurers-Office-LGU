@@ -905,6 +905,11 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
                                   {row.error || 'Invalid'}
                                 </Badge>
                               )}
+                              {row.isShell && (
+                                <Badge className="text-[9px] bg-amber-100 text-amber-900 border-amber-300 font-bold ml-1">
+                                  ⚠️ RPTAR Req.
+                                </Badge>
+                              )}
                             </TableCell>
                             <TableCell className="text-[11px]">
                               {row.diffs.length > 0 ? (
@@ -917,6 +922,10 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
                                     </div>
                                   ))}
                                 </div>
+                              ) : row.isShell ? (
+                                <span className="text-amber-700 font-medium text-[10px] flex items-center gap-1">
+                                  ⚠️ Pending Physical RPTAR Valuation
+                                </span>
                               ) : (
                                 <span className="text-slate-400 text-[10px]">—</span>
                               )}
