@@ -16,6 +16,7 @@ import {
 } from '@/types';
 import { calculateTaxLiability as localCalculateTaxLiability } from '@/utils/taxLogic';
 import { createSessionToken } from '@/lib/crypto';
+import { mergeEncoderLabel } from '@/utils/encoderAttribution';
 
 /**
  * SupabaseRepository
@@ -52,7 +53,11 @@ export class SupabaseRepository implements ITreasuryRepository {
       assessedValue: Number(row.assessed_value) || 0,
       lastPaidYear: Number(row.last_paid_year) || 2025,
       lastPaidQuarter: row.last_paid_quarter !== undefined && row.last_paid_quarter !== null ? Number(row.last_paid_quarter) : 4,
-      isShellRecord: Boolean(row.is_shell_record)
+      isShellRecord: Boolean(row.is_shell_record),
+      encoderLabel: row.encoder_label || undefined,
+      entryType: (row.entry_type as 'MANUAL' | 'CSV_IMPORT') || (row.encoder_label?.includes('(Manual)') ? 'MANUAL' : 'CSV_IMPORT'),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
     }));
   }
 
@@ -85,7 +90,11 @@ export class SupabaseRepository implements ITreasuryRepository {
         lastPaidYear: Number(data.last_paid_year),
         lastPaidQuarter: data.last_paid_quarter !== undefined && data.last_paid_quarter !== null ? Number(data.last_paid_quarter) : 4,
         propertyClass: data.property_class,
-        isShellRecord: Boolean(data.is_shell_record)
+        isShellRecord: Boolean(data.is_shell_record),
+        encoderLabel: data.encoder_label || undefined,
+        entryType: (data.entry_type as 'MANUAL' | 'CSV_IMPORT') || (data.encoder_label?.includes('(Manual)') ? 'MANUAL' : 'CSV_IMPORT'),
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
       };
       return localCalculateTaxLiability(prop, calcOptions);
     }
@@ -210,6 +219,12 @@ export class SupabaseRepository implements ITreasuryRepository {
     if (propertyData.lastPaidQuarter !== undefined && propertyData.lastPaidQuarter !== null) {
       row.last_paid_quarter = propertyData.lastPaidQuarter;
     }
+    if (propertyData.encoderLabel) {
+      row.encoder_label = propertyData.encoderLabel;
+    }
+    if (propertyData.entryType) {
+      row.entry_type = propertyData.entryType;
+    }
 
     const isUpdate = Boolean(propertyData.id && !String(propertyData.id).startsWith('csv-') && !String(propertyData.id).startsWith('prop-'));
 
@@ -231,8 +246,15 @@ export class SupabaseRepository implements ITreasuryRepository {
     };
 
     let { data, error } = await executeSave(row);
-    if (error && (error.message?.includes('last_paid_quarter') || error.code === 'PGRST204')) {
-      delete row.last_paid_quarter;
+    if (error && (error.message?.includes('last_paid_quarter') || error.message?.includes('encoder_label') || error.message?.includes('entry_type') || error.code === 'PGRST204')) {
+      if (error.message?.includes('last_paid_quarter')) delete row.last_paid_quarter;
+      if (error.message?.includes('encoder_label')) delete row.encoder_label;
+      if (error.message?.includes('entry_type')) delete row.entry_type;
+      if (error.code === 'PGRST204') {
+        delete row.last_paid_quarter;
+        delete row.encoder_label;
+        delete row.entry_type;
+      }
       const retry = await executeSave(row);
       data = retry.data;
       error = retry.error;
@@ -272,7 +294,11 @@ export class SupabaseRepository implements ITreasuryRepository {
       assessedValue: Number(resultData.assessed_value),
       lastPaidYear: Number(resultData.last_paid_year),
       lastPaidQuarter: resultData.last_paid_quarter !== undefined && resultData.last_paid_quarter !== null ? Number(resultData.last_paid_quarter) : 4,
-      isShellRecord: Boolean(resultData.is_shell_record)
+      isShellRecord: Boolean(resultData.is_shell_record),
+      encoderLabel: resultData.encoder_label || propertyData.encoderLabel,
+      entryType: (resultData.entry_type as 'MANUAL' | 'CSV_IMPORT') || propertyData.entryType || 'MANUAL',
+      createdAt: resultData.created_at,
+      updatedAt: resultData.updated_at,
     };
   }
 
@@ -1174,6 +1200,8 @@ export class SupabaseRepository implements ITreasuryRepository {
             last_paid_year: p.lastPaidYear !== undefined && !isNaN(Number(p.lastPaidYear)) ? Number(p.lastPaidYear) : 1973,
             last_paid_quarter: p.lastPaidQuarter !== undefined && p.lastPaidQuarter !== null ? Number(p.lastPaidQuarter) : 4,
             is_shell_record: Boolean(p.isShellRecord),
+            encoder_label: (p.encoderLabel as string) || assessorName,
+            entry_type: (p.entryType as string) || 'CSV_IMPORT',
             updated_at: new Date().toISOString(),
           });
           insertedCount++;
@@ -1188,24 +1216,47 @@ export class SupabaseRepository implements ITreasuryRepository {
 
           if (!isIdentical) {
             try {
-              await supabase
+              const chainedLabel = mergeEncoderLabel(
+                existing.encoder_label as string | undefined,
+                assessorName,
+                false
+              );
+
+              const updatePayload: Record<string, unknown> = {
+                previous_td_number: p.previousTdNumber || existing.previous_td_number,
+                pin: p.pin || existing.pin,
+                owner_name: p.ownerName || existing.owner_name,
+                address: p.address || existing.address,
+                barangay: p.barangay || existing.barangay,
+                property_class: p.propertyClass || existing.property_class,
+                lot_area_sqm: p.lotAreaSqm !== undefined ? Number(p.lotAreaSqm) : existing.lot_area_sqm,
+                market_value: p.marketValue !== undefined ? Number(p.marketValue) : existing.market_value,
+                assessed_value: p.assessedValue !== undefined ? Number(p.assessedValue) : existing.assessed_value,
+                is_shell_record: p.isShellRecord !== undefined ? Boolean(p.isShellRecord) : existing.is_shell_record,
+                encoder_label: (p.encoderLabel as string) || chainedLabel,
+                entry_type: (existing.entry_type as string) || (p.entryType as string) || 'CSV_IMPORT',
+                updated_at: new Date().toISOString(),
+              };
+
+              let updateRes = await supabase
                 .from('properties')
-                .update({
-                  previous_td_number: p.previousTdNumber || existing.previous_td_number,
-                  pin: p.pin || existing.pin,
-                  owner_name: p.ownerName || existing.owner_name,
-                  address: p.address || existing.address,
-                  barangay: p.barangay || existing.barangay,
-                  property_class: p.propertyClass || existing.property_class,
-                  lot_area_sqm: p.lotAreaSqm !== undefined ? Number(p.lotAreaSqm) : existing.lot_area_sqm,
-                  market_value: p.marketValue !== undefined ? Number(p.marketValue) : existing.market_value,
-                  assessed_value: p.assessedValue !== undefined ? Number(p.assessedValue) : existing.assessed_value,
-                  is_shell_record: p.isShellRecord !== undefined ? Boolean(p.isShellRecord) : existing.is_shell_record,
-                  updated_at: new Date().toISOString(),
-                })
+                .update(updatePayload)
                 .eq('td_number', cleanTd);
 
-              updatedCount++;
+              if (updateRes.error && (updateRes.error.message?.includes('encoder_label') || updateRes.error.message?.includes('entry_type') || updateRes.error.code === 'PGRST204')) {
+                delete updatePayload.encoder_label;
+                delete updatePayload.entry_type;
+                updateRes = await supabase
+                  .from('properties')
+                  .update(updatePayload)
+                  .eq('td_number', cleanTd);
+              }
+
+              if (updateRes.error) {
+                errors.push(updateRes.error);
+              } else {
+                updatedCount++;
+              }
             } catch (updateErr) {
               errors.push(updateErr);
             }
@@ -1214,7 +1265,12 @@ export class SupabaseRepository implements ITreasuryRepository {
       }
 
       if (toInsert.length > 0) {
-        const { error: insertError } = await supabase.from('properties').insert(toInsert);
+        let { error: insertError } = await supabase.from('properties').insert(toInsert);
+        if (insertError && (insertError.message?.includes('encoder_label') || insertError.message?.includes('entry_type') || insertError.code === 'PGRST204')) {
+          const stripped = toInsert.map(({ encoder_label: _el, entry_type: _et, ...rest }) => rest);
+          const retry = await supabase.from('properties').insert(stripped);
+          insertError = retry.error;
+        }
         if (insertError) {
           errors.push(insertError);
           insertedCount = 0;

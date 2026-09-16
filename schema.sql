@@ -43,6 +43,8 @@ CREATE TABLE IF NOT EXISTS properties (
     last_paid_year INT NOT NULL DEFAULT 2025,
     last_paid_quarter INT NOT NULL DEFAULT 4,
     is_shell_record BOOLEAN DEFAULT FALSE,
+    encoder_label TEXT,
+    entry_type TEXT DEFAULT 'CSV_IMPORT',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
