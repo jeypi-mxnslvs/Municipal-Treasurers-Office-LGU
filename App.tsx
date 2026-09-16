@@ -12,10 +12,10 @@ import { DelinquencyTable } from '@/features/assessment';
 import { OfficialReceiptModal, BookletManagerModal } from '@/features/collections';
 import { AuditLogModal } from '@/features/audit';
 import { NoticeOfDelinquencyModal, BlgfForm3Modal } from '@/features/reports';
-import { Printer, ArrowLeft, CheckCircle2, ShieldCheck, CheckCircle, RefreshCw, FileText } from 'lucide-react';
+import { Printer, ArrowLeft, CheckCircle2, ShieldCheck, CheckCircle, RefreshCw, FileText, FileSpreadsheet } from 'lucide-react';
 import { verifySessionToken, DEFAULT_SESSION_TIMEOUT_MS } from './lib/crypto';
 import { mergeEncoderLabel } from './utils/encoderAttribution';
-import { downloadWordDoc } from '@/utils/documentExport';
+import { downloadWordDoc, downloadNoticeOfDelinquencyXls } from '@/utils/documentExport';
 
 const App: React.FC = () => {
   // Authentication State
@@ -403,6 +403,20 @@ const App: React.FC = () => {
     });
   };
 
+  const handleExportSoaXls = () => {
+    if (!selectedProperty) return;
+    downloadNoticeOfDelinquencyXls(
+      selectedProperty,
+      taxRecords,
+      {
+        basic: taxSummary?.totalBasicTax || 0,
+        sef: taxSummary?.totalSefTax || 0,
+        grandTotal: grandTotal || 0,
+      },
+      `COMPUTATION_${selectedProperty.tdNumber}.xls`
+    );
+  };
+
   const canClearDues = currentUser.role === 'Assessor' || currentUser.role === 'Admin' || currentUser.role === 'Cashier';
 
   return (
@@ -473,11 +487,20 @@ const App: React.FC = () => {
 
                 <button 
                   onClick={handleExportSoaWord}
-                  className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold border border-slate-300 rounded-xl transition-all"
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold border border-slate-300 rounded-xl transition-all cursor-pointer"
                   title="Export Statement of Account to Microsoft Word (.doc)"
                 >
                   <FileText size={14} className="text-blue-600" />
                   Export SOA (Word)
+                </button>
+
+                <button 
+                  onClick={handleExportSoaXls}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold border border-slate-300 rounded-xl transition-all cursor-pointer"
+                  title="Export Statement of Account to Excel (.xls)"
+                >
+                  <FileSpreadsheet size={14} className="text-emerald-700" />
+                  Export SOA (Excel)
                 </button>
 
                 <button 

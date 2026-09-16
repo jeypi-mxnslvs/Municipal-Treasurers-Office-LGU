@@ -2,9 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { Property, TaxYearRecord } from '@/types';
 import { calculateTaxLiability } from '@/utils/taxLogic';
 import {
-  generateNoticeOfDelinquencyCsv,
-  downloadCsvFile,
   downloadWordDoc,
+  downloadNoticeOfDelinquencyXls,
 } from '@/utils/documentExport';
 import {
   Dialog,
@@ -13,7 +12,7 @@ import {
 import { Button } from '@/components/ui/button';
 import {
   Printer,
-  Download,
+  FileSpreadsheet,
   FileText,
   ChevronLeft,
   ChevronRight,
@@ -84,11 +83,11 @@ export const NoticeOfDelinquencyModal: React.FC<NoticeOfDelinquencyModalProps> =
     window.print();
   };
 
-  const handleExportCsv = () => {
+  const handleExportXls = () => {
     if (!activeProperty || !assessmentResult) return;
-    const csvContent = generateNoticeOfDelinquencyCsv(activeProperty, itemizedRows, totals);
-    downloadCsvFile(csvContent, `Notice_of_Delinquency_${activeProperty.tdNumber}.csv`);
+    downloadNoticeOfDelinquencyXls(activeProperty, itemizedRows, totals);
   };
+
 
   const handleExportWord = () => {
     if (!activeProperty || !assessmentResult) return;
@@ -150,11 +149,12 @@ export const NoticeOfDelinquencyModal: React.FC<NoticeOfDelinquencyModalProps> =
               type="button"
               variant="outline"
               size="sm"
-              onClick={handleExportCsv}
-              className="h-8 px-3 bg-slate-800 border-slate-700 text-white hover:bg-slate-700 gap-1 text-xs"
+              onClick={handleExportXls}
+              className="h-8 px-3 bg-slate-800 border-slate-700 text-white hover:bg-slate-700 gap-1.5 text-xs font-bold rounded-xl shadow-sm cursor-pointer"
+              title="Export canonical Santa Rosa COMPUTATION.xls spreadsheet"
             >
-              <Download size={14} />
-              Export CSV
+              <FileSpreadsheet size={14} className="text-emerald-400" />
+              Export Excel (.xls)
             </Button>
             <Button
               type="button"

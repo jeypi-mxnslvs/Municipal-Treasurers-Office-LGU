@@ -12,8 +12,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Printer, CheckCircle2, Building, Ban, ShieldAlert, Lock, AlertTriangle, ArrowLeft, FileText, FileSpreadsheet, FileDown } from 'lucide-react';
-import { generateReceiptCsv, downloadReceiptWordDoc, downloadCsvFile } from '@/utils/documentExport';
+import { Printer, CheckCircle2, Building, Ban, ShieldAlert, Lock, AlertTriangle, ArrowLeft, FileText, FileSpreadsheet } from 'lucide-react';
+import { downloadReceiptWordDoc, downloadReceiptXls } from '@/utils/documentExport';
 
 interface ClearanceModalProps {
   isOpen?: boolean;
@@ -53,12 +53,11 @@ const OfficialReceiptModal: React.FC<ClearanceModalProps> = ({
     window.print();
   };
 
-  const handleExportCsv = () => {
+  const handleExportXls = () => {
     if (!activeReceipt) return;
-    const csv = generateReceiptCsv(activeReceipt);
-    const filename = `Clearance_Slip_${activeReceipt.receiptNo}_${activeReceipt.property.tdNumber}.csv`;
-    downloadCsvFile(csv, filename);
+    downloadReceiptXls(activeReceipt);
   };
+
 
   const handleExportWord = () => {
     if (!activeReceipt) return;
@@ -172,12 +171,12 @@ const OfficialReceiptModal: React.FC<ClearanceModalProps> = ({
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={handleExportCsv}
+                onClick={handleExportXls}
                 className="bg-slate-800 hover:bg-slate-700 text-white border-slate-700 text-xs font-bold rounded-xl shadow-sm gap-1.5 cursor-pointer"
-                title="Export structured CSV format"
+                title="Export Excel (.xls) spreadsheet"
               >
                 <FileSpreadsheet className="h-4 w-4 text-emerald-400" />
-                Export CSV
+                Export Excel (.xls)
               </Button>
               <Button
                 type="button"

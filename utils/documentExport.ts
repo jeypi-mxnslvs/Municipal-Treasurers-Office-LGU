@@ -127,7 +127,7 @@ export const generateWordHtml = (options: WordExportOptions): string => {
     year: 'numeric',
   });
 
-  const tableRowsHtml = records.map((r, idx) => {
+  const tableRowsHtml = records.map((r) => {
     const label = r.periodLabel || String(r.year);
     const isPending = Boolean(r.isMissingValuation || r.isUnverifiedHistorical || r.totalDue === null);
     
@@ -140,15 +140,13 @@ export const generateWordHtml = (options: WordExportOptions): string => {
       ? 'Pending RPTAR'
       : formatPesos(r.assessedValue ?? property.assessedValue);
 
-    const rowBg = idx % 2 === 1 ? '#f9f9f9' : '#ffffff';
-
     return `
-      <tr style="background-color: ${rowBg};">
-        <td style="border: 1pt solid #000000; padding: 4pt 6pt; font-weight: bold; text-align: left;">${label}</td>
-        <td style="border: 1pt solid #000000; padding: 4pt 6pt; text-align: right; font-family: 'Courier New', monospace;">${assessedVal}</td>
-        <td style="border: 1pt solid #000000; padding: 4pt 6pt; text-align: right; font-family: 'Courier New', monospace;">${unpaidTaxes}</td>
-        <td style="border: 1pt solid #000000; padding: 4pt 6pt; text-align: right; font-family: 'Courier New', monospace;">${penaltyOrDiscount}</td>
-        <td style="border: 1pt solid #000000; padding: 4pt 6pt; text-align: right; font-family: 'Courier New', monospace; font-weight: bold;">${totalDelinquency}</td>
+      <tr>
+        <td style="border: 1pt solid #000000; padding: 4pt 6pt; font-weight: normal; text-align: left; color: #000000; font-family: 'Times New Roman', Times, serif;">${label}</td>
+        <td style="border: 1pt solid #000000; padding: 4pt 6pt; font-weight: normal; text-align: right; color: #000000; font-family: 'Times New Roman', Times, serif;">${assessedVal}</td>
+        <td style="border: 1pt solid #000000; padding: 4pt 6pt; font-weight: normal; text-align: right; color: #000000; font-family: 'Times New Roman', Times, serif;">${unpaidTaxes}</td>
+        <td style="border: 1pt solid #000000; padding: 4pt 6pt; font-weight: normal; text-align: right; color: #000000; font-family: 'Times New Roman', Times, serif;">${penaltyOrDiscount}</td>
+        <td style="border: 1pt solid #000000; padding: 4pt 6pt; font-weight: normal; text-align: right; color: #000000; font-family: 'Times New Roman', Times, serif;">${totalDelinquency}</td>
       </tr>
     `;
   }).join('');
@@ -174,33 +172,39 @@ export const generateWordHtml = (options: WordExportOptions): string => {
           mso-page-orientation: portrait;
         }
         body {
-          font-family: 'Arial', 'Calibri', sans-serif;
-          font-size: 10pt;
+          font-family: 'Times New Roman', Times, serif;
+          font-size: 11pt;
           line-height: 1.25;
           color: #000000;
           background-color: #ffffff;
         }
+        table, th, td, p, div, span, h1, h2, h3 {
+          font-family: 'Times New Roman', Times, serif !important;
+        }
         .header-center {
           text-align: center;
           margin-bottom: 12pt;
+          color: #000000;
         }
         .republic {
-          font-size: 9pt;
+          font-size: 9.5pt;
           text-transform: uppercase;
           letter-spacing: 1.5pt;
           margin: 0;
-          font-weight: 600;
+          font-weight: normal;
+          color: #000000;
         }
         .lgu-name {
           font-size: 13pt;
           font-weight: bold;
           text-transform: uppercase;
           margin: 2pt 0;
+          color: #000000;
         }
         .office-name {
           font-size: 10.5pt;
-          font-weight: bold;
-          color: #065f46;
+          font-weight: normal;
+          color: #000000;
           text-transform: uppercase;
           margin: 1pt 0;
         }
@@ -209,51 +213,63 @@ export const generateWordHtml = (options: WordExportOptions): string => {
           font-size: 11pt;
           font-weight: bold;
           text-transform: uppercase;
-          border: 1.5pt solid #000000;
+          border: 1pt solid #000000;
           padding: 3pt 10pt;
           margin-top: 6pt;
+          background-color: #ffffff;
+          color: #000000;
         }
         .sub-clause {
-          font-size: 8.5pt;
+          font-size: 9pt;
           font-style: italic;
-          color: #333333;
+          color: #000000;
           margin-top: 3pt;
         }
         .meta-table {
           width: 100%;
           border-collapse: collapse;
           margin: 10pt 0;
-          font-size: 9pt;
+          font-size: 9.5pt;
         }
         .meta-table td {
           border: 1pt solid #000000;
           padding: 3pt 6pt;
           vertical-align: top;
+          font-weight: normal;
+          color: #000000;
+          background-color: #ffffff;
         }
         .meta-label {
-          font-size: 7.5pt;
+          font-size: 8pt;
           text-transform: uppercase;
-          font-weight: bold;
-          color: #444444;
+          font-weight: normal;
+          color: #000000;
           display: block;
         }
         .meta-val {
-          font-weight: bold;
+          font-weight: normal;
           font-size: 9.5pt;
+          color: #000000;
         }
         .data-table {
           width: 100%;
           border-collapse: collapse;
           margin: 10pt 0;
-          font-size: 9pt;
+          font-size: 9.5pt;
         }
         .data-table th {
-          border: 1.5pt solid #000000;
-          background-color: #e5e7eb;
+          border: 1pt solid #000000;
+          background-color: #ffffff;
           padding: 5pt 6pt;
-          font-weight: bold;
-          font-size: 8.5pt;
+          font-weight: normal;
+          font-size: 9.5pt;
           text-transform: uppercase;
+          color: #000000;
+        }
+        .data-table td {
+          font-weight: normal;
+          color: #000000;
+          background-color: #ffffff;
         }
         .footer-totals {
           width: 100%;
@@ -264,14 +280,18 @@ export const generateWordHtml = (options: WordExportOptions): string => {
         .footer-totals td {
           border: 1pt solid #000000;
           padding: 4pt 8pt;
+          font-weight: normal;
+          color: #000000;
+          background-color: #ffffff;
         }
         .remedies-box {
           border: 1pt solid #000000;
           padding: 6pt 8pt;
           margin: 12pt 0;
-          font-size: 8pt;
+          font-size: 8.5pt;
           text-align: justify;
-          background-color: #fafafa;
+          background-color: #ffffff;
+          color: #000000;
         }
         .signatories-table {
           width: 100%;
@@ -285,6 +305,9 @@ export const generateWordHtml = (options: WordExportOptions): string => {
           vertical-align: top;
           width: 33.33%;
           padding: 0 10pt;
+          font-weight: normal;
+          color: #000000;
+          background-color: #ffffff;
         }
         .sig-line {
           border-top: 1pt solid #000000;
@@ -357,46 +380,46 @@ export const generateWordHtml = (options: WordExportOptions): string => {
 
       <table class="footer-totals">
         <tr>
-          <td style="font-weight: bold; text-align: right; width: 70%; text-transform: uppercase;">Basic Real Property Tax (1% General Fund):</td>
-          <td style="font-weight: bold; text-align: right; width: 30%; font-family: 'Courier New', monospace;">${formatPesos(totals.basic)}</td>
+          <td style="text-align: right; width: 70%; text-transform: uppercase;">Basic Real Property Tax (1% General Fund):</td>
+          <td style="text-align: right; width: 30%;">${formatPesos(totals.basic)}</td>
         </tr>
         <tr>
-          <td style="font-weight: bold; text-align: right; text-transform: uppercase;">Special Education Fund (1% Local School Board):</td>
-          <td style="font-weight: bold; text-align: right; font-family: 'Courier New', monospace;">${formatPesos(totals.sef)}</td>
+          <td style="text-align: right; text-transform: uppercase;">Special Education Fund (1% Local School Board):</td>
+          <td style="text-align: right;">${formatPesos(totals.sef)}</td>
         </tr>
-        <tr style="background-color: #f3f4f6;">
-          <td style="font-weight: bold; font-size: 10.5pt; text-align: right; text-transform: uppercase;">Grand Total Tax Delinquency Payable:</td>
-          <td style="font-weight: bold; font-size: 11pt; text-align: right; font-family: 'Courier New', monospace; color: #064e3b;">${formatPesos(totals.grandTotal)}</td>
+        <tr>
+          <td style="text-align: right; text-transform: uppercase;">Grand Total Tax Delinquency Payable:</td>
+          <td style="text-align: right;">${formatPesos(totals.grandTotal)}</td>
         </tr>
       </table>
 
       ${isNoticeOfDelinquency ? `
       <div class="remedies-box">
-        <strong>STATUTORY REMEDIES FOR COLLECTION (RA 7160 SEC. 254 / 256):</strong><br>
+        STATUTORY REMEDIES FOR COLLECTION (RA 7160 SEC. 254 / 256):<br>
         Pursuant to Title II, Book II of Republic Act No. 7160, notice is hereby given that failure to pay the delinquent tax and penalty within the statutory demand period will compel the Municipal Treasurer to enforce statutory remedies concurrently or consecutively, including: (1) Administrative levy on real property subject to tax lien; (2) Distraint of personal property; or (3) Public auction sale to satisfy the lien, interest, and costs of sale.
       </div>` : ''}
 
       <table class="signatories-table">
         <tr>
           <td>
-            <div style="font-size: 8pt; font-weight: bold; text-transform: uppercase; color: #555555; margin-bottom: 25pt;">Prepared by:</div>
+            <div style="font-size: 8pt; text-transform: uppercase; color: #000000; margin-bottom: 25pt;">Prepared by:</div>
             <div class="sig-line">
-              <strong style="text-transform: uppercase; font-size: 9pt;">${preparedByName}</strong><br>
-              <span style="font-size: 8pt; color: #555555;">${preparedByTitle}</span>
+              <div style="text-transform: uppercase; font-size: 9pt;">${preparedByName}</div>
+              <div style="font-size: 8pt; color: #000000;">${preparedByTitle}</div>
             </div>
           </td>
           <td>
-            <div style="font-size: 8pt; font-weight: bold; text-transform: uppercase; color: #555555; margin-bottom: 25pt;">Received by:</div>
+            <div style="font-size: 8pt; text-transform: uppercase; color: #000000; margin-bottom: 25pt;">Received by:</div>
             <div class="sig-line">
-              <strong style="text-transform: uppercase; font-size: 9pt;">${receivedByName}</strong><br>
-              <span style="font-size: 8pt; color: #555555;">${receivedByTitle}</span>
+              <div style="text-transform: uppercase; font-size: 9pt;">${receivedByName}</div>
+              <div style="font-size: 8pt; color: #000000;">${receivedByTitle}</div>
             </div>
           </td>
           <td>
-            <div style="font-size: 8pt; font-weight: bold; text-transform: uppercase; color: #555555; margin-bottom: 25pt;">Approved by:</div>
+            <div style="font-size: 8pt; text-transform: uppercase; color: #000000; margin-bottom: 25pt;">Approved by:</div>
             <div class="sig-line">
-              <strong style="text-transform: uppercase; font-size: 9.5pt;">${approvedByName}</strong><br>
-              <span style="font-size: 8pt; font-weight: bold; color: #065f46; text-transform: uppercase;">${approvedByTitle}</span>
+              <div style="text-transform: uppercase; font-size: 9.5pt;">${approvedByName}</div>
+              <div style="font-size: 8pt; text-transform: uppercase;">${approvedByTitle}</div>
             </div>
           </td>
         </tr>
@@ -508,23 +531,22 @@ export const generateReceiptWordHtml = (receipt: OfficialReceipt): string => {
     totalPaid: 0,
   };
 
-  const tableRowsHtml = records.map((rec, idx) => {
+  const tableRowsHtml = records.map((rec) => {
     const period = rec.periodLabel || String(rec.year);
     const basic = (rec.basicTax ?? (rec.baseTax !== null ? rec.baseTax / 2 : 0)) || 0;
     const sef = (rec.sefTax ?? (rec.baseTax !== null ? rec.baseTax / 2 : 0)) || 0;
     const penalty = rec.penaltyAmount || 0;
     const discount = rec.discountAmount || 0;
     const totalDue = rec.totalDue || 0;
-    const rowBg = idx % 2 === 1 ? '#f9f9f9' : '#ffffff';
 
     return `
-      <tr style="background-color: ${rowBg};">
-        <td style="border: 1pt solid #000000; padding: 4pt 6pt; font-weight: bold; text-align: left;">${period}</td>
-        <td style="border: 1pt solid #000000; padding: 4pt 6pt; text-align: right; font-family: 'Courier New', monospace;">${formatPesos(basic)}</td>
-        <td style="border: 1pt solid #000000; padding: 4pt 6pt; text-align: right; font-family: 'Courier New', monospace;">${formatPesos(sef)}</td>
-        <td style="border: 1pt solid #000000; padding: 4pt 6pt; text-align: right; font-family: 'Courier New', monospace; color: ${penalty > 0 ? '#b91c1c' : '#000000'};">${penalty > 0 ? formatPesos(penalty) : ' - '}</td>
-        <td style="border: 1pt solid #000000; padding: 4pt 6pt; text-align: right; font-family: 'Courier New', monospace; color: ${discount > 0 ? '#047857' : '#000000'};">${discount > 0 ? `-${formatPesos(discount)}` : ' - '}</td>
-        <td style="border: 1pt solid #000000; padding: 4pt 6pt; text-align: right; font-family: 'Courier New', monospace; font-weight: bold;">${formatPesos(totalDue)}</td>
+      <tr>
+        <td style="border: 1pt solid #000000; padding: 4pt 6pt; font-weight: normal; text-align: left; color: #000000; font-family: 'Times New Roman', Times, serif;">${period}</td>
+        <td style="border: 1pt solid #000000; padding: 4pt 6pt; font-weight: normal; text-align: right; color: #000000; font-family: 'Times New Roman', Times, serif;">${formatPesos(basic)}</td>
+        <td style="border: 1pt solid #000000; padding: 4pt 6pt; font-weight: normal; text-align: right; color: #000000; font-family: 'Times New Roman', Times, serif;">${formatPesos(sef)}</td>
+        <td style="border: 1pt solid #000000; padding: 4pt 6pt; font-weight: normal; text-align: right; color: #000000; font-family: 'Times New Roman', Times, serif;">${penalty > 0 ? formatPesos(penalty) : ' - '}</td>
+        <td style="border: 1pt solid #000000; padding: 4pt 6pt; font-weight: normal; text-align: right; color: #000000; font-family: 'Times New Roman', Times, serif;">${discount > 0 ? `-${formatPesos(discount)}` : ' - '}</td>
+        <td style="border: 1pt solid #000000; padding: 4pt 6pt; font-weight: normal; text-align: right; color: #000000; font-family: 'Times New Roman', Times, serif;">${formatPesos(totalDue)}</td>
       </tr>
     `;
   }).join('');
@@ -550,33 +572,39 @@ export const generateReceiptWordHtml = (receipt: OfficialReceipt): string => {
           mso-page-orientation: portrait;
         }
         body {
-          font-family: 'Arial', 'Calibri', sans-serif;
-          font-size: 10pt;
+          font-family: 'Times New Roman', Times, serif;
+          font-size: 11pt;
           line-height: 1.25;
           color: #000000;
           background-color: #ffffff;
         }
+        table, th, td, p, div, span, h1, h2, h3 {
+          font-family: 'Times New Roman', Times, serif !important;
+        }
         .header-center {
           text-align: center;
           margin-bottom: 12pt;
+          color: #000000;
         }
         .republic {
-          font-size: 9pt;
+          font-size: 9.5pt;
           text-transform: uppercase;
           letter-spacing: 1.5pt;
           margin: 0;
-          font-weight: 600;
+          font-weight: normal;
+          color: #000000;
         }
         .lgu-name {
           font-size: 13pt;
           font-weight: bold;
           text-transform: uppercase;
           margin: 2pt 0;
+          color: #000000;
         }
         .office-name {
           font-size: 10.5pt;
-          font-weight: bold;
-          color: #065f46;
+          font-weight: normal;
+          color: #000000;
           text-transform: uppercase;
           margin: 1pt 0;
         }
@@ -585,52 +613,63 @@ export const generateReceiptWordHtml = (receipt: OfficialReceipt): string => {
           font-size: 11pt;
           font-weight: bold;
           text-transform: uppercase;
-          border: 1.5pt solid #000000;
+          border: 1pt solid #000000;
           padding: 3pt 10pt;
           margin-top: 6pt;
-          background-color: #f3f4f6;
+          background-color: #ffffff;
+          color: #000000;
         }
         .sub-clause {
-          font-size: 8.5pt;
+          font-size: 9pt;
           font-style: italic;
-          color: #333333;
+          color: #000000;
           margin-top: 3pt;
         }
         .meta-table {
           width: 100%;
           border-collapse: collapse;
           margin: 10pt 0;
-          font-size: 9pt;
+          font-size: 9.5pt;
         }
         .meta-table td {
           border: 1pt solid #000000;
           padding: 3pt 6pt;
           vertical-align: top;
+          font-weight: normal;
+          color: #000000;
+          background-color: #ffffff;
         }
         .meta-label {
-          font-size: 7.5pt;
+          font-size: 8pt;
           text-transform: uppercase;
-          font-weight: bold;
-          color: #444444;
+          font-weight: normal;
+          color: #000000;
           display: block;
         }
         .meta-val {
-          font-weight: bold;
+          font-weight: normal;
           font-size: 9.5pt;
+          color: #000000;
         }
         .data-table {
           width: 100%;
           border-collapse: collapse;
           margin: 10pt 0;
-          font-size: 9pt;
+          font-size: 9.5pt;
         }
         .data-table th {
-          border: 1.5pt solid #000000;
-          background-color: #e5e7eb;
+          border: 1pt solid #000000;
+          background-color: #ffffff;
           padding: 5pt 6pt;
-          font-weight: bold;
-          font-size: 8.5pt;
+          font-weight: normal;
+          font-size: 9.5pt;
           text-transform: uppercase;
+          color: #000000;
+        }
+        .data-table td {
+          font-weight: normal;
+          color: #000000;
+          background-color: #ffffff;
         }
         .footer-totals {
           width: 100%;
@@ -641,21 +680,24 @@ export const generateReceiptWordHtml = (receipt: OfficialReceipt): string => {
         .footer-totals td {
           border: 1pt solid #000000;
           padding: 4pt 8pt;
+          font-weight: normal;
+          color: #000000;
+          background-color: #ffffff;
         }
         .cert-box {
           border: 1pt solid #000000;
           padding: 6pt 8pt;
           margin: 10pt 0;
           font-size: 8.5pt;
-          background-color: #fafafa;
+          background-color: #ffffff;
+          color: #000000;
         }
         .void-banner {
-          border: 2pt solid #dc2626;
-          background-color: #fef2f2;
-          color: #b91c1c;
+          border: 1pt solid #000000;
+          background-color: #ffffff;
+          color: #000000;
           padding: 6pt 10pt;
           text-align: center;
-          font-weight: bold;
           margin-bottom: 10pt;
           font-size: 9.5pt;
         }
@@ -671,6 +713,9 @@ export const generateReceiptWordHtml = (receipt: OfficialReceipt): string => {
           vertical-align: top;
           width: 50%;
           padding: 0 15pt;
+          font-weight: normal;
+          color: #000000;
+          background-color: #ffffff;
         }
         .sig-line {
           border-top: 1pt solid #000000;
@@ -692,7 +737,7 @@ export const generateReceiptWordHtml = (receipt: OfficialReceipt): string => {
       ${isVoided ? `
       <div class="void-banner">
         *** OFFICIAL RECEIPT VOIDED & CANCELLED (COA AUDIT PROTOCOL) ***<br>
-        <span style="font-size: 8pt; font-weight: normal; color: #7f1d1d;">
+        <span style="font-size: 8.5pt; color: #000000;">
           Reason: ${receipt.voidReason || 'Supervisory Cancellation'} | 
           Authorized by: ${receipt.voidedBy || 'Administrator'} | 
           Date Voided: ${receipt.voidedAt ? new Date(receipt.voidedAt).toLocaleString('en-PH') : 'Recorded'}
@@ -703,7 +748,7 @@ export const generateReceiptWordHtml = (receipt: OfficialReceipt): string => {
         <tr>
           <td style="width: 50%;">
             <span class="meta-label">Accountable Form No. 51 Ref:</span>
-            <span class="meta-val" style="${isVoided ? 'color: #dc2626; text-decoration: line-through;' : 'color: #1e3a8a;'} font-family: monospace;">${receipt.receiptNo}</span>
+            <span class="meta-val">${receipt.receiptNo}</span>
           </td>
           <td style="width: 50%;">
             <span class="meta-label">Date & Time Issued:</span>
@@ -737,7 +782,7 @@ export const generateReceiptWordHtml = (receipt: OfficialReceipt): string => {
           </td>
           <td>
             <span class="meta-label">Assessed Valuation:</span>
-            <span class="meta-val" style="font-family: 'Courier New', monospace;">${formatPesos(receipt.property.assessedValue)}</span>
+            <span class="meta-val">${formatPesos(receipt.property.assessedValue)}</span>
           </td>
         </tr>
       </table>
@@ -757,22 +802,20 @@ export const generateReceiptWordHtml = (receipt: OfficialReceipt): string => {
           ${tableRowsHtml}
         </tbody>
         <tfoot>
-          <tr style="background-color: #f3f4f6; font-weight: bold;">
-            <td style="border: 1.5pt solid #000000; padding: 4pt 6pt; font-size: 8.5pt; text-transform: uppercase;">Grand Totals:</td>
-            <td style="border: 1.5pt solid #000000; padding: 4pt 6pt; text-align: right; font-family: 'Courier New', monospace;">${formatPesos(summary.basicTax)}</td>
-            <td style="border: 1.5pt solid #000000; padding: 4pt 6pt; text-align: right; font-family: 'Courier New', monospace;">${formatPesos(summary.sefTax)}</td>
-            <td style="border: 1.5pt solid #000000; padding: 4pt 6pt; text-align: right; font-family: 'Courier New', monospace; color: #b91c1c;">${formatPesos(summary.penalty)}</td>
-            <td style="border: 1.5pt solid #000000; padding: 4pt 6pt; text-align: right; font-family: 'Courier New', monospace; color: #047857;">${formatPesos(summary.discount)}</td>
-            <td style="border: 1.5pt solid #000000; padding: 4pt 6pt; text-align: right; font-family: 'Courier New', monospace; font-size: 10.5pt; font-weight: bold; background-color: #e5e7eb;">${formatPesos(summary.totalPaid)}</td>
+          <tr>
+            <td style="border: 1pt solid #000000; padding: 4pt 6pt; font-size: 8.5pt; text-transform: uppercase;">Grand Totals:</td>
+            <td style="border: 1pt solid #000000; padding: 4pt 6pt; text-align: right;">${formatPesos(summary.basicTax)}</td>
+            <td style="border: 1pt solid #000000; padding: 4pt 6pt; text-align: right;">${formatPesos(summary.sefTax)}</td>
+            <td style="border: 1pt solid #000000; padding: 4pt 6pt; text-align: right;">${formatPesos(summary.penalty)}</td>
+            <td style="border: 1pt solid #000000; padding: 4pt 6pt; text-align: right;">${formatPesos(summary.discount)}</td>
+            <td style="border: 1pt solid #000000; padding: 4pt 6pt; text-align: right;">${formatPesos(summary.totalPaid)}</td>
           </tr>
         </tfoot>
       </table>
 
       <div class="cert-box">
-        <strong>COMPLIANCE VERIFICATION: 
-          <span style="color: ${isVoided ? '#dc2626' : '#047857'};">${isVoided ? 'STATUS: CANCELLED / VOIDED (COA)' : 'STATUS: OFFICIALLY CLEARED (RA 7160)'}</span>
-        </strong><br>
-        <span style="font-size: 8pt; color: #333333;">
+        COMPLIANCE VERIFICATION: ${isVoided ? 'STATUS: CANCELLED / VOIDED (COA)' : 'STATUS: OFFICIALLY CLEARED (RA 7160)'}<br>
+        <span style="font-size: 8.5pt; color: #000000;">
           ${isVoided
             ? 'This Official Receipt has been revoked by the Municipal Treasury Supervisor under Commission on Audit (COA) cancellation protocols. Historical tax liability has been reverted.'
             : 'This document certifies that statutory Real Property Tax liabilities and Special Education Fund (SEF) levies for the periods listed above have been audited and officially updated as CLEARED in the municipal tax ledger.'}
@@ -782,17 +825,17 @@ export const generateReceiptWordHtml = (receipt: OfficialReceipt): string => {
       <table class="signatories-table">
         <tr>
           <td>
-            <div style="font-size: 8pt; font-weight: bold; text-transform: uppercase; color: #555555; margin-bottom: 25pt;">Assessed & Recorded By:</div>
+            <div style="font-size: 8pt; text-transform: uppercase; color: #000000; margin-bottom: 25pt;">Assessed & Recorded By:</div>
             <div class="sig-line">
-              <strong style="text-transform: uppercase; font-size: 9pt;">${receipt.postedBy}</strong><br>
-              <span style="font-size: 8pt; color: #555555;">Assessor / Clearance Officer</span>
+              <div style="text-transform: uppercase; font-size: 9pt;">${receipt.postedBy}</div>
+              <div style="font-size: 8pt; color: #000000;">Assessor / Clearance Officer</div>
             </div>
           </td>
           <td>
-            <div style="font-size: 8pt; font-weight: bold; text-transform: uppercase; color: #555555; margin-bottom: 25pt;">Approved & Certified By:</div>
+            <div style="font-size: 8pt; text-transform: uppercase; color: #000000; margin-bottom: 25pt;">Approved & Certified By:</div>
             <div class="sig-line">
-              <strong style="text-transform: uppercase; font-size: 9.5pt;">OFFICE OF THE MUNICIPAL TREASURER</strong><br>
-              <span style="font-size: 8pt; font-weight: bold; color: #065f46; text-transform: uppercase;">Municipality of Santa Rosa</span>
+              <div style="text-transform: uppercase; font-size: 9.5pt;">OFFICE OF THE MUNICIPAL TREASURER</div>
+              <div style="font-size: 8pt; text-transform: uppercase;">Municipality of Santa Rosa</div>
             </div>
           </td>
         </tr>
@@ -821,5 +864,393 @@ export const downloadReceiptWordDoc = (receipt: OfficialReceipt, filename?: stri
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
+};
+
+/**
+ * Downloads generated content as an Excel (.xls) file
+ */
+export const downloadXlsFile = (content: string, filename: string): void => {
+  const blob = new Blob(['\ufeff', content], {
+    type: 'application/vnd.ms-excel;charset=utf-8;',
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
+
+/**
+ * Generates an Excel-compliant (.xls) HTML spreadsheet matching the canonical
+ * Santa Rosa Municipal Treasurer RPT COMPUTATION.xls layout from official records.
+ */
+export const generateNoticeOfDelinquencyXlsHtml = (
+  property: Property,
+  records: TaxYearRecord[],
+  totals: DocumentExportTotals,
+  dateStr?: string
+): string => {
+  const now = new Date();
+  const monthNames = [
+    'JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE',
+    'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'
+  ];
+  const currentMonth = monthNames[now.getMonth()];
+  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const currentYear = now.getFullYear();
+  const dayRange = `01-${lastDay}`;
+  const startYear = property.delinquencyStartYear ?? (property.lastPaidYear + 1);
+
+  const tableRowsHtml = records.map((r, idx) => {
+    const yearLabel = r.periodLabel || String(r.year);
+    const isPending = Boolean(r.isMissingValuation || r.isUnverifiedHistorical || r.totalDue === null);
+    const unpaidTaxesVal = isPending || r.baseTax === null ? ' - ' : (r.baseTax / 2).toFixed(2);
+    
+    const diff = (r.penaltyAmount || 0) - (r.discountAmount || 0);
+    let penaltyOrDiscountVal = ' - ';
+    let penaltyColor = '#000000';
+    if (!isPending && r.penaltyAmount !== null) {
+      if (diff > 0) {
+        penaltyOrDiscountVal = (diff / 2).toFixed(2);
+        penaltyColor = '#ff0000';
+      } else if (diff < 0) {
+        penaltyOrDiscountVal = (Math.abs(diff) / 2).toFixed(2);
+        penaltyColor = '#00b0f0';
+      }
+    }
+    const totalDelinquencyVal = isPending || r.totalDue === null ? ' - ' : (r.totalDue / 2).toFixed(2);
+
+    const tdCell = idx === 0 ? property.tdNumber : '';
+    const areaCell = idx === 0 ? String(property.lotAreaSqm || 100) : '';
+    const avCell = idx === 0 ? property.assessedValue.toFixed(2) : (r.assessedValue && r.assessedValue !== property.assessedValue ? r.assessedValue.toFixed(2) : '');
+    const locCell = idx === 0 ? `${property.barangay}, Santa Rosa` : '';
+    const classCell = idx === 0 ? property.propertyClass : '';
+
+    return `
+      <tr style="height: 16pt;">
+        <td style="border: 1pt solid #000000; text-align: center; mso-number-format: '\\@';">${tdCell}</td>
+        <td style="border: 1pt solid #000000; text-align: center;">${areaCell}</td>
+        <td style="border: 1pt solid #000000; text-align: right; mso-number-format: '\\#\\,\\#\\#0\\.00';">${avCell}</td>
+        <td style="border: 1pt solid #000000; text-align: center;">${locCell}</td>
+        <td style="border: 1pt solid #000000; text-align: center;">${classCell}</td>
+        <td style="border: 1pt solid #000000;"></td>
+        <td style="border: 1pt solid #000000; text-align: center; font-weight: bold; mso-number-format: '\\@';">${yearLabel}</td>
+        <td style="border: 1pt solid #000000; text-align: right; mso-number-format: '\\#\\,\\#\\#0\\.00';">${unpaidTaxesVal}</td>
+        <td style="border: 1pt solid #000000; text-align: right; color: ${penaltyColor}; mso-number-format: '\\#\\,\\#\\#0\\.00';">${penaltyOrDiscountVal}</td>
+        <td style="border: 1pt solid #000000; text-align: right; mso-number-format: '\\#\\,\\#\\#0\\.00';">${totalDelinquencyVal}</td>
+      </tr>
+    `;
+  }).join('');
+
+  return `
+    <html xmlns:o="urn:schemas-microsoft-com:office:office"
+          xmlns:x="urn:schemas-microsoft-com:office:excel"
+          xmlns="http://www.w3.org/TR/REC-html40">
+    <head>
+      <meta charset="utf-8">
+      <!--[if gte mso 9]>
+      <xml>
+        <x:ExcelWorkbook>
+          <x:ExcelWorksheets>
+            <x:ExcelWorksheet>
+              <x:Name>${currentMonth.slice(0, 3)} ${currentYear}</x:Name>
+              <x:WorksheetOptions>
+                <x:DisplayGridlines/>
+                <x:Print>
+                  <x:ValidPrinterInfo/>
+                  <x:PaperSizeIndex>9</x:PaperSizeIndex>
+                  <x:HorizontalResolution>600</x:HorizontalResolution>
+                  <x:VerticalResolution>600</x:VerticalResolution>
+                </x:Print>
+              </x:WorksheetOptions>
+            </x:ExcelWorksheet>
+          </x:ExcelWorksheets>
+        </x:ExcelWorkbook>
+      </xml>
+      <![endif]-->
+      <style>
+        body { font-family: Arial, sans-serif; font-size: 10pt; }
+        table { border-collapse: collapse; font-family: Arial, sans-serif; font-size: 10pt; }
+        td, th { vertical-align: middle; }
+      </style>
+    </head>
+    <body>
+      <table border="0" cellspacing="0" cellpadding="2">
+        <tr style="height: 20pt;"><td colspan="10" align="center" style="font-weight: bold; font-size: 11pt;">REPUBLIC OF THE PHILIPPINES</td></tr>
+        <tr style="height: 18pt;"><td colspan="10" align="center" style="font-weight: bold; font-size: 10pt;">PROVINCE OF NUEVA ECIJA</td></tr>
+        <tr style="height: 18pt;"><td colspan="10" align="center" style="font-weight: bold; font-size: 10pt;">Office of the Treasurer</td></tr>
+        <tr style="height: 10pt;"><td colspan="10"></td></tr>
+        <tr style="height: 20pt;"><td colspan="10" align="center" style="font-weight: bold; font-size: 11pt;">NOTICE OF DELIQUENCY IN THE PAYMENT OF REAL PROPERTY TAX IN THE</td></tr>
+        <tr style="height: 10pt;"><td colspan="10"></td></tr>
+        <tr style="height: 20pt;">
+          <td colspan="4"></td>
+          <td colspan="2" align="center" style="font-weight: bold; font-size: 10pt;">OR #</td>
+          <td></td>
+          <td align="right" style="font-weight: bold; font-size: 10pt;">Date:</td>
+          <td colspan="2" align="center" style="font-weight: bold; font-size: 10pt;">${dateStr ? dateStr.toUpperCase() : `${currentMonth} <font color="red">${dayRange}</font> ${currentYear}`}</td>
+        </tr>
+        <tr style="height: 20pt;">
+          <td colspan="4"></td>
+          <td colspan="2" align="center" style="font-weight: bold; font-size: 9.5pt;">LAST PAYMENT: ${property.lastPaidYear} (Q${property.lastPaidQuarter || 4})</td>
+          <td colspan="4"></td>
+        </tr>
+        <tr style="height: 10pt;"><td colspan="10"></td></tr>
+        <tr style="height: 18pt;">
+          <td colspan="10" style="font-size: 9.5pt;">&nbsp;&nbsp;&nbsp;&nbsp;Notice is hereby served pursuant to the provision of Section 254, Republic Act No. 7160 ( Local Government Code of 1991 ) the Real Property Tax for Calendar</td>
+        </tr>
+        <tr style="height: 18pt;">
+          <td colspan="10" style="font-size: 9.5pt;">year &nbsp;<u>&nbsp;&nbsp;<b>${startYear}</b>&nbsp;&nbsp;</u>&nbsp; and the previous years, has been delinquent with the respect to the figures.</td>
+        </tr>
+        <tr style="height: 8pt;"><td colspan="10"></td></tr>
+        
+        <!-- Table Header (Row 10) -->
+        <tr style="height: 25pt; font-weight: bold; text-align: center; font-size: 9.5pt;">
+          <td style="border: 1.5pt solid #000000; width: 120pt;">Tax Declaration No.</td>
+          <td style="border: 1.5pt solid #000000; width: 60pt;">Area</td>
+          <td style="border: 1.5pt solid #000000; width: 75pt;">Assess<br/>Value</td>
+          <td style="border: 1.5pt solid #000000; width: 120pt;">Location</td>
+          <td style="border: 1.5pt solid #000000; width: 95pt;">Kind of Property</td>
+          <td style="border: 1.5pt solid #000000; width: 25pt;"></td>
+          <td style="border: 1.5pt solid #000000; width: 75pt;">Year</td>
+          <td style="border: 1.5pt solid #000000; width: 85pt;">Unpaid Taxes</td>
+          <td style="border: 1.5pt solid #000000; width: 105pt;"><font color="red">Penalties</font> /<font color="#00b0f0">Discount</font></td>
+          <td style="border: 1.5pt solid #000000; width: 110pt;">Total Tax Delinquency</td>
+        </tr>
+
+        <!-- Table Data Rows -->
+        ${tableRowsHtml}
+
+        <!-- Summary Totals Rows -->
+        <tr style="height: 18pt;">
+          <td style="border: 1pt solid #000000;"></td>
+          <td style="border: 1pt solid #000000;"></td>
+          <td style="border: 1pt solid #000000;"></td>
+          <td style="border: 1pt solid #000000;"></td>
+          <td style="border: 1pt solid #000000;"></td>
+          <td style="border: 1pt solid #000000;"></td>
+          <td style="border: 1pt solid #000000;"></td>
+          <td style="border: 1pt solid #000000;"></td>
+          <td align="center" style="border: 1.5pt solid #000000; font-weight: bold;">BASIC</td>
+          <td align="right" style="border: 1.5pt solid #000000; font-weight: bold; mso-number-format: '\\#\\,\\#\\#0\\.00';">${totals.basic > 0 ? totals.basic.toFixed(2) : ' - '}</td>
+        </tr>
+        <tr style="height: 18pt;">
+          <td style="border: 1pt solid #000000;"></td>
+          <td style="border: 1pt solid #000000;"></td>
+          <td style="border: 1pt solid #000000;"></td>
+          <td style="border: 1pt solid #000000;"></td>
+          <td style="border: 1pt solid #000000;"></td>
+          <td style="border: 1pt solid #000000;"></td>
+          <td style="border: 1pt solid #000000;"></td>
+          <td style="border: 1pt solid #000000;"></td>
+          <td align="center" style="border: 1.5pt solid #000000; font-weight: bold;">SEF</td>
+          <td align="right" style="border: 1.5pt solid #000000; font-weight: bold; mso-number-format: '\\#\\,\\#\\#0\\.00';">${totals.sef > 0 ? totals.sef.toFixed(2) : ' - '}</td>
+        </tr>
+        <tr style="height: 18pt;">
+          <td style="border: 1pt solid #000000;"></td>
+          <td style="border: 1pt solid #000000;"></td>
+          <td style="border: 1pt solid #000000;"></td>
+          <td style="border: 1pt solid #000000;"></td>
+          <td style="border: 1pt solid #000000;"></td>
+          <td style="border: 1pt solid #000000;"></td>
+          <td style="border: 1pt solid #000000;"></td>
+          <td style="border: 1pt solid #000000;"></td>
+          <td align="center" style="border: 1.5pt solid #000000; font-weight: bold;">TOTAL</td>
+          <td align="right" style="border: 1.5pt solid #000000; font-weight: bold; mso-number-format: '\\#\\,\\#\\#0\\.00'; color: ${totals.grandTotal > 0 ? '#000000' : 'red'};">${totals.grandTotal > 0 ? totals.grandTotal.toFixed(2) : ' - '}</td>
+        </tr>
+
+        <!-- Signatures Spacer -->
+        <tr style="height: 20pt;"><td colspan="10"></td></tr>
+
+        <!-- Signatories Header Row -->
+        <tr style="height: 16pt;">
+          <td colspan="3" style="font-size: 9pt;">Prepared by:</td>
+          <td></td>
+          <td colspan="3" style="font-size: 9pt;">Received by:</td>
+          <td></td>
+          <td colspan="2" align="center" style="font-size: 9.5pt; font-weight: bold;">Myra V. Cunanan</td>
+        </tr>
+
+        <!-- Signatures Underlines & Titles -->
+        <tr style="height: 22pt;">
+          <td colspan="3" align="center" style="border-top: 1pt solid #000000; font-size: 9pt;">Revenue Collection Clerk</td>
+          <td></td>
+          <td colspan="3" align="center" style="border-top: 1pt solid #000000; font-size: 9pt;">Signature over printed name & Date</td>
+          <td></td>
+          <td colspan="2" align="center" style="border-top: 1pt solid #000000; font-size: 9pt; font-weight: bold;">Municipal Treasurer</td>
+        </tr>
+      </table>
+    </body>
+    </html>
+  `;
+};
+
+/**
+ * Downloads Notice of Delinquency in native Excel (.xls) format matching the Santa Rosa template
+ */
+export const downloadNoticeOfDelinquencyXls = (
+  property: Property,
+  records: TaxYearRecord[],
+  totals: DocumentExportTotals,
+  filename?: string
+): void => {
+  const htmlContent = generateNoticeOfDelinquencyXlsHtml(property, records, totals);
+  const targetFilename = filename || `COMPUTATION_${property.tdNumber}.xls`;
+  downloadXlsFile(htmlContent, targetFilename);
+};
+
+/**
+ * Generates an Excel-compliant (.xls) HTML spreadsheet for the Official Receipt / Clearance Slip
+ */
+export const generateReceiptXlsHtml = (receipt: OfficialReceipt): string => {
+  const isVoided = receipt.status === 'VOIDED';
+  const issuedDate = new Date(receipt.date).toLocaleString('en-PH');
+  const records = receipt.itemizedRecords || [];
+
+  const summary = receipt.summary || {
+    basicTax: 0,
+    sefTax: 0,
+    penalty: 0,
+    discount: 0,
+    totalPaid: 0,
+  };
+
+  const tableRowsHtml = records.map((rec) => {
+    const period = rec.periodLabel || String(rec.year);
+    const basic = (rec.basicTax ?? (rec.baseTax !== null ? rec.baseTax / 2 : 0)) || 0;
+    const sef = (rec.sefTax ?? (rec.baseTax !== null ? rec.baseTax / 2 : 0)) || 0;
+    const penalty = rec.penaltyAmount || 0;
+    const discount = rec.discountAmount || 0;
+    const totalDue = rec.totalDue || 0;
+
+    return `
+      <tr style="height: 18pt;">
+        <td style="border: 1pt solid #000000; text-align: center; font-weight: bold; mso-number-format: '\\@';">${period}</td>
+        <td style="border: 1pt solid #000000; text-align: right; mso-number-format: '\\#\\,\\#\\#0\\.00';">${basic.toFixed(2)}</td>
+        <td style="border: 1pt solid #000000; text-align: right; mso-number-format: '\\#\\,\\#\\#0\\.00';">${sef.toFixed(2)}</td>
+        <td style="border: 1pt solid #000000; text-align: right; color: ${penalty > 0 ? 'red' : '#000000'}; mso-number-format: '\\#\\,\\#\\#0\\.00';">${penalty > 0 ? penalty.toFixed(2) : ' - '}</td>
+        <td style="border: 1pt solid #000000; text-align: right; color: ${discount > 0 ? '#00b0f0' : '#000000'}; mso-number-format: '\\#\\,\\#\\#0\\.00';">${discount > 0 ? `-${discount.toFixed(2)}` : ' - '}</td>
+        <td style="border: 1pt solid #000000; text-align: right; font-weight: bold; mso-number-format: '\\#\\,\\#\\#0\\.00';">${totalDue.toFixed(2)}</td>
+      </tr>
+    `;
+  }).join('');
+
+  return `
+    <html xmlns:o="urn:schemas-microsoft-com:office:office"
+          xmlns:x="urn:schemas-microsoft-com:office:excel"
+          xmlns="http://www.w3.org/TR/REC-html40">
+    <head>
+      <meta charset="utf-8">
+      <!--[if gte mso 9]>
+      <xml>
+        <x:ExcelWorkbook>
+          <x:ExcelWorksheets>
+            <x:ExcelWorksheet>
+              <x:Name>CLEARANCE_SLIP</x:Name>
+              <x:WorksheetOptions>
+                <x:DisplayGridlines/>
+              </x:WorksheetOptions>
+            </x:ExcelWorksheet>
+          </x:ExcelWorksheets>
+        </x:ExcelWorkbook>
+      </xml>
+      <![endif]-->
+      <style>
+        body { font-family: Arial, sans-serif; font-size: 10pt; }
+        table { border-collapse: collapse; font-family: Arial, sans-serif; font-size: 10pt; }
+        td, th { vertical-align: middle; }
+      </style>
+    </head>
+    <body>
+      <table border="0" cellspacing="0" cellpadding="2">
+        <tr style="height: 20pt;"><td colspan="6" align="center" style="font-weight: bold; font-size: 11pt;">REPUBLIC OF THE PHILIPPINES</td></tr>
+        <tr style="height: 18pt;"><td colspan="6" align="center" style="font-weight: bold; font-size: 10pt;">PROVINCE OF NUEVA ECIJA</td></tr>
+        <tr style="height: 18pt;"><td colspan="6" align="center" style="font-weight: bold; font-size: 10pt;">OFFICE OF THE MUNICIPAL TREASURER & ASSESSOR - SANTA ROSA</td></tr>
+        <tr style="height: 10pt;"><td colspan="6"></td></tr>
+        <tr style="height: 20pt;"><td colspan="6" align="center" style="font-weight: bold; font-size: 11pt;">OFFICIAL REAL PROPERTY TAX CLEARANCE SLIP & LEDGER</td></tr>
+        <tr style="height: 16pt;"><td colspan="6" align="center" style="font-size: 9pt;">Accountable Form No. 51 Tax Ledger Slip (RA 7160)</td></tr>
+        <tr style="height: 10pt;"><td colspan="6"></td></tr>
+
+        <!-- Metadata Matrix -->
+        <tr style="height: 18pt;">
+          <td colspan="3" style="border: 1pt solid #000000; font-size: 9pt;"><b>AF-51 Ref:</b> ${receipt.receiptNo}</td>
+          <td colspan="3" style="border: 1pt solid #000000; font-size: 9pt;"><b>Date & Time:</b> ${issuedDate}</td>
+        </tr>
+        <tr style="height: 18pt;">
+          <td colspan="3" style="border: 1pt solid #000000; font-size: 9pt;"><b>Tax Declaration No.:</b> ${receipt.property.tdNumber}</td>
+          <td colspan="3" style="border: 1pt solid #000000; font-size: 9pt;"><b>Property Index No.:</b> ${receipt.property.pin || 'NOT SPECIFIED'}</td>
+        </tr>
+        <tr style="height: 18pt;">
+          <td colspan="3" style="border: 1pt solid #000000; font-size: 9pt;"><b>Owner:</b> ${receipt.property.ownerName}</td>
+          <td colspan="3" style="border: 1pt solid #000000; font-size: 9pt;"><b>Location:</b> ${receipt.property.address}, Brgy. ${receipt.property.barangay}</td>
+        </tr>
+        <tr style="height: 18pt;">
+          <td colspan="3" style="border: 1pt solid #000000; font-size: 9pt;"><b>Classification:</b> ${receipt.property.propertyClass}</td>
+          <td colspan="3" style="border: 1pt solid #000000; font-size: 9pt;"><b>Assessed Value:</b> ₱${receipt.property.assessedValue.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
+        </tr>
+        <tr style="height: 10pt;"><td colspan="6"></td></tr>
+
+        <!-- Table Header -->
+        <tr style="height: 22pt; font-weight: bold; text-align: center; font-size: 9.5pt;">
+          <td style="border: 1.5pt solid #000000; width: 110pt;">Tax Period / Year</td>
+          <td style="border: 1.5pt solid #000000; width: 90pt;">Basic Tax (1%)</td>
+          <td style="border: 1.5pt solid #000000; width: 90pt;">SEF Tax (1%)</td>
+          <td style="border: 1.5pt solid #000000; width: 90pt;">Penalty (2%/mo)</td>
+          <td style="border: 1.5pt solid #000000; width: 90pt;">Discount</td>
+          <td style="border: 1.5pt solid #000000; width: 100pt;">Subtotal</td>
+        </tr>
+
+        <!-- Data Rows -->
+        ${tableRowsHtml}
+
+        <!-- Grand Totals -->
+        <tr style="height: 20pt; font-weight: bold;">
+          <td align="center" style="border: 1.5pt solid #000000; font-size: 9pt;">Grand Totals:</td>
+          <td align="right" style="border: 1.5pt solid #000000; mso-number-format: '\\#\\,\\#\\#0\\.00';">${summary.basicTax.toFixed(2)}</td>
+          <td align="right" style="border: 1.5pt solid #000000; mso-number-format: '\\#\\,\\#\\#0\\.00';">${summary.sefTax.toFixed(2)}</td>
+          <td align="right" style="border: 1.5pt solid #000000; mso-number-format: '\\#\\,\\#\\#0\\.00'; color: ${summary.penalty > 0 ? 'red' : '#000000'};">${summary.penalty > 0 ? summary.penalty.toFixed(2) : ' - '}</td>
+          <td align="right" style="border: 1.5pt solid #000000; mso-number-format: '\\#\\,\\#\\#0\\.00'; color: ${summary.discount > 0 ? '#00b0f0' : '#000000'};">${summary.discount > 0 ? `-${summary.discount.toFixed(2)}` : ' - '}</td>
+          <td align="right" style="border: 1.5pt solid #000000; font-size: 10pt; mso-number-format: '\\#\\,\\#\\#0\\.00';">${summary.totalPaid.toFixed(2)}</td>
+        </tr>
+
+        <tr style="height: 12pt;"><td colspan="6"></td></tr>
+
+        <!-- Compliance Box -->
+        <tr style="height: 22pt;">
+          <td colspan="6" style="border: 1pt solid #000000; font-size: 9pt; padding: 4pt;">
+            <b>COMPLIANCE VERIFICATION:</b> ${isVoided ? 'STATUS: CANCELLED / VOIDED (COA PROTOCOL)' : 'STATUS: OFFICIALLY CLEARED (RA 7160)'}<br/>
+            ${isVoided ? 'This receipt has been revoked under supervisory authorization.' : 'This document certifies that statutory RPT and SEF liabilities have been audited and officially updated as CLEARED.'}
+          </td>
+        </tr>
+
+        <tr style="height: 20pt;"><td colspan="6"></td></tr>
+
+        <!-- Signatories -->
+        <tr style="height: 16pt;">
+          <td colspan="3" style="font-size: 9pt;">Assessed & Recorded By:</td>
+          <td colspan="3" style="font-size: 9pt;">Approved & Certified By:</td>
+        </tr>
+        <tr style="height: 20pt;">
+          <td colspan="3" align="center" style="border-top: 1pt solid #000000; font-size: 9pt;">${receipt.postedBy}<br/><span style="font-size: 8pt;">Assessor / Clearance Officer</span></td>
+          <td colspan="3" align="center" style="border-top: 1pt solid #000000; font-size: 9pt; font-weight: bold;">OFFICE OF THE MUNICIPAL TREASURER<br/><span style="font-size: 8pt; font-weight: normal;">Municipality of Santa Rosa</span></td>
+        </tr>
+      </table>
+    </body>
+    </html>
+  `;
+};
+
+/**
+ * Downloads Clearance Slip in native Excel (.xls) format
+ */
+export const downloadReceiptXls = (
+  receipt: OfficialReceipt,
+  filename?: string
+): void => {
+  const htmlContent = generateReceiptXlsHtml(receipt);
+  const targetFilename = filename || `Clearance_Slip_${receipt.receiptNo}_${receipt.property.tdNumber}.xls`;
+  downloadXlsFile(htmlContent, targetFilename);
 };
 

@@ -5,6 +5,8 @@ import {
   generateWordHtml,
   generateReceiptCsv,
   generateReceiptWordHtml,
+  generateNoticeOfDelinquencyXlsHtml,
+  generateReceiptXlsHtml,
   formatPesos,
   DocumentExportTotals,
 } from './documentExport';
@@ -125,14 +127,16 @@ describe('utils/documentExport', () => {
     expect(wordHtml).toContain('<w:WordDocument>');
     expect(wordHtml).toContain('<w:View>Print</w:View>');
 
-    // Check letterhead and metadata
+    // Check letterhead, font and metadata
+    expect(wordHtml).toContain('Times New Roman');
     expect(wordHtml).toContain('Municipality of Santa Rosa');
     expect(wordHtml).toContain('Office of the Municipal Treasurer');
     expect(wordHtml).toContain('TD-SR-2026-001');
     expect(wordHtml).toContain('Juan Dela Cruz');
 
-    // Check table borders and cells
-    expect(wordHtml).toContain('border: 1.5pt solid #000000;');
+    // Check table borders, normal weight (no bold in tables), and amounts
+    expect(wordHtml).toContain('border: 1pt solid #000000;');
+    expect(wordHtml).toContain('font-weight: normal;');
     expect(wordHtml).toContain('₱6,160.00');
     expect(wordHtml).toContain('₱12,320.00');
     expect(wordHtml).toContain('Myra V. Cunanan');
@@ -207,6 +211,8 @@ describe('utils/documentExport', () => {
 
     expect(wordHtml).toContain('xmlns:w="urn:schemas-microsoft-com:office:word"');
     expect(wordHtml).toContain('<w:WordDocument>');
+    expect(wordHtml).toContain('Times New Roman');
+    expect(wordHtml).toContain('font-weight: normal;');
     expect(wordHtml).toContain('OFFICIAL REAL PROPERTY TAX CLEARANCE SLIP & LEDGER');
     expect(wordHtml).toContain('AF51-4500013');
     expect(wordHtml).toContain('17-23001-84332');
@@ -231,5 +237,65 @@ describe('utils/documentExport', () => {
     expect(voidedCsv).toContain('STATUS:,"VOIDED / CANCELLED (COA)"');
     expect(voidedCsv).toContain('CANCELLATION REASON:,"Supervisory correction"');
     expect(voidedCsv).toContain('CANCELLED / VOIDED UNDER COA PROTOCOLS');
+  });
+
+  it('generates native Excel (.xls) spreadsheet matching canonical Santa Rosa template', () => {
+    const xlsHtml = generateNoticeOfDelinquencyXlsHtml(
+      mockProperty,
+      mockRecords,
+      mockTotals,
+      'SEPTEMBER 01-31 2026'
+    );
+
+    expect(xlsHtml).toContain('xmlns:x="urn:schemas-microsoft-com:office:excel"');
+    expect(xlsHtml).toContain('<x:ExcelWorkbook>');
+    expect(xlsHtml).toContain('<x:DisplayGridlines/>');
+    expect(xlsHtml).toContain('REPUBLIC OF THE PHILIPPINES');
+    expect(xlsHtml).toContain('PROVINCE OF NUEVA ECIJA');
+    expect(xlsHtml).toContain('Office of the Treasurer');
+    expect(xlsHtml).toContain('NOTICE OF DELIQUENCY IN THE PAYMENT OF REAL PROPERTY TAX IN THE');
+    expect(xlsHtml).toContain('Date:');
+    expect(xlsHtml).toContain('SEPTEMBER 01-31 2026');
+    expect(xlsHtml).toContain('LAST PAYMENT: 2023 (Q4)');
+
+    // Table Header check matching user image
+    expect(xlsHtml).toContain('Tax Declaration No.');
+    expect(xlsHtml).toContain('Area');
+    expect(xlsHtml).toContain('Assess<br/>Value');
+    expect(xlsHtml).toContain('Location');
+    expect(xlsHtml).toContain('Kind of Property');
+    expect(xlsHtml).toContain('Year');
+    expect(xlsHtml).toContain('Unpaid Taxes');
+    expect(xlsHtml).toContain('<font color="red">Penalties</font> /<font color="#00b0f0">Discount</font>');
+    expect(xlsHtml).toContain('Total Tax Delinquency');
+
+    // Data row and totals
+    expect(xlsHtml).toContain('TD-SR-2026-001');
+    expect(xlsHtml).toContain('BASIC');
+    expect(xlsHtml).toContain('SEF');
+    expect(xlsHtml).toContain('TOTAL');
+    expect(xlsHtml).toContain('6160.00');
+    expect(xlsHtml).toContain('12320.00');
+
+    // Signatories
+    expect(xlsHtml).toContain('Prepared by:');
+    expect(xlsHtml).toContain('Received by:');
+    expect(xlsHtml).toContain('Revenue Collection Clerk');
+    expect(xlsHtml).toContain('Myra V. Cunanan');
+    expect(xlsHtml).toContain('Municipal Treasurer');
+  });
+
+  it('generates native Excel (.xls) Clearance Slip with AF-51 structure', () => {
+    const receiptXls = generateReceiptXlsHtml(mockReceipt);
+
+    expect(receiptXls).toContain('xmlns:x="urn:schemas-microsoft-com:office:excel"');
+    expect(receiptXls).toContain('<x:Name>CLEARANCE_SLIP</x:Name>');
+    expect(receiptXls).toContain('OFFICIAL REAL PROPERTY TAX CLEARANCE SLIP & LEDGER');
+    expect(receiptXls).toContain('AF-51 Ref:</b> AF51-4500013');
+    expect(receiptXls).toContain('17-23001-84332');
+    expect(receiptXls).toContain('Adoracion Aquino');
+    expect(receiptXls).toContain('Grand Totals:');
+    expect(receiptXls).toContain('OFFICIALLY CLEARED (RA 7160)');
+    expect(receiptXls).toContain('Helen Abejuro (Assessor • Assessor-Desk-03)');
   });
 });
