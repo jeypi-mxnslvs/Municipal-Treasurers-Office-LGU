@@ -63,7 +63,9 @@ export const NoticeOfDelinquencyModal: React.FC<NoticeOfDelinquencyModalProps> =
     if (!itemizedRows || itemizedRows.length === 0) {
       return { basic: 0, sef: 0, grandTotal: 0 };
     }
-    const basicTotal = itemizedRows.reduce((sum, r) => sum + (r.totalDue / 2), 0);
+    const basicTotal = itemizedRows
+      .filter((r) => !r.isUnverifiedHistorical && r.totalDue !== null)
+      .reduce((sum, r) => sum + ((r.totalDue ?? 0) / 2), 0);
     const sefTotal = basicTotal;
     const grandTotal = basicTotal + sefTotal;
     return {
@@ -97,15 +99,16 @@ export const NoticeOfDelinquencyModal: React.FC<NoticeOfDelinquencyModalProps> =
 
     itemizedRows.forEach((r: TaxYearRecord) => {
       const yearLabel = r.periodLabel || String(r.year);
-      const unpaidTaxes = r.baseTax / 2;
-      const penaltyOrDiscount = (r.penaltyAmount - (r.discountAmount || 0)) / 2;
-      const totalDelinquency = r.totalDue / 2;
-      const assessedValStr = r.isMissingValuation
+      const isPending = Boolean(r.isMissingValuation || r.isUnverifiedHistorical || r.totalDue === null);
+      const unpaidTaxes = isPending || r.baseTax === null ? 'Pending RPTAR' : (r.baseTax / 2).toFixed(2);
+      const penaltyOrDiscount = isPending || r.penaltyAmount === null ? 'Pending RPTAR' : ((r.penaltyAmount - (r.discountAmount || 0)) / 2).toFixed(2);
+      const totalDelinquency = isPending || r.totalDue === null ? 'Pending RPTAR' : (r.totalDue / 2).toFixed(2);
+      const assessedValStr = isPending
         ? 'Pending RPTAR'
         : (r.assessedValue ?? activeProperty.assessedValue).toFixed(2);
 
       lines.push(
-        `"${activeProperty.tdNumber}",,"${activeProperty.lotAreaSqm || 'N/A'}","${assessedValStr}","${activeProperty.barangay}, Santa Rosa",,"${activeProperty.propertyClass}",,,,${yearLabel},${unpaidTaxes.toFixed(2)},,${penaltyOrDiscount.toFixed(2)},,${totalDelinquency.toFixed(2)},,`
+        `"${activeProperty.tdNumber}",,"${activeProperty.lotAreaSqm || 'N/A'}","${assessedValStr}","${activeProperty.barangay}, Santa Rosa",,"${activeProperty.propertyClass}",,,,${yearLabel},${unpaidTaxes},,${penaltyOrDiscount},,${totalDelinquency},,`
       );
     });
 
@@ -295,9 +298,10 @@ export const NoticeOfDelinquencyModal: React.FC<NoticeOfDelinquencyModalProps> =
                   const label = r.periodLabel || String(r.year);
                   const isDelinquent = r.status === 'Delinquent';
                   const isCleared = r.status === 'Cleared';
-                  const unpaidTaxes = isCleared ? 0 : r.baseTax / 2;
-                  const penaltyOrDiscount = isCleared ? 0 : (r.penaltyAmount - (r.discountAmount || 0)) / 2;
-                  const totalDelinquency = isCleared ? 0 : r.totalDue / 2;
+                  const isPending = Boolean(r.isMissingValuation || r.isUnverifiedHistorical || r.totalDue === null);
+                  const unpaidTaxes = isCleared || isPending || r.baseTax === null ? undefined : r.baseTax / 2;
+                  const penaltyOrDiscount = isCleared || isPending || r.penaltyAmount === null ? undefined : (r.penaltyAmount - (r.discountAmount || 0)) / 2;
+                  const totalDelinquency = isCleared || isPending || r.totalDue === null ? undefined : r.totalDue / 2;
 
                   return (
                     <tr key={idx} className={isDelinquent ? 'bg-amber-50/40' : ''}>
@@ -307,7 +311,9 @@ export const NoticeOfDelinquencyModal: React.FC<NoticeOfDelinquencyModalProps> =
                           <span className="ml-2 text-[10px] font-normal text-emerald-600 font-sans">(Cleared)</span>
                         )}
                         {r.isMissingValuation && (
-                          <span className="ml-2 text-[10px] font-semibold text-amber-700 font-sans bg-amber-100 px-1 py-0.5 rounded">⚠️ RPTAR Req.</span>
+                          <span className="ml-2 text-[10px] font-semibold text-amber-700 font-sans bg-amber-100 px-1 py-0.5 rounded">
+                            {r.isUnverifiedHistorical ? '⚠️ Prior Historical (RPTAR)' : '⚠️ RPTAR Req.'}
+                          </span>
                         )}
                       </td>
                       <td className="py-1.5 px-3 text-right font-mono text-slate-700">

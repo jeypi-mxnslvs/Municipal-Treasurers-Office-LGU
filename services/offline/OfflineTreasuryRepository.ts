@@ -109,33 +109,24 @@ export class OfflineTreasuryRepository implements ITreasuryRepository {
       }
     }
 
-    let prop = property;
-    if (!prop) {
-      prop = (await this.storage.getCachedPropertyById(propertyId)) || undefined;
-    }
-
-    if (!prop || prop.lastPaidYear < 1970) return [];
 
     const completed: TaxYearRecord[] = [];
-    const minYear = Math.max(prop.lastPaidYear - 4, 1971);
-    const baseTax = Math.round(prop.assessedValue * 0.02 * 100) / 100;
-
-    for (let y = minYear; y <= prop.lastPaidYear; y++) {
-      completed.push({
-        year: y,
-        status: 'Cleared',
-        baseTax,
-        basicTax: baseTax / 2,
-        sefTax: baseTax / 2,
-        monthsDelayed: 0,
-        penaltyRate: 0,
-        penaltyAmount: 0,
-        discountRate: 0,
-        discountAmount: 0,
-        totalDue: baseTax,
-        clearanceReference: 'Settled per Masterlist Baseline (Offline Cached)',
-        clearedBy: 'Historical RPTAR Record',
-      });
+    try {
+      const queued = await this.storage.getPendingPayments();
+      const propPayments = queued.filter(p => String(p.propertyId) === String(propertyId));
+      for (const pay of propPayments) {
+        for (const rec of pay.paidRecords) {
+          completed.push({
+            ...rec,
+            status: 'Cleared',
+            receiptNo: pay.receiptNo,
+            clearanceReference: `Offline Receipt ${pay.receiptNo}`,
+            clearedBy: pay.postedBy,
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to retrieve queued offline payments for completed records:', e);
     }
 
     return completed;
@@ -148,6 +139,22 @@ export class OfflineTreasuryRepository implements ITreasuryRepository {
       return saved;
     }
     throw new Error('Property masterlist modifications require an active network connection.');
+  }
+
+  async saveHistoricalAssessedValue(payload: {
+    propertyId: string | number;
+    periodLabel: string;
+    value: number;
+    rptarPageReference?: string;
+    assessorName: string;
+    reason?: string;
+  }): Promise<Property> {
+    if (this.isOnline()) {
+      const saved = await this.baseRepo.saveHistoricalAssessedValue(payload);
+      this.storage.cacheProperties([saved]).catch(() => {});
+      return saved;
+    }
+    throw new Error('Historical assessed value transcription requires an active network connection.');
   }
 
   async deleteProperty(propertyId: string): Promise<void> {

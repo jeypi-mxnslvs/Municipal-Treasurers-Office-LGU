@@ -1,3 +1,11 @@
+export interface HistoricalAssessedValueItem {
+  value: number;
+  transcribedBy: string;
+  transcribedAt: string; // ISO 8601 timestamp
+  rptarPageReference?: string; // Physical RPTAR ledger citation (e.g. "Vol. 14, Page 22")
+  remarks?: string;
+}
+
 export interface Property {
   id: string;
   tdNumber: string; 
@@ -12,6 +20,10 @@ export interface Property {
   assessedValue: number;
   lastPaidYear: number;
   lastPaidQuarter?: number; // Last settled quarter: 1, 2, 3, or 4 (default 4 for full year)
+  delinquencyStartYear?: number; // Explicit first unpaid year (if provided by import or user)
+  parcelOriginYear?: number | null; // Subdivision/creation year. If null, defaults to HISTORICAL_BASELINE_YEAR
+  historicalAssessedValues?: Record<string, HistoricalAssessedValueItem>; // Keyed by canonical bracket label
+  hasUnverifiedPriorHistory?: boolean; // Derived summary flag: true if >=1 unverified historical record exists
   isShellRecord: boolean;
   totalDebt?: number;
   status?: 'CLEARED' | 'PARTIAL' | 'DELINQUENT';
@@ -39,10 +51,11 @@ export interface TaxYearRecord {
   clearanceReference?: string;
   assessedValue?: number;        // Period-specific assessed valuation (e.g. 10000 for 1987-1991)
   isMissingValuation?: boolean;  // True if AV has not yet been retrieved from physical RPTAR
+  isUnverifiedHistorical?: boolean; // True if period lies in pre-import unverified gap (1971+)
   rptarReference?: string;       // E.g. "RPTAR Vol. 14, Page 22"
-  basicTax?: number;
-  sefTax?: number;
-  baseTax: number;
+  basicTax?: number | null;
+  sefTax?: number | null;
+  baseTax: number | null;        // NULL for unverified historical records, never 0
   systemBasicTax?: number;       // Original system-calculated Basic Tax
   systemSefTax?: number;         // Original system-calculated SEF Tax
   systemDiscountRate?: number;   // Original system-calculated Discount Rate
@@ -50,10 +63,10 @@ export interface TaxYearRecord {
   editReason?: string;           // Mandatory reason for manual assessor override
   monthsDelayed: number;
   penaltyRate: number;
-  penaltyAmount: number;
+  penaltyAmount: number | null;  // NULL for unverified historical records, never 0
   discountRate?: number;
   discountAmount?: number;
-  totalDue: number;
+  totalDue: number | null;       // NULL for unverified historical records, never 0
   isPayable?: boolean;
 }
 

@@ -49,6 +49,7 @@ describe('Phase 5: Offline Resilience & Field Tellering (COA AF-51 Compliance)',
       getPropertyAssessment: vi.fn(),
       getPropertyCompletedRecords: vi.fn().mockResolvedValue([]),
       saveProperty: vi.fn(),
+      saveHistoricalAssessedValue: vi.fn(),
       deleteProperty: vi.fn(),
       lookupSfmv: vi.fn().mockResolvedValue({ base_rate_sqm: 2000, assessment_level: 0.2 }),
       postPayment: vi.fn().mockResolvedValue({

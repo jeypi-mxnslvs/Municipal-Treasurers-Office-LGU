@@ -42,6 +42,9 @@ CREATE TABLE IF NOT EXISTS properties (
     assessed_value NUMERIC NOT NULL DEFAULT 0,
     last_paid_year INT NOT NULL DEFAULT 2025,
     last_paid_quarter INT NOT NULL DEFAULT 4,
+    delinquency_start_year INT,
+    parcel_origin_year INT,
+    historical_assessed_values JSONB DEFAULT '{}'::jsonb,
     is_shell_record BOOLEAN DEFAULT FALSE,
     encoder_label TEXT,
     entry_type TEXT DEFAULT 'CSV_IMPORT',
@@ -484,15 +487,19 @@ BEGIN
                     lot_area_sqm = COALESCE((v_item->>'lot_area_sqm')::NUMERIC, lot_area_sqm),
                     market_value = COALESCE((v_item->>'market_value')::NUMERIC, market_value),
                     assessed_value = COALESCE((v_item->>'assessed_value')::NUMERIC, assessed_value),
+                    parcel_origin_year = COALESCE((v_item->>'parcel_origin_year')::INT, parcel_origin_year),
+                    historical_assessed_values = COALESCE((v_item->'historical_assessed_values'), historical_assessed_values),
                     is_shell_record = COALESCE((v_item->>'is_shell_record')::BOOLEAN, is_shell_record),
                     updated_at = timezone('utc'::text, now())
-                    -- Financial history protection: last_paid_year & last_paid_quarter are NEVER altered on update
+                    -- Financial history protection: last_paid_year, last_paid_quarter & delinquency_start_year are NEVER altered on update
                 WHERE td_number = v_td;
                 v_updated := v_updated + 1;
             ELSE
                 INSERT INTO properties (
                     td_number, previous_td_number, pin, owner_name, address, barangay, property_class,
-                    lot_area_sqm, market_value, assessed_value, last_paid_year, last_paid_quarter, is_shell_record, updated_at
+                    lot_area_sqm, market_value, assessed_value, last_paid_year, last_paid_quarter,
+                    delinquency_start_year, parcel_origin_year, historical_assessed_values,
+                    is_shell_record, updated_at
                 ) VALUES (
                     v_td,
                     COALESCE(v_item->>'previous_td_number', ''),
@@ -506,6 +513,9 @@ BEGIN
                     COALESCE((v_item->>'assessed_value')::NUMERIC, 0),
                     COALESCE((v_item->>'last_paid_year')::INT, 1973),
                     COALESCE((v_item->>'last_paid_quarter')::INT, 4),
+                    (v_item->>'delinquency_start_year')::INT,
+                    (v_item->>'parcel_origin_year')::INT,
+                    COALESCE(v_item->'historical_assessed_values', '{}'::jsonb),
                     COALESCE((v_item->>'is_shell_record')::BOOLEAN, false),
                     timezone('utc'::text, now())
                 );

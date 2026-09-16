@@ -29,6 +29,14 @@ export interface ITreasuryRepository {
   getPropertyAssessment(propertyId: string, fallbackProp?: Property, customSettings?: MunicipalTaxSettings): Promise<CalculationResult>;
   getPropertyCompletedRecords(propertyId: string | number, property?: Property): Promise<TaxYearRecord[]>;
   saveProperty(propertyData: Partial<Property>): Promise<Property>;
+  saveHistoricalAssessedValue(payload: {
+    propertyId: string | number;
+    periodLabel: string;
+    value: number;
+    rptarPageReference?: string;
+    assessorName: string;
+    reason?: string;
+  }): Promise<Property>;
   deleteProperty(propertyId: string): Promise<void>;
   lookupSfmv(barangay: string, propertyClass: string): Promise<{ base_rate_sqm: number; assessment_level: number }>;
 

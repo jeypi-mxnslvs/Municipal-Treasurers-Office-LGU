@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { TaxYearRecord, TaxSummary, Property, User } from '@/types';
-import { AlertCircle, CheckCircle2, Tag, Calendar, CheckSquare, Layers, Sparkles, Pencil, Info } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Tag, Calendar, CheckSquare, Layers, Sparkles, Pencil, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -74,17 +74,29 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
     setSelectedMaxIndex(records.length - 1);
   }, [records.length]);
 
-  // Compute selected subset for outstanding records
+  // Identify unverified historical records
+  const unverifiedRecords = React.useMemo(
+    () => records.filter(r => r.isUnverifiedHistorical),
+    [records]
+  );
+  const hasHistoricalGap = unverifiedRecords.length > 0 || Boolean(property?.hasUnverifiedPriorHistory);
+
+  // Collapsible state: default true (collapsed) when >= 3 unverified records exist
+  const [isHistoricalRollCollapsed, setIsHistoricalRollCollapsed] = useState<boolean>(true);
+
+  // Compute selected subset for outstanding records (strictly excludes unverified historical records)
   const selectedRecords = React.useMemo(
-    () => records.slice(0, selectedMaxIndex + 1),
+    () => records
+      .slice(0, selectedMaxIndex + 1)
+      .filter(r => !r.isUnverifiedHistorical && r.isPayable !== false && r.totalDue !== null),
     [records, selectedMaxIndex]
   );
   const selectedSubtotal = React.useMemo(
     () => selectedRecords.reduce((sum, r) => sum + (r.totalDue || 0), 0),
     [selectedRecords]
   );
-  const selectedBasicTax = selectedRecords.reduce((sum, r) => sum + (r.basicTax || (r.baseTax / 2) || 0), 0);
-  const selectedSefTax = selectedRecords.reduce((sum, r) => sum + (r.sefTax || (r.baseTax / 2) || 0), 0);
+  const selectedBasicTax = selectedRecords.reduce((sum, r) => sum + (r.basicTax || ((r.baseTax ?? 0) / 2) || 0), 0);
+  const selectedSefTax = selectedRecords.reduce((sum, r) => sum + (r.sefTax || ((r.baseTax ?? 0) / 2) || 0), 0);
   const selectedPenalties = selectedRecords.reduce((sum, r) => sum + (r.penaltyAmount || 0), 0);
   const selectedDiscounts = selectedRecords.reduce((sum, r) => sum + (r.discountAmount || 0), 0);
 
@@ -94,11 +106,11 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
     [completedRecords]
   );
   const completedBasicTax = React.useMemo(
-    () => completedRecords.reduce((sum, r) => sum + (r.basicTax || (r.baseTax / 2) || 0), 0),
+    () => completedRecords.reduce((sum, r) => sum + (r.basicTax || ((r.baseTax ?? 0) / 2) || 0), 0),
     [completedRecords]
   );
   const completedSefTax = React.useMemo(
-    () => completedRecords.reduce((sum, r) => sum + (r.sefTax || (r.baseTax / 2) || 0), 0),
+    () => completedRecords.reduce((sum, r) => sum + (r.sefTax || ((r.baseTax ?? 0) / 2) || 0), 0),
     [completedRecords]
   );
   const completedPenalties = React.useMemo(
@@ -112,15 +124,21 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
 
   // Active list of records to render based on selected organizer tab
   const displayedRecords = React.useMemo(() => {
+    let list: TaxYearRecord[];
     if (activeTab === 'COMPLETED') {
-      return completedRecords;
-    }
-    if (activeTab === 'ALL') {
+      list = completedRecords;
+    } else if (activeTab === 'ALL') {
       const combined = [...completedRecords, ...records];
-      return combined.sort((a, b) => a.year - b.year);
+      list = combined.sort((a, b) => a.year - b.year);
+    } else {
+      list = records;
     }
-    return records;
-  }, [activeTab, completedRecords, records]);
+
+    if (isHistoricalRollCollapsed && unverifiedRecords.length >= 3 && activeTab !== 'COMPLETED') {
+      return list.filter(r => !r.isUnverifiedHistorical);
+    }
+    return list;
+  }, [activeTab, completedRecords, records, isHistoricalRollCollapsed, unverifiedRecords.length]);
 
   // Modal state for manual assessor override
   const [editingRecord, setEditingRecord] = useState<TaxYearRecord | null>(null);
@@ -182,10 +200,13 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
 
     if (field === 'ASSESSED_VALUE') {
       setEditValue(record.assessedValue !== undefined && record.assessedValue > 0 ? String(record.assessedValue) : '');
+      if (record.isUnverifiedHistorical) {
+        setEditReason('Physical RPTAR Ledger Transcription');
+      }
     } else if (field === 'BASIC_TAX') {
-      setEditValue(String(record.basicTax ?? (record.baseTax / 2)));
+      setEditValue(String(record.basicTax ?? ((record.baseTax ?? 0) / 2)));
     } else if (field === 'SEF_TAX') {
-      setEditValue(String(record.sefTax ?? (record.baseTax / 2)));
+      setEditValue(String(record.sefTax ?? ((record.baseTax ?? 0) / 2)));
     } else if (field === 'DISCOUNT_RATE') {
       setEditValue(String(((record.discountRate ?? 0) * 100).toFixed(2)));
     }
@@ -209,8 +230,8 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
     let finalAssessedValue = editingRecord.assessedValue;
     let finalRptarReference = editingRecord.rptarReference;
     let isMissingValuation = editingRecord.isMissingValuation;
-    let finalBasicTax = editingRecord.basicTax ?? (editingRecord.baseTax / 2);
-    let finalSefTax = editingRecord.sefTax ?? (editingRecord.baseTax / 2);
+    let finalBasicTax = editingRecord.basicTax ?? ((editingRecord.baseTax ?? 0) / 2);
+    let finalSefTax = editingRecord.sefTax ?? ((editingRecord.baseTax ?? 0) / 2);
     let finalDiscountRate = editingRecord.discountRate ?? 0;
     let originalValue = 0;
     let newValue = 0;
@@ -226,11 +247,11 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
       finalBasicTax = isMissingValuation ? 0 : Math.round(numericVal * 0.01 * yearsMultiplier * 100) / 100;
       finalSefTax = isMissingValuation ? 0 : Math.round(numericVal * 0.01 * yearsMultiplier * 100) / 100;
     } else if (editingField === 'BASIC_TAX') {
-      originalValue = editingRecord.systemBasicTax ?? (editingRecord.baseTax / 2);
+      originalValue = editingRecord.systemBasicTax ?? ((editingRecord.baseTax ?? 0) / 2);
       newValue = numericVal;
       finalBasicTax = numericVal;
     } else if (editingField === 'SEF_TAX') {
-      originalValue = editingRecord.systemSefTax ?? (editingRecord.baseTax / 2);
+      originalValue = editingRecord.systemSefTax ?? ((editingRecord.baseTax ?? 0) / 2);
       newValue = numericVal;
       finalSefTax = numericVal;
     } else if (editingField === 'DISCOUNT_RATE') {
@@ -250,6 +271,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
       ...editingRecord,
       assessedValue: finalAssessedValue,
       isMissingValuation,
+      isUnverifiedHistorical: isMissingValuation ? Boolean(editingRecord.isUnverifiedHistorical) : false,
       rptarReference: finalRptarReference,
       basicTax: finalBasicTax,
       sefTax: finalSefTax,
@@ -269,6 +291,22 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
       const recordKey = r.periodLabel || String(r.year);
       return recordKey === targetKey ? updatedRecord : r;
     }));
+
+    // If transcribing historical AV, persist permanently to database
+    if (property?.id && editingField === 'ASSESSED_VALUE' && numericVal > 0) {
+      try {
+        await api.saveHistoricalAssessedValue({
+          propertyId: property.id,
+          periodLabel: editingRecord.periodLabel || String(editingRecord.year),
+          value: numericVal,
+          rptarPageReference: rptarRefInput.trim() || undefined,
+          assessorName: currentUser?.name || 'Authorized Assessor',
+          reason: editReason.trim(),
+        });
+      } catch (saveErr) {
+        console.error('Failed to persist historical assessed value to database:', saveErr);
+      }
+    }
 
     // Log individual field-level audit record
     if (property?.tdNumber) {
@@ -417,6 +455,26 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
           </div>
         )}
 
+        {/* Historical Gap Alert Banner */}
+        {hasHistoricalGap && (
+          <div className="p-3 bg-amber-50/90 border border-amber-300 rounded-xl text-xs text-amber-950 flex items-start gap-2.5">
+            <AlertTriangle className="text-amber-600 shrink-0 mt-0.5" size={16} />
+            <div className="space-y-0.5 flex-1">
+              <div className="font-bold flex items-center justify-between">
+                <span>
+                  Historical Delinquency Gap Detected ({property?.parcelOriginYear || 1971}–{(property?.delinquencyStartYear || 2026) - 1})
+                </span>
+                <Badge variant="outline" className="text-[10px] font-bold bg-amber-100 text-amber-900 border-amber-400">
+                  Physical RPTAR Audit Required
+                </Badge>
+              </div>
+              <p className="text-[11px] text-amber-900/90 leading-relaxed">
+                Digital import for this parcel begins in tax year <strong>{property?.delinquencyStartYear || 'modern roll'}</strong>. Prior historical assessment rolls from <strong>{property?.parcelOriginYear || 1971}</strong> to <strong>{(property?.delinquencyStartYear || 2026) - 1}</strong> are retained as unverified records. Payments cannot be posted for unverified periods until valuations are transcribed from physical RPTAR archive books.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Informative Subtitle for Completed Tab */}
         {activeTab === 'COMPLETED' && (
           <div className="pt-1 text-xs text-slate-500 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1 border-t border-slate-200/70">
@@ -425,6 +483,42 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
           </div>
         )}
       </div>
+
+      {/* Historical Ledger Collapsible Header (if >= 3 unverified records) */}
+      {unverifiedRecords.length >= 3 && activeTab !== 'COMPLETED' && (
+        <div className="px-4 py-2 bg-amber-50/70 border-b border-amber-200/80 flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-300 text-[10px] font-bold">
+              Archive Roll
+            </Badge>
+            <span className="font-bold text-slate-800">
+              Historical Ledger ({property?.parcelOriginYear || 1971}–{(property?.delinquencyStartYear || 2026) - 1}):
+            </span>
+            <span className="text-slate-600 text-[11px]">
+              {unverifiedRecords.length} period(s) pending physical RPTAR audit
+            </span>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsHistoricalRollCollapsed(prev => !prev)}
+            className="h-7 text-xs font-semibold text-amber-900 hover:bg-amber-100/80 cursor-pointer gap-1"
+          >
+            {isHistoricalRollCollapsed ? (
+              <>
+                <span>Expand {unverifiedRecords.length} Unverified Rows</span>
+                <ChevronDown size={14} />
+              </>
+            ) : (
+              <>
+                <span>Collapse Historical Rows</span>
+                <ChevronUp size={14} />
+              </>
+            )}
+          </Button>
+        </div>
+      )}
       
       {/* Itemized Table - Scrollable container for multi-year delinquency rolls (e.g. 1971-2026) */}
       <div className="overflow-y-auto overflow-x-auto max-h-[560px] flex-grow relative">
@@ -447,7 +541,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
             {displayedRecords.map((record, idx) => {
               const isCleared = record.status === 'Cleared';
               const isDelinquent = record.status === 'Delinquent';
-              const isUnassessed = Boolean(record.isMissingValuation);
+              const isUnassessed = Boolean(record.isMissingValuation || record.isUnverifiedHistorical || record.baseTax === null);
               const hasDiscount = Boolean(record.discountAmount && record.discountAmount > 0);
 
               const isBasicOverridden = !isCleared && record.systemBasicTax !== undefined && record.basicTax !== record.systemBasicTax;
@@ -488,7 +582,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
                         checked={isSelected && !isUnassessed}
                         disabled={isUnassessed}
                         onChange={() => !isUnassessed && outstandingIndex !== -1 && handleCheckboxClick(outstandingIndex)}
-                        title={isUnassessed ? "Must verify historical Assessed Value from Physical RPTAR before selecting." : undefined}
+                        title={record.isUnverifiedHistorical ? "Unverified historical period. Valuation must be transcribed from physical RPTAR." : isUnassessed ? "Must verify historical Assessed Value from Physical RPTAR before selecting." : undefined}
                         className="w-4.5 h-4.5 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600 transition-transform active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
                       />
                     )}
@@ -504,6 +598,10 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
                         {isCleared ? (
                           <Badge variant="secondary" className="text-[10px] font-bold px-1.5 py-0 bg-emerald-100 text-emerald-800 border-emerald-300">
                             ✓ Cleared
+                          </Badge>
+                        ) : record.isUnverifiedHistorical ? (
+                          <Badge variant="outline" className="text-[10px] font-bold px-1.5 py-0 bg-amber-100 text-amber-900 border-amber-400">
+                            ⚠️ Unverified
                           </Badge>
                         ) : isDelinquent ? (
                           <Badge variant="destructive" className="text-[10px] font-bold px-1.5 py-0 bg-rose-100 text-rose-800 border-rose-300">
@@ -608,7 +706,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
                           )}
                         </div>
                         <span className="text-[10px] text-slate-400 font-normal tabular-nums truncate max-w-full">
-                          {isCleared ? 'Settled' : `Def: ₱${(record.systemBasicTax ?? (record.baseTax / 2)).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                          {isCleared ? 'Settled' : (record.systemBasicTax !== null && record.systemBasicTax !== undefined) ? `Def: ₱${record.systemBasicTax.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'Def: Pending AV'}
                         </span>
                       </div>
                     )}
@@ -622,7 +720,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
                       <div className="flex flex-col items-end">
                         <div className="flex items-center justify-end gap-1">
                           <span className={`text-xs sm:text-sm font-bold tabular-nums ${isSefOverridden ? 'text-amber-800 underline decoration-dotted font-black' : isCleared ? 'text-slate-700' : 'text-slate-900'}`}>
-                            ₱{(record.sefTax ?? (record.baseTax / 2)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            ₱{(record.sefTax ?? ((record.baseTax ?? 0) / 2)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </span>
                           {canEdit && !isCleared && (
                             <button
@@ -636,7 +734,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
                           )}
                         </div>
                         <span className="text-[10px] text-slate-400 font-normal tabular-nums truncate max-w-full">
-                          {isCleared ? 'Settled' : `Def: ₱${(record.systemSefTax ?? (record.baseTax / 2)).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                          {isCleared ? 'Settled' : (record.systemSefTax !== null && record.systemSefTax !== undefined) ? `Def: ₱${record.systemSefTax.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'Def: Pending AV'}
                         </span>
                       </div>
                     )}
@@ -646,13 +744,13 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
                   <TableCell className="text-right py-2.5 px-1.5">
                     {isUnassessed ? (
                       <span className="text-slate-400 font-mono italic text-xs">Pending AV</span>
-                    ) : record.penaltyAmount > 0 ? (
+                    ) : (record.penaltyAmount ?? 0) > 0 ? (
                       <div className="flex flex-col items-end">
                         <span className={`text-xs sm:text-sm font-bold tabular-nums ${isCleared ? 'text-slate-700' : 'text-rose-700'}`}>
-                          +₱{record.penaltyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          +₱{(record.penaltyAmount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                         </span>
                         <span className="text-[10px] text-slate-500 font-medium tabular-nums truncate max-w-full">
-                          {(record.penaltyRate * 100).toFixed(0)}% ({record.monthsDelayed}m)
+                          {((record.penaltyRate ?? 0) * 100).toFixed(0)}% ({record.monthsDelayed ?? 0}m)
                         </span>
                       </div>
                     ) : (
@@ -695,8 +793,8 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
                   <TableCell className={`text-right text-xs sm:text-sm tabular-nums py-2.5 pl-2 pr-6 font-normal ${
                     isCleared ? 'text-emerald-800' : isUnassessed ? 'text-amber-700' : 'text-slate-800'
                   }`}>
-                    {isUnassessed ? (
-                      <span className="text-amber-700 font-mono text-xs">Requires RPTAR</span>
+                    {isUnassessed || record.totalDue === null ? (
+                      <span className="text-amber-700 font-mono text-xs font-semibold">Requires RPTAR</span>
                     ) : (
                       `₱${record.totalDue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
                     )}
@@ -840,7 +938,14 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
                     : 'Unset / Unassessed'
                   : editingField === 'DISCOUNT_RATE'
                     ? `${((editingRecord?.systemDiscountRate ?? 0) * 100).toFixed(2)}%`
-                    : `₱${(editingField === 'BASIC_TAX' ? editingRecord?.systemBasicTax : editingRecord?.systemSefTax ?? (editingRecord?.baseTax ? editingRecord.baseTax / 2 : 0))?.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                    : (() => {
+                        const val = editingField === 'BASIC_TAX'
+                          ? (editingRecord?.systemBasicTax ?? (editingRecord?.baseTax !== null && editingRecord?.baseTax !== undefined ? editingRecord.baseTax / 2 : null))
+                          : (editingRecord?.systemSefTax ?? (editingRecord?.baseTax !== null && editingRecord?.baseTax !== undefined ? editingRecord.baseTax / 2 : null));
+                        return val !== null && val !== undefined
+                          ? `₱${val.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                          : 'Pending AV';
+                      })()}
               </span>
             </div>
 

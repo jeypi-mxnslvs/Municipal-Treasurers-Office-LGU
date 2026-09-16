@@ -2,46 +2,23 @@ import { Property, TaxYearRecord, CalculationResult, MunicipalTaxSettings, TaxSu
 import { 
   CURRENT_YEAR, 
   PENALTY_RATE_PER_MONTH, 
-  MAX_PENALTY_MONTHS 
+  MAX_PENALTY_MONTHS,
+  HISTORICAL_BASELINE_YEAR,
+  CANONICAL_MUNICIPAL_BRACKETS,
+  PeriodBracketDefinition
 } from '../constants';
 
-export interface PeriodBracketDefinition {
-  label: string;
-  startYear: number;
-  endYear: number;
-  quarterSpan?: string;
-  quarters?: [number, number];
-  isAdvance?: boolean;
-}
+export type { PeriodBracketDefinition };
+export { CANONICAL_MUNICIPAL_BRACKETS };
 
 /**
- * Canonical Municipal Assessment Eras & Delinquency Brackets
- * Codified from Santa Rosa Treasury Section 254 Notice of Delinquency Roll (RA 7160 Sec. 254/255)
+ * Returns the effective statutory origin year of a parcel.
+ * If parcelOriginYear is known (e.g. 2015 subdivision), returns that year.
+ * If unknown (null/undefined), defaults conservatively to HISTORICAL_BASELINE_YEAR (1971).
  */
-export const CANONICAL_MUNICIPAL_BRACKETS: PeriodBracketDefinition[] = [
-  { label: '1973-79', startYear: 1973, endYear: 1979 },
-  { label: '1980-85', startYear: 1980, endYear: 1985 },
-  { label: '1986', startYear: 1986, endYear: 1986 },
-  { label: '1987-1991', startYear: 1987, endYear: 1991 },
-  { label: '1992-1993', startYear: 1992, endYear: 1993 },
-  { label: '1994-2005', startYear: 1994, endYear: 2005 },
-  { label: '2006-11', startYear: 2006, endYear: 2011 },
-  // Modern Era (2012 - 2025): Annual individual rolls
-  { label: '2012', startYear: 2012, endYear: 2012 },
-  { label: '2013', startYear: 2013, endYear: 2013 },
-  { label: '2014', startYear: 2014, endYear: 2014 },
-  { label: '2015', startYear: 2015, endYear: 2015 },
-  { label: '2016', startYear: 2016, endYear: 2016 },
-  { label: '2017', startYear: 2017, endYear: 2017 },
-  { label: '2018', startYear: 2018, endYear: 2018 },
-  { label: '2019', startYear: 2019, endYear: 2019 },
-  { label: '2020', startYear: 2020, endYear: 2020 },
-  { label: '2021', startYear: 2021, endYear: 2021 },
-  { label: '2022', startYear: 2022, endYear: 2022 },
-  { label: '2023', startYear: 2023, endYear: 2023 },
-  { label: '2024', startYear: 2024, endYear: 2024 },
-  { label: '2025', startYear: 2025, endYear: 2025 },
-];
+export const getEffectiveOriginYear = (property: Property): number => {
+  return property.parcelOriginYear ?? HISTORICAL_BASELINE_YEAR;
+};
 
 /**
  * Santa Rosa Municipal Treasurer Notice of Delinquency Penalty Rates
@@ -51,6 +28,7 @@ export const CANONICAL_MUNICIPAL_BRACKETS: PeriodBracketDefinition[] = [
 export const SANTA_ROSA_LEGACY_PENALTY_RATE = 0.24;
 
 export const SANTA_ROSA_MUNICIPAL_PENALTY_SCHEDULE: Record<string, number> = {
+  '1971-72': 0.24,
   '1973-79': 0.24,
   '1980-85': 0.24,
   '1986': 0.24,
@@ -140,16 +118,23 @@ export const calculateTaxLiability = (
   const includeAdvance = options?.includeAdvanceYear ?? false;
 
   // If lastPaidYear === CURRENT_YEAR, lastPaidQuarter defines how many quarters of CURRENT_YEAR are settled.
+  // If lastPaidYear === CURRENT_YEAR, lastPaidQuarter defines how many quarters of CURRENT_YEAR are settled.
   // If lastPaidYear < CURRENT_YEAR, 0 quarters of CURRENT_YEAR are settled.
   const currentYearPaidQuarter = property.lastPaidYear === CURRENT_YEAR
     ? (property.lastPaidQuarter !== undefined && property.lastPaidQuarter !== null ? Number(property.lastPaidQuarter) : 4)
     : 0;
 
   const isCurrentYearPartial = property.lastPaidYear === CURRENT_YEAR && currentYearPaidQuarter < 4;
-  const startYear = isCurrentYearPartial ? CURRENT_YEAR : property.lastPaidYear + 1;
+  const activeStartYear = property.delinquencyStartYear !== undefined && !isNaN(property.delinquencyStartYear)
+    ? property.delinquencyStartYear
+    : (isCurrentYearPartial ? CURRENT_YEAR : property.lastPaidYear + 1);
   const endYear = CURRENT_YEAR;
 
-  if (startYear > endYear && !includeAdvance) {
+  const originYear = getEffectiveOriginYear(property);
+  const hasHistoricalGap = (property.delinquencyStartYear !== undefined && property.delinquencyStartYear > originYear) ||
+    (Boolean(property.hasUnverifiedPriorHistory) && activeStartYear > originYear);
+
+  if (activeStartYear > endYear && !includeAdvance && !hasHistoricalGap) {
     return {
       propertyId: property.id,
       currentTd: property.tdNumber,
@@ -253,6 +238,9 @@ export const calculateTaxLiability = (
     quarterSpan?: string;
     quarter?: number;
     multiplier: number; // 1 for 1 year, N for multi-year bracket, 0.5 for semi-annual
+    forcedAssessedValue?: number;
+    forcedRptarRef?: string;
+    isUnverifiedHistorical?: boolean;
   }) => {
     const { year, periodLabel, startYear: sYear, endYear: eYear, yearsCovered, isDelinquent, isAdvance, quarterSpan, quarter, multiplier } = params;
 
@@ -260,7 +248,17 @@ export const calculateTaxLiability = (
       return;
     }
 
-    const valuation = resolvePeriodValuation({ year, periodLabel, startYear: sYear, endYear: eYear });
+    let valuation: { assessedValue: number; isMissingValuation: boolean; rptarReference?: string };
+    if (params.forcedAssessedValue !== undefined) {
+      valuation = {
+        assessedValue: params.forcedAssessedValue,
+        isMissingValuation: params.forcedAssessedValue <= 0,
+        rptarReference: params.forcedRptarRef,
+      };
+    } else {
+      valuation = resolvePeriodValuation({ year, periodLabel, startYear: sYear, endYear: eYear });
+    }
+
     const periodAssessedValue = valuation.assessedValue;
     const isMissingVal = valuation.isMissingValuation;
     const rptarRef = valuation.rptarReference;
@@ -299,7 +297,9 @@ export const calculateTaxLiability = (
       penaltyAmount = Math.round(systemBaseTax * penaltyRate * 100) / 100;
     } else {
       monthsDelayed = isAdvance ? 0 : paymentMonth;
-      penaltyRate = 0;
+      penaltyRate = (periodLabel && activePenaltySchedule[periodLabel] !== undefined)
+        ? activePenaltySchedule[periodLabel]
+        : (eYear <= 1993 ? SANTA_ROSA_LEGACY_PENALTY_RATE : (isDelinquent ? 0.72 : 0));
       penaltyAmount = 0;
     }
 
@@ -310,7 +310,6 @@ export const calculateTaxLiability = (
     } else if (isAdvance) {
       systemDiscountRate = earlyDiscountRate; // 20% advance discount
     } else if (quarterSpan === '3-4 Q') {
-      // In Notice of Delinquency schedule, 3-4 Q is at face value (0%) unless prompt discount is explicitly enabled
       systemDiscountRate = options?.discountCurrentQuarters ? regularPromptRate : 0.00;
     } else {
       if (paymentMonth >= earlyStartMonth && paymentMonth <= earlyEndMonth) {
@@ -337,8 +336,9 @@ export const calculateTaxLiability = (
 
     const appliedBaseTax = Math.round((appliedBasicTax + appliedSefTax) * 100) / 100;
     const discountAmount = Math.round(appliedBaseTax * appliedDiscountRate * 100) / 100;
-    const totalDue = isMissingVal ? 0 : Math.max(0, Math.round((appliedBaseTax + penaltyAmount - discountAmount) * 100) / 100);
-    const isPayable = !isMissingVal;
+    const isUnverified = Boolean(params.isUnverifiedHistorical);
+    const totalDue = isUnverified ? null : Math.max(0, Math.round((appliedBaseTax + penaltyAmount - discountAmount) * 100) / 100);
+    const isPayable = !isMissingVal && !isUnverified;
 
     const status: TaxYearRecord['status'] = isAdvance 
       ? 'Advance' 
@@ -355,27 +355,28 @@ export const calculateTaxLiability = (
       quarterSpan,
       quarter,
       status,
-      assessedValue: periodAssessedValue,
+      assessedValue: isUnverified ? undefined : periodAssessedValue,
       isMissingValuation: isMissingVal,
+      isUnverifiedHistorical: isUnverified,
       rptarReference: rptarRef,
-      basicTax: appliedBasicTax,
-      sefTax: appliedSefTax,
-      baseTax: appliedBaseTax,
-      systemBasicTax,
-      systemSefTax,
-      systemDiscountRate,
+      basicTax: isUnverified ? null : appliedBasicTax,
+      sefTax: isUnverified ? null : appliedSefTax,
+      baseTax: isUnverified ? null : appliedBaseTax,
+      systemBasicTax: isUnverified ? undefined : systemBasicTax,
+      systemSefTax: isUnverified ? undefined : systemSefTax,
+      systemDiscountRate: isUnverified ? undefined : systemDiscountRate,
       isManuallyEdited,
       editReason,
       monthsDelayed: Math.min(monthsDelayed, MAX_PENALTY_MONTHS),
       penaltyRate,
-      penaltyAmount,
+      penaltyAmount: isUnverified ? null : penaltyAmount,
       discountRate: appliedDiscountRate,
       discountAmount,
       totalDue,
       isPayable,
     });
 
-    if (!isMissingVal) {
+    if (!isUnverified && totalDue !== null) {
       totalBasicTax += appliedBasicTax;
       totalSefTax += appliedSefTax;
       totalBaseTax += appliedBaseTax;
@@ -385,31 +386,84 @@ export const calculateTaxLiability = (
     }
   };
 
-  // 1. Process Historical Brackets (< 2012)
-  if (groupHistorical && startYear < 2012) {
-    // Pre-1973 bracket (if account has legacy arrears prior to 1973)
-    if (startYear < 1973) {
-      const preEnd = Math.min(1972, endYear);
-      if (startYear <= preEnd) {
-        const count = preEnd - startYear + 1;
-        const years = Array.from({ length: count }, (_, i) => startYear + i);
+  // 0. Unconditional Preserved Historical Gap (whenever activeStartYear > originYear)
+  if (hasHistoricalGap) {
+    const gapEndYear = (property.delinquencyStartYear !== undefined ? property.delinquencyStartYear : activeStartYear) - 1;
+    const gapBrackets = CANONICAL_MUNICIPAL_BRACKETS.filter(
+      (b) => b.startYear <= gapEndYear && b.endYear >= originYear
+    );
+
+    for (const bracket of gapBrackets) {
+      const effStart = Math.max(bracket.startYear, originYear);
+      const effEnd = Math.min(bracket.endYear, gapEndYear);
+      const count = effEnd - effStart + 1;
+      const years = Array.from({ length: count }, (_, i) => effStart + i);
+      const isFullBracket = effStart === bracket.startYear && effEnd === bracket.endYear;
+      const label = isFullBracket ? bracket.label : count === 1 ? String(effStart) : `${effStart}-${String(effEnd).slice(-2)}`;
+
+      if (options?.completedPeriodLabels?.includes(label) || options?.completedPeriodLabels?.includes(bracket.label)) {
+        continue;
+      }
+
+      // Check if transcribed in property.historicalAssessedValues
+      const transcribed = property.historicalAssessedValues?.[bracket.label] || property.historicalAssessedValues?.[label];
+
+      if (transcribed && transcribed.value > 0) {
+        // Transcribed from Physical RPTAR: VERIFIED!
         createRecord({
-          year: startYear,
-          periodLabel: count === 1 ? String(startYear) : `${startYear}-${String(preEnd).slice(-2)}`,
-          startYear,
-          endYear: preEnd,
+          year: effStart,
+          periodLabel: label,
+          startYear: effStart,
+          endYear: effEnd,
           yearsCovered: years,
           isDelinquent: true,
           isCurrentYear: false,
           multiplier: count,
+          forcedAssessedValue: transcribed.value,
+          forcedRptarRef: transcribed.rptarPageReference || 'Physical RPTAR Transcription',
+          isUnverifiedHistorical: false,
+        });
+      } else {
+        // UNVERIFIED Historical Bracket: pending physical RPTAR audit
+        const activePenaltySchedule = options?.penaltyScheduleOverride || SANTA_ROSA_MUNICIPAL_PENALTY_SCHEDULE;
+        const penaltyRate = activePenaltySchedule[bracket.label] ?? 
+          activePenaltySchedule[label] ?? 
+          (effEnd <= 1993 ? SANTA_ROSA_LEGACY_PENALTY_RATE : 0.72);
+
+        records.push({
+          year: effStart,
+          periodLabel: label,
+          startYear: effStart,
+          endYear: effEnd,
+          yearsCovered: years,
+          status: 'Delinquent',
+          assessedValue: undefined,
+          isMissingValuation: true,
+          isUnverifiedHistorical: true,
+          rptarReference: 'Pending Physical RPTAR Ledger Audit',
+          basicTax: null,
+          sefTax: null,
+          baseTax: null,
+          systemBasicTax: undefined,
+          systemSefTax: undefined,
+          systemDiscountRate: 0,
+          monthsDelayed: Math.min(((CURRENT_YEAR - effStart) * 12) + paymentMonth, MAX_PENALTY_MONTHS),
+          penaltyRate,
+          penaltyAmount: null,
+          discountRate: 0,
+          discountAmount: 0,
+          totalDue: null,
+          isPayable: false,
         });
       }
     }
+  }
 
-    // Canonical Brackets up to 2011
+  // 1. Process Historical Brackets (< 2012) for active delinquent years
+  if (groupHistorical && activeStartYear < 2012) {
     const historicalBrackets = CANONICAL_MUNICIPAL_BRACKETS.filter(b => b.endYear < 2012);
     for (const bracket of historicalBrackets) {
-      const effectiveStart = Math.max(bracket.startYear, startYear);
+      const effectiveStart = Math.max(bracket.startYear, activeStartYear);
       const effectiveEnd = Math.min(bracket.endYear, endYear);
 
       if (effectiveStart <= effectiveEnd) {
@@ -434,10 +488,9 @@ export const calculateTaxLiability = (
         });
       }
     }
-  } else if (!groupHistorical && startYear < 2012) {
-    // Itemize single years (< 2012) if grouping is explicitly disabled
+  } else if (!groupHistorical && activeStartYear < 2012) {
     const maxHistorical = Math.min(2011, endYear);
-    for (let y = startYear; y <= maxHistorical; y++) {
+    for (let y = activeStartYear; y <= maxHistorical; y++) {
       createRecord({
         year: y,
         periodLabel: String(y),
@@ -452,7 +505,7 @@ export const calculateTaxLiability = (
   }
 
   // 2. Process Modern Era (2012 to 2025)
-  const modernStart = Math.max(2012, startYear);
+  const modernStart = Math.max(2012, activeStartYear);
   const modernEnd = Math.min(2025, endYear);
   for (let y = modernStart; y <= modernEnd; y++) {
     createRecord({
@@ -468,7 +521,7 @@ export const calculateTaxLiability = (
   }
 
   // 3. Process Current Operational Year (2026)
-  if (startYear <= CURRENT_YEAR && endYear >= CURRENT_YEAR) {
+  if (activeStartYear <= CURRENT_YEAR && endYear >= CURRENT_YEAR) {
     const isFirstHalfPaid = currentYearPaidQuarter >= 2;
     const isSecondHalfPaid = currentYearPaidQuarter >= 4;
 

@@ -12,11 +12,36 @@ import {
   AccountableFormBooklet,
   TaxYearRecord,
   MunicipalTaxSettings,
-  CsvImportBatch
+  CsvImportBatch,
+  HistoricalAssessedValueItem,
 } from '@/types';
 import { calculateTaxLiability as localCalculateTaxLiability } from '@/utils/taxLogic';
 import { createSessionToken } from '@/lib/crypto';
 import { mergeEncoderLabel } from '@/utils/encoderAttribution';
+
+const mapPropertyRow = (row: Record<string, unknown>): Property => ({
+  id: String(row.id),
+  tdNumber: String(row.td_number || ''),
+  previousTdNumber: (row.previous_td_number as string) || '',
+  pin: (row.pin as string) || '',
+  ownerName: String(row.owner_name || ''),
+  address: String(row.address || ''),
+  barangay: String(row.barangay || ''),
+  propertyClass: String(row.property_class || 'Residential'),
+  lotAreaSqm: Number(row.lot_area_sqm) || 0,
+  marketValue: Number(row.market_value) || 0,
+  assessedValue: Number(row.assessed_value) || 0,
+  lastPaidYear: Number(row.last_paid_year) || 2025,
+  lastPaidQuarter: row.last_paid_quarter !== undefined && row.last_paid_quarter !== null ? Number(row.last_paid_quarter) : 4,
+  isShellRecord: Boolean(row.is_shell_record),
+  delinquencyStartYear: row.delinquency_start_year ? Number(row.delinquency_start_year) : undefined,
+  parcelOriginYear: row.parcel_origin_year !== undefined && row.parcel_origin_year !== null ? Number(row.parcel_origin_year) : null,
+  historicalAssessedValues: (row.historical_assessed_values as Record<string, HistoricalAssessedValueItem>) || {},
+  encoderLabel: (row.encoder_label as string) || undefined,
+  entryType: (row.entry_type as 'MANUAL' | 'CSV_IMPORT') || (String(row.encoder_label || '').includes('(Manual)') ? 'MANUAL' : 'CSV_IMPORT'),
+  createdAt: row.created_at as string | undefined,
+  updatedAt: row.updated_at as string | undefined,
+});
 
 /**
  * SupabaseRepository
@@ -39,26 +64,7 @@ export class SupabaseRepository implements ITreasuryRepository {
     const { data, error } = await query.order('id', { ascending: true });
     if (error) throw error;
 
-    return (data || []).map(row => ({
-      id: String(row.id),
-      tdNumber: row.td_number,
-      previousTdNumber: row.previous_td_number || '',
-      pin: row.pin,
-      ownerName: row.owner_name,
-      address: row.address,
-      barangay: row.barangay,
-      propertyClass: row.property_class,
-      lotAreaSqm: Number(row.lot_area_sqm) || 0,
-      marketValue: Number(row.market_value) || 0,
-      assessedValue: Number(row.assessed_value) || 0,
-      lastPaidYear: Number(row.last_paid_year) || 2025,
-      lastPaidQuarter: row.last_paid_quarter !== undefined && row.last_paid_quarter !== null ? Number(row.last_paid_quarter) : 4,
-      isShellRecord: Boolean(row.is_shell_record),
-      encoderLabel: row.encoder_label || undefined,
-      entryType: (row.entry_type as 'MANUAL' | 'CSV_IMPORT') || (row.encoder_label?.includes('(Manual)') ? 'MANUAL' : 'CSV_IMPORT'),
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    }));
+    return (data || []).map(row => mapPropertyRow(row));
   }
 
   async getPropertyAssessment(propertyId: string, fallbackProp?: Property, customSettings?: MunicipalTaxSettings): Promise<CalculationResult> {
@@ -79,23 +85,7 @@ export class SupabaseRepository implements ITreasuryRepository {
     }
     const { data } = await supabase.from('properties').select('*').eq('id', propertyId).single();
     if (data) {
-      const prop: Property = {
-        id: String(data.id),
-        tdNumber: data.td_number,
-        previousTdNumber: data.previous_td_number,
-        ownerName: data.owner_name,
-        address: data.address,
-        barangay: data.barangay,
-        assessedValue: Number(data.assessed_value),
-        lastPaidYear: Number(data.last_paid_year),
-        lastPaidQuarter: data.last_paid_quarter !== undefined && data.last_paid_quarter !== null ? Number(data.last_paid_quarter) : 4,
-        propertyClass: data.property_class,
-        isShellRecord: Boolean(data.is_shell_record),
-        encoderLabel: data.encoder_label || undefined,
-        entryType: (data.entry_type as 'MANUAL' | 'CSV_IMPORT') || (data.encoder_label?.includes('(Manual)') ? 'MANUAL' : 'CSV_IMPORT'),
-        createdAt: data.created_at,
-        updatedAt: data.updated_at,
-      };
+      const prop = mapPropertyRow(data);
       return localCalculateTaxLiability(prop, calcOptions);
     }
     return { records: [], grandTotal: 0 };
@@ -173,29 +163,9 @@ export class SupabaseRepository implements ITreasuryRepository {
       console.warn('Failed to fetch delinquency completions:', e);
     }
 
-    // 3. Fallback: if no records were found but property.lastPaidYear indicates settled history
-    if (completedRecordsMap.size === 0 && property && property.lastPaidYear >= 1970) {
-      const minYear = Math.max(property.lastPaidYear - 4, 1971);
-      const baseTax = Math.round(property.assessedValue * 0.02 * 100) / 100;
-      for (let y = minYear; y <= property.lastPaidYear; y++) {
-        completedRecordsMap.set(String(y), {
-          year: y,
-          status: 'Cleared',
-          baseTax,
-          basicTax: baseTax / 2,
-          sefTax: baseTax / 2,
-          monthsDelayed: 0,
-          penaltyRate: 0,
-          penaltyAmount: 0,
-          discountRate: 0,
-          discountAmount: 0,
-          totalDue: baseTax,
-          clearanceReference: 'Settled per Masterlist Baseline',
-          clearedBy: 'Historical RPTAR Record',
-        });
-      }
-    }
-
+    // 3. Authentic Database Records Only:
+    // Never fabricate synthetic 'Cleared per Masterlist Baseline' records for unverified years.
+    // If no payment postings or completed records exist in the database, return authentic empty set.
     return Array.from(completedRecordsMap.values()).sort((a, b) => (a.year - b.year) || (a.periodLabel || '').localeCompare(b.periodLabel || ''));
   }
 
@@ -225,6 +195,15 @@ export class SupabaseRepository implements ITreasuryRepository {
     if (propertyData.entryType) {
       row.entry_type = propertyData.entryType;
     }
+    if (propertyData.delinquencyStartYear !== undefined && propertyData.delinquencyStartYear !== null) {
+      row.delinquency_start_year = propertyData.delinquencyStartYear;
+    }
+    if (propertyData.parcelOriginYear !== undefined) {
+      row.parcel_origin_year = propertyData.parcelOriginYear;
+    }
+    if (propertyData.historicalAssessedValues !== undefined) {
+      row.historical_assessed_values = propertyData.historicalAssessedValues;
+    }
 
     const isUpdate = Boolean(propertyData.id && !String(propertyData.id).startsWith('csv-') && !String(propertyData.id).startsWith('prop-'));
 
@@ -246,14 +225,20 @@ export class SupabaseRepository implements ITreasuryRepository {
     };
 
     let { data, error } = await executeSave(row);
-    if (error && (error.message?.includes('last_paid_quarter') || error.message?.includes('encoder_label') || error.message?.includes('entry_type') || error.code === 'PGRST204')) {
+    if (error && (error.message?.includes('last_paid_quarter') || error.message?.includes('encoder_label') || error.message?.includes('entry_type') || error.message?.includes('delinquency_start_year') || error.message?.includes('parcel_origin_year') || error.message?.includes('historical_assessed_values') || error.code === 'PGRST204')) {
       if (error.message?.includes('last_paid_quarter')) delete row.last_paid_quarter;
       if (error.message?.includes('encoder_label')) delete row.encoder_label;
       if (error.message?.includes('entry_type')) delete row.entry_type;
+      if (error.message?.includes('delinquency_start_year')) delete row.delinquency_start_year;
+      if (error.message?.includes('parcel_origin_year')) delete row.parcel_origin_year;
+      if (error.message?.includes('historical_assessed_values')) delete row.historical_assessed_values;
       if (error.code === 'PGRST204') {
         delete row.last_paid_quarter;
         delete row.encoder_label;
         delete row.entry_type;
+        delete row.delinquency_start_year;
+        delete row.parcel_origin_year;
+        delete row.historical_assessed_values;
       }
       const retry = await executeSave(row);
       data = retry.data;
@@ -280,26 +265,70 @@ export class SupabaseRepository implements ITreasuryRepository {
       // Non-blocking audit log
     }
 
-    return {
-      id: String(resultData.id),
-      tdNumber: resultData.td_number,
-      previousTdNumber: resultData.previous_td_number,
-      pin: resultData.pin,
-      ownerName: resultData.owner_name,
-      address: resultData.address,
-      barangay: resultData.barangay,
-      propertyClass: resultData.property_class,
-      lotAreaSqm: resultData.lot_area_sqm !== undefined ? Number(resultData.lot_area_sqm) : 100,
-      marketValue: resultData.market_value !== undefined ? Number(resultData.market_value) : 0,
-      assessedValue: Number(resultData.assessed_value),
-      lastPaidYear: Number(resultData.last_paid_year),
-      lastPaidQuarter: resultData.last_paid_quarter !== undefined && resultData.last_paid_quarter !== null ? Number(resultData.last_paid_quarter) : 4,
-      isShellRecord: Boolean(resultData.is_shell_record),
-      encoderLabel: resultData.encoder_label || propertyData.encoderLabel,
-      entryType: (resultData.entry_type as 'MANUAL' | 'CSV_IMPORT') || propertyData.entryType || 'MANUAL',
-      createdAt: resultData.created_at,
-      updatedAt: resultData.updated_at,
+    return mapPropertyRow(resultData);
+  }
+
+  async saveHistoricalAssessedValue(payload: {
+    propertyId: string | number;
+    periodLabel: string;
+    value: number;
+    rptarPageReference?: string;
+    assessorName: string;
+    reason?: string;
+  }): Promise<Property> {
+    const { data: prop, error } = await supabase
+      .from('properties')
+      .select('*')
+      .eq('id', payload.propertyId)
+      .single();
+
+    if (error || !prop) {
+      throw new Error(`Property ${payload.propertyId} not found: ${error?.message || 'Unknown error'}`);
+    }
+
+    const currentValues = (prop.historical_assessed_values as Record<string, unknown>) || {};
+    const updatedValues = {
+      ...currentValues,
+      [payload.periodLabel]: {
+        value: Number(payload.value),
+        transcribedBy: payload.assessorName,
+        transcribedAt: new Date().toISOString(),
+        rptarPageReference: payload.rptarPageReference || undefined,
+      },
     };
+
+    const { data: updated, error: updateError } = await supabase
+      .from('properties')
+      .update({
+        historical_assessed_values: updatedValues,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', payload.propertyId)
+      .select('*')
+      .single();
+
+    if (updateError || !updated) {
+      throw new Error(`Failed to update historical assessed value: ${updateError?.message || 'Unknown error'}`);
+    }
+
+    // Non-blocking audit log
+    try {
+      await supabase.from('rptar_audit_logs').insert({
+        property_id: Number(payload.propertyId),
+        td_number: prop.td_number,
+        action_type: 'TRANSCRIBE_HISTORICAL_AV',
+        assessor_name: payload.assessorName,
+        details: `Transcribed historical AV for ${payload.periodLabel}: ₱${Number(payload.value).toLocaleString()}${payload.rptarPageReference ? ` (Ref: ${payload.rptarPageReference})` : ''}`,
+        field_changed: `historical_assessed_values.${payload.periodLabel}`,
+        new_value: Number(payload.value),
+        reason: payload.reason || 'Physical RPTAR Ledger Transcription',
+        timestamp: new Date().toISOString(),
+      });
+    } catch {
+      // Non-blocking audit log
+    }
+
+    return mapPropertyRow(updated);
   }
 
   async deleteProperty(propertyId: string): Promise<void> {
@@ -1197,6 +1226,9 @@ export class SupabaseRepository implements ITreasuryRepository {
       last_paid_year: p.lastPaidYear !== undefined && !isNaN(Number(p.lastPaidYear)) ? Number(p.lastPaidYear) : 1973,
       last_paid_quarter: p.lastPaidQuarter !== undefined && p.lastPaidQuarter !== null ? Number(p.lastPaidQuarter) : 4,
       is_shell_record: Boolean(p.isShellRecord),
+      delinquency_start_year: p.delinquencyStartYear !== undefined && p.delinquencyStartYear !== null && !isNaN(Number(p.delinquencyStartYear)) ? Number(p.delinquencyStartYear) : null,
+      parcel_origin_year: p.parcelOriginYear !== undefined && p.parcelOriginYear !== null && !isNaN(Number(p.parcelOriginYear)) ? Number(p.parcelOriginYear) : null,
+      historical_assessed_values: p.historicalAssessedValues || {},
     }));
 
     let batchHandled = false;
@@ -1237,6 +1269,9 @@ export class SupabaseRepository implements ITreasuryRepository {
             last_paid_year: p.lastPaidYear !== undefined && !isNaN(Number(p.lastPaidYear)) ? Number(p.lastPaidYear) : 1973,
             last_paid_quarter: p.lastPaidQuarter !== undefined && p.lastPaidQuarter !== null ? Number(p.lastPaidQuarter) : 4,
             is_shell_record: Boolean(p.isShellRecord),
+            delinquency_start_year: p.delinquencyStartYear !== undefined && p.delinquencyStartYear !== null && !isNaN(Number(p.delinquencyStartYear)) ? Number(p.delinquencyStartYear) : null,
+            parcel_origin_year: p.parcelOriginYear !== undefined && p.parcelOriginYear !== null && !isNaN(Number(p.parcelOriginYear)) ? Number(p.parcelOriginYear) : null,
+            historical_assessed_values: p.historicalAssessedValues || {},
             encoder_label: (p.encoderLabel as string) || assessorName,
             entry_type: (p.entryType as string) || 'CSV_IMPORT',
             updated_at: new Date().toISOString(),
@@ -1270,6 +1305,8 @@ export class SupabaseRepository implements ITreasuryRepository {
                 market_value: p.marketValue !== undefined ? Number(p.marketValue) : existing.market_value,
                 assessed_value: p.assessedValue !== undefined ? Number(p.assessedValue) : existing.assessed_value,
                 is_shell_record: p.isShellRecord !== undefined ? Boolean(p.isShellRecord) : existing.is_shell_record,
+                delinquency_start_year: p.delinquencyStartYear !== undefined && p.delinquencyStartYear !== null ? Number(p.delinquencyStartYear) : existing.delinquency_start_year,
+                parcel_origin_year: p.parcelOriginYear !== undefined && p.parcelOriginYear !== null ? Number(p.parcelOriginYear) : existing.parcel_origin_year,
                 encoder_label: (p.encoderLabel as string) || chainedLabel,
                 entry_type: (existing.entry_type as string) || (p.entryType as string) || 'CSV_IMPORT',
                 updated_at: new Date().toISOString(),
@@ -1280,9 +1317,11 @@ export class SupabaseRepository implements ITreasuryRepository {
                 .update(updatePayload)
                 .eq('td_number', cleanTd);
 
-              if (updateRes.error && (updateRes.error.message?.includes('encoder_label') || updateRes.error.message?.includes('entry_type') || updateRes.error.code === 'PGRST204')) {
+              if (updateRes.error && (updateRes.error.message?.includes('encoder_label') || updateRes.error.message?.includes('entry_type') || updateRes.error.message?.includes('delinquency_start_year') || updateRes.error.message?.includes('parcel_origin_year') || updateRes.error.code === 'PGRST204')) {
                 delete updatePayload.encoder_label;
                 delete updatePayload.entry_type;
+                delete updatePayload.delinquency_start_year;
+                delete updatePayload.parcel_origin_year;
                 updateRes = await supabase
                   .from('properties')
                   .update(updatePayload)
@@ -1303,8 +1342,8 @@ export class SupabaseRepository implements ITreasuryRepository {
 
       if (toInsert.length > 0) {
         let { error: insertError } = await supabase.from('properties').insert(toInsert);
-        if (insertError && (insertError.message?.includes('encoder_label') || insertError.message?.includes('entry_type') || insertError.code === 'PGRST204')) {
-          const stripped = toInsert.map(({ encoder_label: _el, entry_type: _et, ...rest }) => rest);
+        if (insertError && (insertError.message?.includes('encoder_label') || insertError.message?.includes('entry_type') || insertError.message?.includes('delinquency_start_year') || insertError.message?.includes('parcel_origin_year') || insertError.message?.includes('historical_assessed_values') || insertError.code === 'PGRST204')) {
+          const stripped = toInsert.map(({ encoder_label: _el, entry_type: _et, delinquency_start_year: _dsy, parcel_origin_year: _poy, historical_assessed_values: _hav, ...rest }) => rest);
           const retry = await supabase.from('properties').insert(stripped);
           insertError = retry.error;
         }

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Property, User, CsvImportRowState, CsvImportBatch } from '@/types';
-import { BARANGAYS, PROPERTY_CLASSES } from '@/constants';
+import { BARANGAYS, PROPERTY_CLASSES, HISTORICAL_BASELINE_YEAR } from '@/constants';
 import { api } from '@/services/api';
 import { mergeEncoderLabel } from '@/utils/encoderAttribution';
 import { BreakdownAlertModal } from '@/components/common/BreakdownAlertModal';
@@ -33,6 +33,7 @@ import {
   Filter,
   ShieldCheck,
   FileText,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface BulkImportModalProps {
@@ -63,6 +64,10 @@ interface ParsedRow {
   marketValue: number;
   assessedValue: number;
   lastPaidYear: number;
+  delinquencyStartYear?: number;
+  parcelOriginYear?: number | null;
+  hasHistoricalGap?: boolean;
+  gapRange?: string;
   state: CsvImportRowState;
   isShell: boolean;
   existingProperty?: Property;
@@ -205,6 +210,8 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
       marketValue: number;
       assessedValue: number;
       rawLastPaid: string;
+      rawStartYear: string;
+      rawOriginYear: string;
     }> = [];
 
     const lastSeenIndexByTd = new Map<string, number>();
@@ -231,7 +238,20 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
     const colLotArea = findColIdx(['lotareasqm', 'lotarea', 'area'], 7);
     const colMv = findColIdx(['marketvalue', 'mv'], 8);
     const colAv = findColIdx(['assessedvalue', 'av'], 9);
-    const colLastPaid = findColIdx(['lastpaidyear', 'lastpaid'], 10);
+
+    // Strict column groups for Start Year, Paid Year, and Parcel Origin Year
+    const colStartYear = findColIdx(
+      ['startyear', 'delinquentyear', 'yearfrom', 'unpaidfrom', 'fromyear', 'delinquencystartyear'],
+      -1
+    );
+    const colLastPaid = findColIdx(
+      ['lastpaidyear', 'lastpaid', 'lastpayment'],
+      colStartYear === -1 ? 10 : -1
+    );
+    const colOriginYear = findColIdx(
+      ['originyear', 'parceloriginyear', 'creationyear', 'origyear'],
+      -1
+    );
 
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i];
@@ -247,7 +267,9 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
       const lotAreaSqm = parseFloat(cleanCols[colLotArea]) || 100;
       const marketValue = parseFloat(cleanCols[colMv]) || 0;
       const assessedValue = parseFloat(cleanCols[colAv]) || 0;
-      const rawLastPaid = cleanCols[colLastPaid]?.trim() || '';
+      const rawLastPaid = colLastPaid !== -1 ? cleanCols[colLastPaid]?.trim() || '' : '';
+      const rawStartYear = colStartYear !== -1 ? cleanCols[colStartYear]?.trim() || '' : '';
+      const rawOriginYear = colOriginYear !== -1 ? cleanCols[colOriginYear]?.trim() || '' : '';
 
       const record = {
         line: i + 1,
@@ -262,6 +284,8 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
         marketValue,
         assessedValue,
         rawLastPaid,
+        rawStartYear,
+        rawOriginYear,
       };
 
       rawParsed.push(record);
@@ -394,18 +418,68 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
         }
       }
 
-      // Statutory Last Paid Year Validation (DEBT-DOM-05 Protection against unverified debt amnesty)
+      // Statutory Delinquency Start Year, Last Paid Year & Parcel Origin Resolution
+      const parsedStart = r.rawStartYear ? parseInt(r.rawStartYear, 10) : NaN;
+      const parsedPaid = r.rawLastPaid ? parseInt(r.rawLastPaid, 10) : NaN;
+      const parsedOrigin = r.rawOriginYear ? parseInt(r.rawOriginYear, 10) : NaN;
+
+      const parcelOriginYear: number | null = !isNaN(parsedOrigin) ? parsedOrigin : (existingProperty?.parcelOriginYear ?? null);
+
       let resolvedLastPaidYear: number;
-      if (existingProperty) {
-        // Protect existing financial ledger: ingestion never alters existing payment history
-        resolvedLastPaidYear = existingProperty.lastPaidYear;
-      } else {
-        const parsedYear = r.rawLastPaid ? parseInt(r.rawLastPaid, 10) : NaN;
-        if (isNaN(parsedYear) || parsedYear < 1970 || parsedYear > 2026) {
-          state = 'INVALID_NUMERIC_VALUE';
-          error = `Missing or invalid Last Paid Year ("${r.rawLastPaid || 'omitted'}"). Explicit statutory year (1970–2026) is required for new parcels to prevent unverified debt amnesty.`;
+      let resolvedDelinquencyStartYear: number | undefined;
+
+      const hasStart = !isNaN(parsedStart) && parsedStart >= 1970 && parsedStart <= 2026;
+      const hasPaid = !isNaN(parsedPaid) && parsedPaid >= 1970 && parsedPaid <= 2026;
+
+      if (hasStart && hasPaid) {
+        // Both columns provided: enforce strict consistency: start_year === last_paid_year + 1
+        if (parsedStart !== parsedPaid + 1) {
+          state = 'CONFLICTING_RECORD';
+          error = `Conflicting columns: start_year (${parsedStart}) and last_paid_year (${parsedPaid}) disagree. Expected start_year = last_paid_year + 1. Routed to manual review.`;
+          resolvedLastPaidYear = parsedPaid;
+          resolvedDelinquencyStartYear = parsedStart;
+        } else {
+          resolvedLastPaidYear = parsedPaid;
+          resolvedDelinquencyStartYear = parsedStart;
         }
-        resolvedLastPaidYear = !isNaN(parsedYear) ? parsedYear : 1973;
+      } else if (hasStart) {
+        // Start year provided: last_paid_year = start_year - 1
+        resolvedDelinquencyStartYear = parsedStart;
+        resolvedLastPaidYear = parsedStart - 1;
+      } else if (hasPaid) {
+        // Last paid year provided: start_year = last_paid_year + 1
+        resolvedLastPaidYear = parsedPaid;
+        resolvedDelinquencyStartYear = parsedPaid + 1;
+      } else if (existingProperty) {
+        // Existing property: preserve recorded ledger
+        resolvedLastPaidYear = existingProperty.lastPaidYear;
+        resolvedDelinquencyStartYear = existingProperty.delinquencyStartYear ?? (existingProperty.lastPaidYear + 1);
+      } else {
+        // New property with neither column provided
+        state = 'INVALID_NUMERIC_VALUE';
+        error = `Missing or invalid Last Paid Year / Delinquency Start Year ("${r.rawLastPaid || r.rawStartYear || 'omitted'}"). Explicit statutory year (1970–2026) is required for new parcels to prevent unverified debt amnesty.`;
+        resolvedLastPaidYear = 1973;
+        resolvedDelinquencyStartYear = 1974;
+      }
+
+      // If existing property is updated, protect established payment history against overwrite
+      if (existingProperty && state !== 'CONFLICTING_RECORD') {
+        resolvedLastPaidYear = existingProperty.lastPaidYear;
+        if (hasStart && !existingProperty.delinquencyStartYear) {
+          resolvedDelinquencyStartYear = parsedStart;
+        } else {
+          resolvedDelinquencyStartYear = existingProperty.delinquencyStartYear ?? (existingProperty.lastPaidYear + 1);
+        }
+      }
+
+      // Historical Gap Detection:
+      // If delinquencyStartYear > effectiveOriginYear, flag unverified historical gap
+      const effectiveOrigin = parcelOriginYear ?? HISTORICAL_BASELINE_YEAR;
+      let hasHistoricalGap = false;
+      let gapRange: string | undefined;
+      if (resolvedDelinquencyStartYear && resolvedDelinquencyStartYear > effectiveOrigin) {
+        hasHistoricalGap = true;
+        gapRange = `${effectiveOrigin}–${resolvedDelinquencyStartYear - 1}`;
       }
 
       const isShell = r.assessedValue === 0;
@@ -428,6 +502,10 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
         marketValue: r.marketValue,
         assessedValue: r.assessedValue,
         lastPaidYear: resolvedLastPaidYear,
+        delinquencyStartYear: resolvedDelinquencyStartYear,
+        parcelOriginYear,
+        hasHistoricalGap,
+        gapRange,
         state,
         isShell,
         existingProperty,
@@ -456,15 +534,15 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
   // Download official Santa Rosa 33-Barangay template
   const handleDownloadTemplate = (filterBarangay = 'All') => {
     const header =
-      'TD_Number,Previous_TD,PIN,Owner_Name,Address,Barangay,Property_Class,Lot_Area_Sqm,Market_Value,Assessed_Value,Last_Paid_Year\n';
+      'TD_Number,Previous_TD,PIN,Owner_Name,Address,Barangay,Property_Class,Lot_Area_Sqm,Market_Value,Assessed_Value,Last_Paid_Year,Delinquency_Start_Year,Parcel_Origin_Year\n';
 
     const targetBrgy = filterBarangay !== 'All' ? filterBarangay : 'Rizal (Poblacion)';
     const sampleRows = [
-      `TD-SR-2026-001,TD-92-001,024-05-001-01-001,JUAN DELA CRUZ,"Lot 4 Blk 2, Rizal St.",${targetBrgy},Dwell House,250,500000,100000,2023`,
-      `TD-SR-2026-002,TD-88-004,024-05-002-02-015,MARIA SANTOS,"Sitio Central",${filterBarangay !== 'All' ? targetBrgy : 'Aguinaldo'},Agricultural,2500,800000,320000,2025`,
-      `TD-SR-2026-003,,024-05-006-03-099,SANTA ROSA MILLING CORP,"National Highway",${filterBarangay !== 'All' ? targetBrgy : 'San Isidro'},Industrial,1200,3500000,1750000,2024`,
-      `TD-SR-2026-004,,024-05-008-01-042,AGRI DIESEL POWER INC,"Purok 3",${filterBarangay !== 'All' ? targetBrgy : 'La Fuente'},Machinery,100,600000,300000,2025`,
-      `TD-SR-2026-005,TD-91-005,024-05-010-04-008,PEDRO PENDUKO,"Lot 10",${filterBarangay !== 'All' ? targetBrgy : 'Berang'},Residential,180,200000,40000,2022`,
+      `TD-SR-2026-001,TD-92-001,024-05-001-01-001,JUAN DELA CRUZ,"Lot 4 Blk 2, Rizal St.",${targetBrgy},Dwell House,250,500000,100000,2023,2024,`,
+      `TD-SR-2026-002,TD-88-004,024-05-002-02-015,MARIA SANTOS,"Sitio Central",${filterBarangay !== 'All' ? targetBrgy : 'Aguinaldo'},Agricultural,2500,800000,320000,2025,2026,`,
+      `TD-SR-2026-003,,024-05-006-03-099,SANTA ROSA MILLING CORP,"National Highway",${filterBarangay !== 'All' ? targetBrgy : 'San Isidro'},Industrial,1200,3500000,1750000,,2020,`,
+      `TD-SR-2026-004,,024-05-008-01-042,AGRI DIESEL POWER INC,"Purok 3",${filterBarangay !== 'All' ? targetBrgy : 'La Fuente'},Machinery,100,600000,300000,2025,2026,2015`,
+      `TD-SR-2026-005,TD-91-005,024-05-010-04-008,PEDRO PENDUKO,"Lot 10",${filterBarangay !== 'All' ? targetBrgy : 'Berang'},Residential,180,200000,40000,2022,2023,`,
     ].join('\n');
 
     const blob = new Blob([header + sampleRows], { type: 'text/csv;charset=utf-8;' });
@@ -515,6 +593,8 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
         marketValue: r.marketValue,
         assessedValue: r.assessedValue,
         lastPaidYear: r.lastPaidYear,
+        delinquencyStartYear: r.delinquencyStartYear,
+        parcelOriginYear: r.parcelOriginYear,
         isShellRecord: r.isShell,
         encoderLabel: r.encoderLabel,
         entryType: r.entryType,
@@ -571,6 +651,8 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
   const updateCount = parsedRows.filter((r) => r.state === 'VALID_UPDATE').length;
   const unchangedCount = parsedRows.filter((r) => r.state === 'UNCHANGED').length;
   const duplicateCount = parsedRows.filter((r) => r.state === 'DUPLICATE_IN_FILE').length;
+  const conflictingCount = parsedRows.filter((r) => r.state === 'CONFLICTING_RECORD').length;
+  const historicalGapCount = parsedRows.filter((r) => r.hasHistoricalGap).length;
   const errorCount = parsedRows.filter(
     (r) =>
       r.state === 'INVALID_TD' ||
@@ -826,7 +908,20 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
                         >
                           Superseded ({duplicateCount})
                         </button>
-                        {errorCount > 0 && (
+                        {conflictingCount > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setStateFilter('CONFLICTING_RECORD')}
+                            className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                              stateFilter === 'CONFLICTING_RECORD'
+                                ? 'bg-rose-700 text-white'
+                                : 'bg-white text-rose-800 hover:bg-rose-50 border border-rose-200'
+                            }`}
+                          >
+                            Conflicting ({conflictingCount})
+                          </button>
+                        )}
+                        {errorCount - conflictingCount > 0 && (
                           <button
                             type="button"
                             onClick={() => setStateFilter('INVALID_TD')}
@@ -836,15 +931,23 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
                                 : 'bg-white text-rose-700 hover:bg-rose-50'
                             }`}
                           >
-                            Errors ({errorCount})
+                            Errors ({errorCount - conflictingCount})
                           </button>
                         )}
                       </div>
                     </div>
 
-                    <span className="text-[11px] text-slate-500 font-mono">
-                      Showing {filteredRows.length} of {parsedRows.length} rows
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {historicalGapCount > 0 && (
+                        <span className="text-[10px] text-amber-800 bg-amber-50 border border-amber-300 px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
+                          <AlertTriangle size={11} className="text-amber-600" />
+                          {historicalGapCount} with historical gap
+                        </span>
+                      )}
+                      <span className="text-[11px] text-slate-500 font-mono">
+                        Showing {filteredRows.length} of {parsedRows.length} rows
+                      </span>
+                    </div>
                   </div>
 
                   {/* Staging Matrix Table */}
@@ -916,6 +1019,11 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
                                   Superseded
                                 </Badge>
                               )}
+                              {row.state === 'CONFLICTING_RECORD' && (
+                                <Badge variant="destructive" className="text-[9px] font-bold bg-rose-600 text-white">
+                                  ⚠️ Conflicting
+                                </Badge>
+                              )}
                               {row.state.startsWith('INVALID') && (
                                 <Badge variant="destructive" className="text-[9px] font-bold">
                                   {row.error || 'Invalid'}
@@ -924,6 +1032,11 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
                               {row.isShell && (
                                 <Badge className="text-[9px] bg-amber-100 text-amber-900 border-amber-300 font-bold ml-1">
                                   ⚠️ RPTAR Req.
+                                </Badge>
+                              )}
+                              {row.hasHistoricalGap && (
+                                <Badge className="text-[9px] bg-amber-100 text-amber-900 border-amber-300 font-bold ml-1" title={`Billing begins in ${row.delinquencyStartYear}. Prior historical ledger (${row.gapRange}) preserved unverified pending physical RPTAR audit.`}>
+                                  ⚠️ Starts {row.delinquencyStartYear} ({row.gapRange} Unverified)
                                 </Badge>
                               )}
                             </TableCell>
@@ -938,9 +1051,17 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
                                     </div>
                                   ))}
                                 </div>
+                              ) : row.state === 'CONFLICTING_RECORD' ? (
+                                <span className="text-rose-700 font-semibold text-[10px] flex items-center gap-1">
+                                  {row.error}
+                                </span>
                               ) : row.isShell ? (
                                 <span className="text-amber-700 font-medium text-[10px] flex items-center gap-1">
                                   ⚠️ Pending Physical RPTAR Valuation
+                                </span>
+                              ) : row.hasHistoricalGap ? (
+                                <span className="text-amber-800 font-medium text-[10px] flex items-center gap-1">
+                                  Starts {row.delinquencyStartYear} • {row.gapRange} unverified
                                 </span>
                               ) : (
                                 <span className="text-slate-400 text-[10px]">—</span>

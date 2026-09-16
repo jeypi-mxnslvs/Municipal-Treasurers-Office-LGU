@@ -99,6 +99,20 @@ export class LocalHttpRepository implements ITreasuryRepository {
     });
   }
 
+  async saveHistoricalAssessedValue(payload: {
+    propertyId: string | number;
+    periodLabel: string;
+    value: number;
+    rptarPageReference?: string;
+    assessorName: string;
+    reason?: string;
+  }): Promise<Property> {
+    return this.request<Property>(`/properties/${payload.propertyId}/historical-av`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
   async deleteProperty(propertyId: string): Promise<void> {
     await this.request(`/properties/${propertyId}`, { method: 'DELETE' });
   }

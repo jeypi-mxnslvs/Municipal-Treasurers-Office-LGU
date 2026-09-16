@@ -886,6 +886,155 @@ describe("taxLogic - Municipal Payment-Date Policy & Assessor Overrides", () => 
       expect(missingRec!.isPayable).toBe(false);
     });
   });
+
+  describe("Historical Gap Preservation (1971+) & Unconditional Roll Generation (v1.1)", () => {
+    const baseGapProperty: Property = {
+      id: "prop-gap-test",
+      tdNumber: "TD-SR-GAP-001",
+      previousTdNumber: "",
+      ownerName: "Dela Cruz, Juan",
+      address: "Poblacion, Santa Rosa",
+      barangay: "Poblacion",
+      propertyClass: "Residential",
+      assessedValue: 100000,
+      lastPaidYear: 2019,
+      isShellRecord: false,
+    };
+
+    it("Property with delinquencyStartYear = 1998 generates preserved unverified brackets for 1971-1997 without threshold gate", () => {
+      const prop: Property = {
+        ...baseGapProperty,
+        delinquencyStartYear: 1998,
+        lastPaidYear: 1997,
+      };
+
+      const result = calculateTaxLiability(prop);
+      // Historical brackets ending before 1998: 1971-72, 1973-79, 1980-85, 1986, 1987-1991, 1992-1993, 1994-1997 (partial)
+      const unverified = result.records.filter((r) => r.isUnverifiedHistorical);
+      expect(unverified.length).toBeGreaterThanOrEqual(6);
+
+      const b73 = result.records.find((r) => r.periodLabel === "1973-79");
+      expect(b73).toBeDefined();
+      expect(b73!.isUnverifiedHistorical).toBe(true);
+      expect(b73!.isMissingValuation).toBe(true);
+      expect(b73!.baseTax).toBeNull();
+      expect(b73!.penaltyAmount).toBeNull();
+      expect(b73!.totalDue).toBeNull();
+      expect(b73!.isPayable).toBe(false);
+
+      // Active records from 1998 to 2026 are generated with real taxes
+      const r98 = result.records.find((r) => r.year === 1998 || r.startYear === 1998);
+      expect(r98).toBeDefined();
+      expect(r98!.isUnverifiedHistorical).toBe(false);
+      expect(r98!.baseTax).toBeGreaterThan(0);
+      expect(r98!.totalDue).toBeGreaterThan(0);
+    });
+
+    it("Property with parcelOriginYear = 2015 generates unverified rows only for 2015-2019, completely suppressing 1971-2014", () => {
+      const prop: Property = {
+        ...baseGapProperty,
+        parcelOriginYear: 2015,
+        delinquencyStartYear: 2020,
+        lastPaidYear: 2019,
+      };
+
+      const result = calculateTaxLiability(prop);
+      const pre2015 = result.records.filter((r) => (r.endYear ?? r.year) < 2015);
+      expect(pre2015).toHaveLength(0); // 1971-2014 completely suppressed because parcel did not exist yet
+
+      const unverified = result.records.filter((r) => r.isUnverifiedHistorical);
+      expect(unverified.map((r) => r.year)).toEqual([2015, 2016, 2017, 2018, 2019]);
+    });
+
+    it("Property with delinquencyStartYear = 2020 maintains active billing at 2020 and preserves 1971-2019 as unverified", () => {
+      const prop: Property = {
+        ...baseGapProperty,
+        delinquencyStartYear: 2020,
+        lastPaidYear: 2019,
+      };
+
+      const result = calculateTaxLiability(prop);
+      const unverified = result.records.filter((r) => r.isUnverifiedHistorical);
+      expect(unverified.length).toBeGreaterThanOrEqual(8);
+
+      // Verify all unverified amounts are strictly null, never 0
+      unverified.forEach((rec) => {
+        expect(rec.baseTax).toBeNull();
+        expect(rec.basicTax).toBeNull();
+        expect(rec.sefTax).toBeNull();
+        expect(rec.penaltyAmount).toBeNull();
+        expect(rec.totalDue).toBeNull();
+        expect(rec.isPayable).toBe(false);
+      });
+
+      // Active records start at 2020 through 2026
+      const activeRecords = result.records.filter((r) => !r.isUnverifiedHistorical);
+      const activeYears = activeRecords.map((r) => r.year);
+      expect(activeYears).toContain(2020);
+      expect(activeYears).toContain(2025);
+      expect(activeYears).toContain(2026);
+
+      // Grand total only reflects active 2020-2026 records
+      const expectedTotal = activeRecords.reduce((sum, r) => sum + (r.totalDue ?? 0), 0);
+      expect(result.grandTotal).toBe(expectedTotal);
+      expect(result.summary?.grandTotal).toBe(expectedTotal);
+    });
+
+    it("+AV transcription on one bracket converts that bracket to verified while siblings remain unverified and null", () => {
+      const prop: Property = {
+        ...baseGapProperty,
+        delinquencyStartYear: 2020,
+        lastPaidYear: 2019,
+        historicalAssessedValues: {
+          "1987-1991": {
+            value: 50000,
+            transcribedBy: "Juan Reyes",
+            transcribedAt: "2026-09-16T12:00:00Z",
+            rptarPageReference: "RPTAR Vol. 14, Page 22",
+          },
+        },
+      };
+
+      const result = calculateTaxLiability(prop);
+      const b87 = result.records.find((r) => r.periodLabel === "1987-1991");
+      expect(b87).toBeDefined();
+      expect(b87!.isUnverifiedHistorical).toBe(false);
+      expect(b87!.isMissingValuation).toBe(false);
+      expect(b87!.assessedValue).toBe(50000);
+      // 50,000 * 0.01 * 5 = 2500 Basic, 2500 SEF = 5000 Base
+      expect(b87!.baseTax).toBe(5000);
+      expect(b87!.penaltyRate).toBe(0.24);
+      expect(b87!.penaltyAmount).toBe(1200);
+      expect(b87!.totalDue).toBe(6200);
+      expect(b87!.isPayable).toBe(true);
+
+      // Sibling brackets remain unverified and null
+      const b73 = result.records.find((r) => r.periodLabel === "1973-79");
+      expect(b73).toBeDefined();
+      expect(b73!.isUnverifiedHistorical).toBe(true);
+      expect(b73!.totalDue).toBeNull();
+      expect(b73!.isPayable).toBe(false);
+
+      // Grand total includes active records + 6200 from transcribed bracket
+      const activeRecords = result.records.filter((r) => !r.isUnverifiedHistorical);
+      const expectedTotal = activeRecords.reduce((sum, r) => sum + (r.totalDue ?? 0), 0);
+      expect(result.grandTotal).toBe(expectedTotal);
+      expect(result.grandTotal).toBeGreaterThan(6200);
+    });
+
+    it("ensures backward compatibility for properties with no historical gap", () => {
+      const standardProperty: Property = {
+        ...baseGapProperty,
+        lastPaidYear: 2023,
+        // no delinquencyStartYear, no parcelOriginYear
+      };
+
+      const result = calculateTaxLiability(standardProperty);
+      const unverified = result.records.filter((r) => r.isUnverifiedHistorical);
+      expect(unverified).toHaveLength(0);
+      expect(result.records.map((r) => r.year)).toEqual([2024, 2025, 2026]);
+    });
+  });
 });
 
 

@@ -64,6 +64,17 @@ export const api = {
     return treasuryRepository.saveProperty(propertyData);
   },
 
+  saveHistoricalAssessedValue(payload: {
+    propertyId: string | number;
+    periodLabel: string;
+    value: number;
+    rptarPageReference?: string;
+    assessorName: string;
+    reason?: string;
+  }): Promise<Property> {
+    return treasuryRepository.saveHistoricalAssessedValue(payload);
+  },
+
   deleteProperty(propertyId: string): Promise<void> {
     return treasuryRepository.deleteProperty(propertyId);
   },
