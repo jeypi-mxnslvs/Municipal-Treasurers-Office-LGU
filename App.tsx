@@ -476,75 +476,82 @@ const App: React.FC = () => {
             </div>
 
             {selectedProperty && (
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-                {/* Column 1: Property Master Card & Sequential Dues Clearance Action Box (Sticky on Desktop) */}
-                <div className="lg:col-span-1 space-y-6 lg:sticky lg:top-6 self-start">
-                  <PropertyCard 
-                    property={selectedProperty} 
-                    onViewAudit={() => handleOpenAuditModal(selectedProperty)}
-                  />
+              <div className="space-y-6">
+                {/* Top Section: Property Information Banner & Sequential Dues Clearance Card */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+                  {/* Property Master Info Card */}
+                  <div className="lg:col-span-7 xl:col-span-8 flex flex-col">
+                    <PropertyCard 
+                      property={selectedProperty} 
+                      onViewAudit={() => handleOpenAuditModal(selectedProperty)}
+                    />
+                  </div>
 
                   {/* Sequential Dues Clearance Action Box */}
-                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4 no-print">
-                    <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
-                      <ShieldCheck size={18} className="text-emerald-600" />
-                      <h3 className="font-bold text-sm text-slate-800">Sequential Dues Clearance</h3>
+                  <div className="lg:col-span-5 xl:col-span-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between space-y-4 no-print">
+                    <div>
+                      <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
+                        <ShieldCheck size={18} className="text-emerald-600" />
+                        <h3 className="font-bold text-sm text-slate-800">Sequential Dues Clearance</h3>
+                      </div>
+
+                      {taxRecords.length > 0 ? (
+                        <div className="space-y-3 text-xs pt-3">
+                          <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-xl text-emerald-950 space-y-1">
+                            <p className="font-bold">
+                              Selected Scope: {selectedRecords.length} of {taxRecords.length} {taxRecords.length === 1 ? 'Tax Period' : 'Tax Periods'}
+                            </p>
+                            <p className="text-[11px] text-emerald-800">
+                              Under the <strong>Arrears-First rule</strong>, earlier tax periods must be settled chronologically before subsequent ones.
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-center text-xs font-bold flex items-center justify-center gap-2 mt-4">
+                          <CheckCircle size={18} className="text-emerald-600" />
+                          Account is fully cleared. Zero liabilities.
+                        </div>
+                      )}
                     </div>
 
-                    {taxRecords.length > 0 ? (
-                      <div className="space-y-4 text-xs">
-                        <div className="p-3.5 bg-emerald-50/80 border border-emerald-200 rounded-xl text-emerald-950 space-y-1">
-                          <p className="font-bold">
-                            Selected Scope: {selectedRecords.length} of {taxRecords.length} {taxRecords.length === 1 ? 'Tax Period' : 'Tax Periods'}
-                          </p>
-                          <p className="text-[11px] text-emerald-800">
-                            Under the <strong>Arrears-First rule</strong>, earlier tax periods must be settled chronologically before subsequent ones.
-                          </p>
-                        </div>
-
-                        <div className="pt-2">
-                          {canClearDues ? (
-                            <button 
-                              onClick={handleMarkDuesCleared}
-                              disabled={isProcessingClearance || selectedRecords.length === 0}
-                              className={`w-full transition-all duration-200 rounded-xl shadow-md active:scale-98 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2 bg-[#064e3b] hover:bg-[#085a44] text-white ${
-                                selectedScopeSubtotal >= 100000 
-                                  ? 'px-3 py-2.5 sm:py-3' 
-                                  : 'px-4 py-3 sm:py-3.5'
-                              }`}
-                            >
-                              <CheckCircle2 size={18} className="shrink-0 text-emerald-300" />
-                              <div className={`flex items-center justify-center gap-1.5 text-center ${
-                                selectedScopeSubtotal >= 100000 ? 'flex-col sm:flex-row' : 'flex-wrap'
-                              }`}>
-                                <span className="font-bold text-xs sm:text-sm">
-                                  {isProcessingClearance ? 'Processing Clearance...' : 'Mark Selected Dues as Cleared'}
+                    {taxRecords.length > 0 && (
+                      <div className="pt-2">
+                        {canClearDues ? (
+                          <button 
+                            onClick={handleMarkDuesCleared}
+                            disabled={isProcessingClearance || selectedRecords.length === 0}
+                            className={`w-full transition-all duration-200 rounded-xl shadow-md active:scale-98 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2 bg-[#064e3b] hover:bg-[#085a44] text-white ${
+                              selectedScopeSubtotal >= 100000 
+                                ? 'px-3 py-2.5 sm:py-3' 
+                                : 'px-4 py-3 sm:py-3.5'
+                            }`}
+                          >
+                            <CheckCircle2 size={18} className="shrink-0 text-emerald-300" />
+                            <div className={`flex items-center justify-center gap-1.5 text-center ${
+                              selectedScopeSubtotal >= 100000 ? 'flex-col sm:flex-row' : 'flex-wrap'
+                            }`}>
+                              <span className="font-bold text-xs sm:text-sm">
+                                {isProcessingClearance ? 'Processing Clearance...' : 'Mark Selected Dues as Cleared'}
+                              </span>
+                              {!isProcessingClearance && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-950/60 border border-emerald-500/30 text-emerald-200 font-extrabold text-xs sm:text-sm tracking-tight tabular-nums whitespace-nowrap">
+                                  ₱{selectedScopeSubtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </span>
-                                {!isProcessingClearance && (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-950/60 border border-emerald-500/30 text-emerald-200 font-extrabold text-xs sm:text-sm tracking-tight tabular-nums whitespace-nowrap">
-                                    ₱{selectedScopeSubtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                  </span>
-                                )}
-                              </div>
-                            </button>
-                          ) : (
-                            <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-center text-xs">
-                              Log in as <strong>Assessor</strong> or <strong>Admin</strong> to mark dues as cleared.
+                              )}
                             </div>
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-center text-xs font-bold flex items-center justify-center gap-2">
-                        <CheckCircle size={18} className="text-emerald-600" />
-                        Account is fully cleared. Zero liabilities.
+                          </button>
+                        ) : (
+                          <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-center text-xs">
+                            Log in as <strong>Assessor</strong> or <strong>Admin</strong> to mark dues as cleared.
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Column 2-3: Statement of Account Table */}
-                <div className="lg:col-span-2">
+                {/* Full-Width Statement of Account (SOA) Table */}
+                <div className="w-full">
                   <DelinquencyTable 
                     records={taxRecords} 
                     completedRecords={completedTaxRecords}

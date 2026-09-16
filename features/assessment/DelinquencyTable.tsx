@@ -428,20 +428,19 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
       
       {/* Itemized Table - Scrollable container for multi-year delinquency rolls (e.g. 1971-2026) */}
       <div className="overflow-y-auto overflow-x-auto max-h-[560px] flex-grow relative">
-        <Table className="w-full min-w-[900px] table-fixed text-sm font-sans">
+        <Table className="w-full min-w-[780px] table-fixed text-sm font-sans">
           <TableHeader className="bg-slate-100/95 backdrop-blur-xs sticky top-0 z-10 shadow-2xs">
             <TableRow className="hover:bg-transparent border-b border-slate-200">
-              <TableHead className="w-[6%] min-w-[44px] text-center font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 pl-3 pr-2">Select</TableHead>
-              <TableHead className="w-[13%] text-left font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 pl-2 pr-1.5">Period</TableHead>
-              <TableHead className="w-[9%] text-left font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 px-1.5">Status</TableHead>
-              <TableHead className="w-[14%] text-right font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 px-1.5">Assessed Value</TableHead>
-              <TableHead className="w-[11%] text-right font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 px-1.5">Basic (1%)</TableHead>
-              <TableHead className="w-[11%] text-right font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 px-1.5">SEF (1%)</TableHead>
-              <TableHead className="w-[12%] text-right font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 px-1.5">
+              <TableHead className="w-[4%] min-w-[36px] text-center font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 pl-3 pr-2">Select</TableHead>
+              <TableHead className="w-[14%] min-w-[125px] text-left font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 pl-2 pr-1.5">Period & Status</TableHead>
+              <TableHead className="w-[13%] min-w-[105px] text-right font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 px-1.5">Assessed Value</TableHead>
+              <TableHead className="w-[13%] min-w-[100px] text-right font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 px-1.5">Basic (1%)</TableHead>
+              <TableHead className="w-[13%] min-w-[100px] text-right font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 px-1.5">SEF (1%)</TableHead>
+              <TableHead className="w-[14%] min-w-[100px] text-right font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 px-1.5">
                 Penalty <span className="text-slate-500 font-normal text-[10px]">(Rate)</span>
               </TableHead>
-              <TableHead className="w-[9%] text-right font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 px-1.5">Discount</TableHead>
-              <TableHead className="w-[15%] text-right font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 pl-2 pr-6">Net Due</TableHead>
+              <TableHead className="w-[11%] min-w-[80px] text-right font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 px-1.5">Discount</TableHead>
+              <TableHead className="w-[18%] min-w-[130px] text-right font-bold text-slate-800 uppercase tracking-wider text-[11px] py-3 pl-2 pr-6">Net Due</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody className="divide-y divide-slate-100">
@@ -477,6 +476,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
                           : 'opacity-40 hover:opacity-75 bg-slate-50/20 cursor-pointer'
                   }`}
                 >
+                  {/* 1. Selection Checkbox */}
                   <TableCell className="text-center py-2.5 pl-3 pr-2">
                     {isCleared ? (
                       <span title={`Cleared / Settled (${record.clearanceReference || 'Official Settlement'})`}>
@@ -494,51 +494,53 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
                     )}
                   </TableCell>
 
+                  {/* 2. Period & Integrated Status (Tightly Proportioned) */}
                   <TableCell className="font-bold text-slate-900 py-2.5 pl-2 pr-1.5">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className={`text-xs sm:text-sm font-extrabold tracking-tight tabular-nums ${isCleared ? 'text-slate-700' : 'text-slate-900'}`}>
-                        {record.periodLabel || record.year}
-                      </span>
-                      {record.yearsCovered && record.yearsCovered.length > 1 && (
-                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-200/80 text-slate-700 font-semibold tracking-tight whitespace-nowrap">
-                          {record.yearsCovered.length} Yrs
+                    <div className="flex flex-col gap-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className={`text-xs sm:text-sm font-extrabold tracking-tight tabular-nums ${isCleared ? 'text-slate-700' : 'text-slate-900'}`}>
+                          {record.periodLabel || record.year}
                         </span>
-                      )}
-                      {record.quarter && !record.quarterSpan && (
-                        <span className="text-[10px] px-1 py-0.5 rounded bg-slate-100 text-slate-700 font-semibold">
-                          Q{record.quarter}
-                        </span>
-                      )}
-                      {record.receiptNo && (
-                        <Badge variant="outline" className="text-[9px] px-1 py-0 bg-emerald-50 text-emerald-800 border-emerald-300 font-bold" title={`Issued Receipt: ${record.receiptNo}`}>
-                          {record.receiptNo}
-                        </Badge>
-                      )}
-                      {record.isManuallyEdited && (
-                        <Badge variant="outline" className="text-[9px] px-1 py-0 bg-amber-50 text-amber-800 border-amber-300 font-bold" title={record.editReason || 'Assessor adjusted'}>
-                          Adj
-                        </Badge>
-                      )}
+                        {isCleared ? (
+                          <Badge variant="secondary" className="text-[10px] font-bold px-1.5 py-0 bg-emerald-100 text-emerald-800 border-emerald-300">
+                            ✓ Cleared
+                          </Badge>
+                        ) : isDelinquent ? (
+                          <Badge variant="destructive" className="text-[10px] font-bold px-1.5 py-0 bg-rose-100 text-rose-800 border-rose-300">
+                            Delq
+                          </Badge>
+                        ) : (
+                          <Badge variant="default" className="text-[10px] font-bold px-1.5 py-0 bg-blue-100 text-blue-800 border-blue-300">
+                            Current
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1">
+                        {record.yearsCovered && record.yearsCovered.length > 1 && (
+                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-200/80 text-slate-700 font-semibold tracking-tight whitespace-nowrap">
+                            {record.yearsCovered.length} Yrs
+                          </span>
+                        )}
+                        {record.quarter && !record.quarterSpan && (
+                          <span className="text-[9px] px-1 py-0.2 rounded bg-slate-100 text-slate-700 font-semibold">
+                            Q{record.quarter}
+                          </span>
+                        )}
+                        {record.receiptNo && (
+                          <Badge variant="outline" className="text-[9px] px-1 py-0 bg-emerald-50 text-emerald-800 border-emerald-300 font-bold" title={`Issued Receipt: ${record.receiptNo}`}>
+                            OR #{record.receiptNo}
+                          </Badge>
+                        )}
+                        {record.isManuallyEdited && (
+                          <Badge variant="outline" className="text-[9px] px-1 py-0 bg-amber-50 text-amber-800 border-amber-300 font-bold" title={record.editReason || 'Assessor adjusted'}>
+                            Adj
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                   </TableCell>
 
-                  <TableCell className="py-2.5 px-1.5">
-                    {isCleared ? (
-                      <Badge variant="secondary" className="text-[11px] font-bold px-1.5 py-0.5 bg-emerald-100 text-emerald-800 border-emerald-300">
-                        ✓ Cleared
-                      </Badge>
-                    ) : isDelinquent ? (
-                      <Badge variant="destructive" className="text-[11px] font-bold px-1.5 py-0.5 bg-rose-100 text-rose-800 border-rose-300">
-                        Delq
-                      </Badge>
-                    ) : (
-                      <Badge variant="default" className="text-[11px] font-bold px-1.5 py-0.5 bg-blue-100 text-blue-800 border-blue-300">
-                        Current
-                      </Badge>
-                    )}
-                  </TableCell>
-
-                  {/* Assessed Value (Output Precedence: AV -> Basic/SEF) */}
+                  {/* 3. Assessed Value */}
                   <TableCell className="text-right py-2.5 px-1.5">
                     {isUnassessed ? (
                       <div className="flex items-center justify-end gap-1">
@@ -584,7 +586,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
                     )}
                   </TableCell>
 
-                  {/* Basic Tax with Default vs Applied */}
+                  {/* 4. Basic Tax (1%) */}
                   <TableCell className="text-right py-2.5 px-1.5">
                     {isUnassessed ? (
                       <span className="text-slate-400 font-mono italic text-xs">Pending AV</span>
@@ -612,7 +614,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
                     )}
                   </TableCell>
 
-                  {/* SEF Tax with Default vs Applied */}
+                  {/* 5. SEF Tax (1%) */}
                   <TableCell className="text-right py-2.5 px-1.5">
                     {isUnassessed ? (
                       <span className="text-slate-400 font-mono italic text-xs">Pending AV</span>
@@ -640,7 +642,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
                     )}
                   </TableCell>
 
-                  {/* Penalty */}
+                  {/* 6. Delinquency Penalty */}
                   <TableCell className="text-right py-2.5 px-1.5">
                     {isUnassessed ? (
                       <span className="text-slate-400 font-mono italic text-xs">Pending AV</span>
@@ -658,7 +660,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
                     )}
                   </TableCell>
 
-                  {/* Discount Rate & Derived Amount */}
+                  {/* 7. Prompt / Advance Discount */}
                   <TableCell className="text-right py-2.5 px-1.5">
                     {isUnassessed ? (
                       <span className="text-slate-400 font-mono italic text-xs">—</span>
@@ -689,10 +691,12 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
                     )}
                   </TableCell>
 
-                  {/* Net Total Due */}
-                  <TableCell className={`font-black text-right text-xs sm:text-sm tabular-nums py-2.5 pl-2 pr-6 ${isCleared ? 'text-emerald-800' : isUnassessed ? 'text-amber-700' : 'text-slate-950'}`}>
+                  {/* 8. Net Total Due (Normal weight, clean right-aligned) */}
+                  <TableCell className={`text-right text-xs sm:text-sm tabular-nums py-2.5 pl-2 pr-6 font-normal ${
+                    isCleared ? 'text-emerald-800' : isUnassessed ? 'text-amber-700' : 'text-slate-800'
+                  }`}>
                     {isUnassessed ? (
-                      <span className="text-amber-700 font-mono font-bold text-xs">Requires RPTAR</span>
+                      <span className="text-amber-700 font-mono text-xs">Requires RPTAR</span>
                     ) : (
                       `₱${record.totalDue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
                     )}
