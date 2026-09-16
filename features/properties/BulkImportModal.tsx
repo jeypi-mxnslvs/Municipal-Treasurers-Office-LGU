@@ -3,6 +3,7 @@ import { Property, User, CsvImportRowState, CsvImportBatch } from '@/types';
 import { BARANGAYS, PROPERTY_CLASSES } from '@/constants';
 import { api } from '@/services/api';
 import { mergeEncoderLabel } from '@/utils/encoderAttribution';
+import { BreakdownAlertModal } from '@/components/common/BreakdownAlertModal';
 import {
   Dialog,
   DialogContent,
@@ -150,6 +151,7 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
   const [stateFilter, setStateFilter] = useState<string>('ALL');
   const [importBatches, setImportBatches] = useState<CsvImportBatch[]>([]);
   const [isLoadingBatches, setIsLoadingBatches] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -544,7 +546,7 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
       onImportComplete();
       await loadBatchHistory();
     } catch (err) {
-      alert(`Import failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      setImportError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setIsProcessing(false);
     }
@@ -581,6 +583,7 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
   const totalActionable = newCount + updateCount + unchangedCount;
 
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-5xl max-h-[92vh] p-0 flex flex-col overflow-hidden gap-0 border-slate-200 shadow-2xl">
         {/* Modal Header */}
@@ -1133,6 +1136,17 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <BreakdownAlertModal
+      isOpen={!!importError}
+      onClose={() => setImportError(null)}
+      severity="error"
+      title="Batch Import Failed"
+      summary="The CSV import could not be committed to the masterlist. Any rows already processed were rolled back — the database was not modified."
+      guidance="Common causes: a required column is missing, a TD Number is malformed, or a database connectivity issue occurred. Correct the CSV and re-upload. If the issue persists, contact the system administrator."
+      technicalDetail={importError ?? undefined}
+    />
+  </>
   );
 };
 

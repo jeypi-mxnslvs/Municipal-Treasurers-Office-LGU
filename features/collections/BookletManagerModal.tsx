@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AccountableFormBooklet, User } from '@/types';
 import { api } from '@/services/api';
+import { useToast } from '@/components/common/Toast';
 import {
   Dialog,
   DialogContent,
@@ -19,7 +20,7 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/table';
-import { BookOpen, UserCheck, AlertCircle, RefreshCw } from 'lucide-react';
+import { BookOpen, UserCheck, RefreshCw } from 'lucide-react';
 
 interface BookletManagerModalProps {
   isOpen: boolean;
@@ -37,7 +38,7 @@ export const BookletManagerModal: React.FC<BookletManagerModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [selectedBookletId, setSelectedBookletId] = useState<string | null>(null);
   const [selectedUsername, setSelectedUsername] = useState<string>('');
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const { showToast } = useToast();
 
   const loadData = async () => {
     setIsLoading(true);
@@ -58,7 +59,6 @@ export const BookletManagerModal: React.FC<BookletManagerModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       loadData();
-      setStatusMessage(null);
       setSelectedBookletId(null);
     }
   }, [isOpen]);
@@ -67,12 +67,20 @@ export const BookletManagerModal: React.FC<BookletManagerModalProps> = ({
     if (!selectedUsername) return;
     try {
       await api.assignBooklet(bookletId, selectedUsername);
-      setStatusMessage(`Booklet ${bookletId} assigned to ${selectedUsername}.`);
+      showToast({
+        type: 'success',
+        title: `Booklet ${bookletId} Assigned`,
+        message: `AF-51 booklet assigned to ${selectedUsername}.`,
+      });
       setSelectedBookletId(null);
       setSelectedUsername('');
       await loadData();
     } catch (err) {
-      setStatusMessage(err instanceof Error ? err.message : 'Assignment failed.');
+      showToast({
+        type: 'warning',
+        title: 'Booklet Assignment Failed',
+        message: err instanceof Error ? err.message : 'Assignment failed.',
+      });
     }
   };
 
@@ -120,12 +128,6 @@ export const BookletManagerModal: React.FC<BookletManagerModalProps> = ({
         </DialogHeader>
 
         <div className="p-6 overflow-y-auto space-y-4 flex-1">
-          {statusMessage && (
-            <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl flex items-center gap-2">
-              <AlertCircle className="h-4 w-4 text-emerald-600 shrink-0" />
-              <span>{statusMessage}</span>
-            </div>
-          )}
 
           {/* Booklets Table */}
           <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">

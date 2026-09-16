@@ -13,7 +13,12 @@ import {
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Database, UserPlus, Info } from 'lucide-react';
+import { Database, UserPlus, Info, AlertCircle } from 'lucide-react';
+import {
+  validatePropertyForm,
+  FormErrors,
+  SANTA_ROSA_BARANGAY_CODES,
+} from '@/utils/validationPipeline';
 
 interface RptarModalProps {
   isOpen: boolean;
@@ -22,43 +27,6 @@ interface RptarModalProps {
   initialData?: Property | null;
   currentUser?: User;
 }
-
-// Official 5-Digit Barangay Codes for Santa Rosa, Nueva Ecija (23001 - 23033)
-const SANTA_ROSA_BARANGAY_CODES: Record<string, string> = {
-  'Rizal (Poblacion)': '23001',
-  'Aguinaldo': '23002',
-  'Berang': '23003',
-  'Burgos': '23004',
-  'Cojuangco (Poblacion)': '23005',
-  'Del Pilar': '23006',
-  'Gomez': '23007',
-  'Inspector': '23008',
-  'Isla': '23009',
-  'La Fuente': '23010',
-  'Liwayway': '23011',
-  'Lourdes': '23012',
-  'Luna': '23013',
-  'Mabini': '23014',
-  'Malacañang': '23015',
-  'Maliolio': '23016',
-  'Mapalad': '23017',
-  'Rajal Centro': '23018',
-  'Rajal Norte': '23019',
-  'Rajal Sur': '23020',
-  'San Gregorio': '23021',
-  'San Isidro': '23022',
-  'San Joseph': '23023',
-  'San Mariano': '23024',
-  'San Pedro': '23025',
-  'Santa Teresita': '23026',
-  'Santo Rosario': '23027',
-  'Sapsap': '23028',
-  'Soledad': '23029',
-  'Tagpos': '23030',
-  'Tramo': '23031',
-  'Valenzuela (Poblacion)': '23032',
-  'Zamora (Poblacion)': '23033',
-};
 
 const getBarangayCode = (brgy?: string): string => {
   if (!brgy) return '23001';
@@ -96,6 +64,19 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
   const [marketValueStr, setMarketValueStr] = useState<string>('0');
   const [lotAreaStr, setLotAreaStr] = useState<string>('0');
   const [lastPaidYearStr, setLastPaidYearStr] = useState<string>('2025');
+
+  // Inline validation errors state
+  const [formErrors, setFormErrors] = useState<FormErrors>({});
+
+  const clearFieldError = (fieldName: string) => {
+    if (formErrors[fieldName]) {
+      setFormErrors((prev) => {
+        const next = { ...prev };
+        delete next[fieldName];
+        return next;
+      });
+    }
+  };
 
   const getAssessmentLevel = (propertyClass?: string) => {
     return propertyClass === 'Commercial' || propertyClass === 'Industrial' ? 0.50 : 0.20;
@@ -135,10 +116,12 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
       setLotAreaStr('0');
       setLastPaidYearStr('2025');
     }
+    setFormErrors({});
   }, [initialData, isOpen]);
 
   // When barangay changes, only update barangay code in TD number if an existing 17-23xxx pattern was already entered
   const handleBarangayChange = (newBrgy: string) => {
+    clearFieldError('tdNumber');
     const newCode = getBarangayCode(newBrgy);
     setFormData((prev) => {
       let updatedTd = prev.tdNumber || '';
@@ -156,6 +139,7 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
 
   // Primary handler: Assessed value is the fundamental tax base for Treasury billing
   const handleAssessedValueChange = (valStr: string) => {
+    clearFieldError('assessedValue');
     setAssessedValueStr(valStr);
     const num = parseFloat(valStr);
     const aVal = isNaN(num) ? 0 : num;
@@ -201,14 +185,33 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
   };
 
   const handleSave = () => {
+    // Execute validation pipeline constraints
+    const validationErrors = validatePropertyForm({
+      tdNumber: formData.tdNumber,
+      ownerName: formData.ownerName,
+      assessedValue: assessedValueStr,
+      lotAreaSqm: lotAreaStr,
+      lastPaidYear: lastPaidYearStr,
+      barangay: formData.barangay,
+    });
+
+    if (Object.keys(validationErrors).length > 0) {
+      setFormErrors(validationErrors);
+      return;
+    }
+    setFormErrors({});
+
     const level = getAssessmentLevel(formData.propertyClass);
-    const finalAssessed = parseFloat(assessedValueStr) || 0;
+    const parsedAssessed = parseFloat(assessedValueStr);
+    const finalAssessed = isNaN(parsedAssessed) ? 0 : parsedAssessed;
     const finalMarket =
       marketValueStr && parseFloat(marketValueStr) > 0
         ? parseFloat(marketValueStr)
         : Math.round(finalAssessed / level);
-    const finalLotArea = parseFloat(lotAreaStr) || 100;
-    const finalLastPaid = parseInt(lastPaidYearStr, 10) || 2025;
+    const parsedLotArea = parseFloat(lotAreaStr);
+    const finalLotArea = isNaN(parsedLotArea) ? 0 : parsedLotArea;
+    const parsedLastPaid = parseInt(lastPaidYearStr, 10);
+    const finalLastPaid = isNaN(parsedLastPaid) ? 2025 : parsedLastPaid;
 
     const finalEncoderLabel = mergeEncoderLabel(
       formData.encoderLabel,
@@ -284,6 +287,13 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
 
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto space-y-4 text-xs flex-1">
+          {Object.keys(formErrors).length > 0 && (
+            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center gap-2">
+              <AlertCircle size={15} className="text-rose-600 shrink-0" />
+              <span>Please correct the highlighted fields before saving the record.</span>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* TD Number */}
             <div>
@@ -292,15 +302,24 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
               </label>
               <Input
                 type="text"
-                className="bg-slate-50 font-mono font-semibold"
+                className={`bg-slate-50 font-mono font-semibold ${
+                  formErrors.tdNumber ? 'border-rose-500 focus-visible:ring-rose-500/20' : ''
+                }`}
                 value={formData.tdNumber || ''}
-                onChange={(e) => setFormData({ ...formData, tdNumber: e.target.value })}
+                onChange={(e) => {
+                  clearFieldError('tdNumber');
+                  setFormData({ ...formData, tdNumber: e.target.value });
+                }}
                 placeholder={`TD-${getBarangayCode(formData.barangay)}-00000`}
                 required
               />
-              <p className="text-[10px] text-slate-500 mt-1">
-                Format: <span className="font-mono font-bold text-slate-700">17-{getBarangayCode(formData.barangay)}-00000</span>
-              </p>
+              {formErrors.tdNumber ? (
+                <p className="text-[10px] text-rose-600 font-semibold mt-1">{formErrors.tdNumber}</p>
+              ) : (
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Format: <span className="font-mono font-bold text-slate-700">17-{getBarangayCode(formData.barangay)}-00000</span>
+                </p>
+              )}
             </div>
 
             {/* Cadastral PIN */}
@@ -324,12 +343,20 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
               </label>
               <Input
                 type="text"
-                className="font-semibold"
+                className={`font-semibold ${
+                  formErrors.ownerName ? 'border-rose-500 focus-visible:ring-rose-500/20' : ''
+                }`}
                 value={formData.ownerName || ''}
-                onChange={(e) => setFormData({ ...formData, ownerName: e.target.value })}
+                onChange={(e) => {
+                  clearFieldError('ownerName');
+                  setFormData({ ...formData, ownerName: e.target.value });
+                }}
                 placeholder="Juan Dela Cruz"
                 required
               />
+              {formErrors.ownerName && (
+                <p className="text-[10px] text-rose-600 font-semibold mt-1">{formErrors.ownerName}</p>
+              )}
             </div>
 
             {/* Address */}
@@ -389,14 +416,22 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
                 type="number"
                 min="0"
                 step="any"
-                className="font-mono"
+                className={`font-mono ${
+                  formErrors.lotAreaSqm ? 'border-rose-500 focus-visible:ring-rose-500/20' : ''
+                }`}
                 value={lotAreaStr}
-                onChange={(e) => setLotAreaStr(e.target.value)}
+                onChange={(e) => {
+                  clearFieldError('lotAreaSqm');
+                  setLotAreaStr(e.target.value);
+                }}
                 onFocus={(e) => {
                   if (e.target.value === '0') e.target.select();
                 }}
                 placeholder="0"
               />
+              {formErrors.lotAreaSqm && (
+                <p className="text-[10px] text-rose-600 font-semibold mt-1">{formErrors.lotAreaSqm}</p>
+              )}
             </div>
 
             {/* Previous TD */}
@@ -430,7 +465,11 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
                 type="number"
                 min="0"
                 step="any"
-                className="h-11 font-bold text-slate-900 font-mono text-base bg-white border-slate-300/90 focus-visible:ring-emerald-600/20 focus-visible:border-emerald-600 rounded-lg shadow-2xs"
+                className={`h-11 font-bold text-slate-900 font-mono text-base bg-white rounded-lg shadow-2xs ${
+                  formErrors.assessedValue
+                    ? 'border-rose-500 focus-visible:ring-rose-500/20 focus-visible:border-rose-500'
+                    : 'border-slate-300/90 focus-visible:ring-emerald-600/20 focus-visible:border-emerald-600'
+                }`}
                 value={assessedValueStr}
                 onChange={(e) => handleAssessedValueChange(e.target.value)}
                 onFocus={(e) => {
@@ -439,6 +478,9 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
                 required
                 placeholder="0"
               />
+              {formErrors.assessedValue && (
+                <p className="text-[10px] text-rose-600 font-semibold mt-1">{formErrors.assessedValue}</p>
+              )}
             </div>
 
             {/* Optional Reference Section: Market Valuation (BLGF & Audit Reference) */}
@@ -495,14 +537,22 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
               </label>
               <Input
                 type="number"
-                className="font-mono"
+                className={`font-mono ${
+                  formErrors.lastPaidYear ? 'border-rose-500 focus-visible:ring-rose-500/20' : ''
+                }`}
                 value={lastPaidYearStr}
-                onChange={(e) => setLastPaidYearStr(e.target.value)}
+                onChange={(e) => {
+                  clearFieldError('lastPaidYear');
+                  setLastPaidYearStr(e.target.value);
+                }}
                 onFocus={(e) => {
                   if (e.target.value === '0') e.target.select();
                 }}
                 placeholder="2025"
               />
+              {formErrors.lastPaidYear && (
+                <p className="text-[10px] text-rose-600 font-semibold mt-1">{formErrors.lastPaidYear}</p>
+              )}
             </div>
           </div>
         </div>

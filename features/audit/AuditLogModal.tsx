@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { History, Clock, UserCheck, FileText } from 'lucide-react';
+import { History, Clock, UserCheck, FileText, AlertCircle } from 'lucide-react';
 
 interface AuditLogModalProps {
   isOpen: boolean;
@@ -22,19 +22,22 @@ interface AuditLogModalProps {
 const AuditLogModal: React.FC<AuditLogModalProps> = ({ isOpen, onClose, property }) => {
   const [logs, setLogs] = useState<RptarAuditLog[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       setIsLoading(true);
-      if (property && property.id) {
-        api.getPropertyAudit(property.id)
-          .then(res => setLogs(res))
-          .finally(() => setIsLoading(false));
-      } else {
-        api.getAllAuditLogs()
-          .then(res => setLogs(res))
-          .finally(() => setIsLoading(false));
-      }
+      setLoadError(null);
+      const request = property && property.id
+        ? api.getPropertyAudit(property.id)
+        : api.getAllAuditLogs();
+
+      request
+        .then((res) => setLogs(res))
+        .catch((err) =>
+          setLoadError(err instanceof Error ? err.message : 'Failed to load audit trail.')
+        )
+        .finally(() => setIsLoading(false));
     }
   }, [isOpen, property]);
 
@@ -78,6 +81,12 @@ const AuditLogModal: React.FC<AuditLogModalProps> = ({ isOpen, onClose, property
 
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto space-y-4 text-xs flex-1">
+          {loadError && (
+            <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-800 text-[11px] font-semibold rounded-xl flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0 text-rose-500" />
+              <span>Failed to load audit trail: {loadError}</span>
+            </div>
+          )}
           {isLoading ? (
             <div className="py-12 text-center text-slate-400">
               <Clock className="animate-spin h-6 w-6 mx-auto mb-2 text-blue-600" />

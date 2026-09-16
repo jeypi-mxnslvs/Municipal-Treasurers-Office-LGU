@@ -121,12 +121,18 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
 
   const handleDeleteUser = (userToDelete: User) => {
     if (userToDelete.username === 'admin') {
-      alert('The primary System Administrator account cannot be deleted.');
+      setStatusMessage({
+        type: 'error',
+        text: 'The primary System Administrator account cannot be deleted. This is a treasury governance protection rule.',
+      });
       return;
     }
 
     if (currentUser && String(currentUser.id) === String(userToDelete.id)) {
-      alert('You cannot delete your own active administrator account.');
+      setStatusMessage({
+        type: 'error',
+        text: 'You cannot delete your own active administrator account while logged in.',
+      });
       return;
     }
 

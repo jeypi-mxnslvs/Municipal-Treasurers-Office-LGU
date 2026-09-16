@@ -434,8 +434,8 @@ const OfficialReceiptModal: React.FC<ClearanceModalProps> = ({
 
           <form onSubmit={handleExecuteVoid} className="space-y-4 mt-2">
             {voidError && (
-              <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 shrink-0 text-red-500" />
+              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-[11px] font-semibold rounded-xl flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-rose-500" />
                 <span>{voidError}</span>
               </div>
             )}

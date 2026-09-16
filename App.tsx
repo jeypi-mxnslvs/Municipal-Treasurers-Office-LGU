@@ -2,6 +2,9 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Property, TaxYearRecord, User, OfficialReceipt, DashboardStatsData, TaxSummary } from './types';
 import { api } from './services/api';
 import Header from './components/Header';
+import { BreakdownAlertModal } from '@/components/common/BreakdownAlertModal';
+import type { AlertSeverity } from '@/components/common/BreakdownAlertModal';
+import { useToast } from '@/components/common/Toast';
 import { LoginPage, UserManagementModal, PasswordConfirmationModal } from '@/features/auth';
 import { DashboardStats } from '@/features/dashboard';
 import { DashboardTable, PropertyCard, RptarModal, BulkImportModal } from '@/features/properties';
@@ -9,7 +12,7 @@ import { DelinquencyTable } from '@/features/assessment';
 import { OfficialReceiptModal, BookletManagerModal } from '@/features/collections';
 import { AuditLogModal } from '@/features/audit';
 import { NoticeOfDelinquencyModal, BlgfForm3Modal } from '@/features/reports';
-import { Printer, ArrowLeft, CheckCircle2, ShieldCheck, CheckCircle, RefreshCw, Bell, FileText } from 'lucide-react';
+import { Printer, ArrowLeft, CheckCircle2, ShieldCheck, CheckCircle, RefreshCw, FileText } from 'lucide-react';
 import { verifySessionToken, DEFAULT_SESSION_TIMEOUT_MS } from './lib/crypto';
 import { mergeEncoderLabel } from './utils/encoderAttribution';
 
@@ -39,8 +42,27 @@ const App: React.FC = () => {
   const [isBlgfModalOpen, setIsBlgfModalOpen] = useState(false);
   const [noticeProperties, setNoticeProperties] = useState<Property[]>([]);
 
-  // Live Multi-Assessor Sync State & Notification Toast
-  const [syncToast, setSyncToast] = useState<{ message: string; author: string } | null>(null);
+  // Unified Toast hook (replaces the old inline syncToast state)
+  const { showToast } = useToast();
+
+  // Breakdown Alert Modal state (replaces window.alert())
+  const [breakdownAlert, setBreakdownAlert] = useState<{
+    isOpen: boolean;
+    severity: AlertSeverity;
+    title: string;
+    summary: string;
+    guidance?: string;
+    technicalDetail?: string;
+  }>({
+    isOpen: false,
+    severity: 'error',
+    title: '',
+    summary: '',
+  });
+
+  const closeBreakdownAlert = useCallback(() => {
+    setBreakdownAlert((prev) => ({ ...prev, isOpen: false }));
+  }, []);
 
   // Clearance & Assessment View State
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
@@ -88,18 +110,18 @@ const App: React.FC = () => {
 
     const unsubscribe = api.subscribeToMutations((mutation) => {
       loadData(true);
-      setSyncToast({
-        message: `RPTAR record (${mutation.tdNumber || 'Masterlist'}) was updated [${mutation.action}]`,
+      showToast({
+        type: 'sync',
+        title: `RPTAR record (${mutation.tdNumber || 'Masterlist'}) was updated [${mutation.action}]`,
         author: mutation.author,
+        duration: 5000,
       });
-
-      setTimeout(() => setSyncToast(null), 5000);
     });
 
     return () => {
       unsubscribe();
     };
-  }, [currentUser, loadData]);
+  }, [currentUser, loadData, showToast]);
 
   const initialRestoredRef = useRef(false);
 
@@ -230,7 +252,14 @@ const App: React.FC = () => {
         : (err && typeof err === 'object' && 'message' in err)
           ? String((err as Record<string, unknown>).message)
           : 'Failed to save property. Please check required fields.';
-      alert(errMsg);
+      setBreakdownAlert({
+        isOpen: true,
+        severity: 'error',
+        title: 'Property Save Failed',
+        summary: 'The RPTAR property record could not be saved. Please review the details below.',
+        guidance: 'Verify that all required fields are correctly filled out. If the issue persists, it may indicate a database connectivity problem — contact the system administrator.',
+        technicalDetail: errMsg,
+      });
     }
   };
 
@@ -279,7 +308,15 @@ const App: React.FC = () => {
 
       await loadData(true);
     } catch (err) {
-      alert(`Clearance failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      const errMsg = err instanceof Error ? err.message : 'Unknown error';
+      setBreakdownAlert({
+        isOpen: true,
+        severity: 'error',
+        title: 'Clearance Transaction Failed',
+        summary: 'The payment clearance could not be posted. No receipt was issued and no charges were recorded.',
+        guidance: 'Common causes: AF-51 booklet exhausted (assign a new booklet), network timeout, or database RPC rejection. The transaction was rolled back — data integrity is preserved.',
+        technicalDetail: errMsg,
+      });
     } finally {
       setIsProcessingClearance(false);
     }
@@ -365,24 +402,16 @@ const App: React.FC = () => {
         }}
       />
 
-      {/* Live Sync Toast Notification */}
-      {syncToast && (
-        <div className="fixed bottom-5 right-5 z-[100] bg-slate-900 text-white p-4 rounded-2xl shadow-2xl border border-slate-700 flex items-center gap-3 animate-fade-in-up max-w-md text-xs">
-          <div className="p-2 bg-emerald-600 rounded-xl animate-pulse">
-            <Bell size={18} className="text-white" />
-          </div>
-          <div>
-            <p className="font-bold text-slate-100">{syncToast.message}</p>
-            <p className="text-[11px] text-slate-400">By: {syncToast.author}</p>
-          </div>
-          <button 
-            onClick={() => setSyncToast(null)}
-            className="ml-auto text-slate-400 hover:text-white text-xs"
-          >
-            ✕
-          </button>
-        </div>
-      )}
+      {/* Breakdown Alert Modal — replaces all window.alert() calls */}
+      <BreakdownAlertModal
+        isOpen={breakdownAlert.isOpen}
+        onClose={closeBreakdownAlert}
+        severity={breakdownAlert.severity}
+        title={breakdownAlert.title}
+        summary={breakdownAlert.summary}
+        guidance={breakdownAlert.guidance}
+        technicalDetail={breakdownAlert.technicalDetail}
+      />
 
       <main className="flex-grow container mx-auto px-4 py-6 max-w-7xl">
         {view === 'dashboard' ? (
