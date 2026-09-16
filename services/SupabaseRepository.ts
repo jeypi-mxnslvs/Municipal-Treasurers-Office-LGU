@@ -840,17 +840,35 @@ export class SupabaseRepository implements ITreasuryRepository {
     stationId: string;
   }): Promise<{ message: string; user: User }> {
     const cleanUsername = userData.username.trim().toLowerCase();
-    const { data, error } = await supabase
+    const insertPayload: Record<string, unknown> = {
+      username: cleanUsername,
+      password: userData.password,
+      password_hash: userData.password,
+      full_name: userData.fullName,
+      role: userData.role,
+      station_id: userData.stationId
+    };
+
+    let { data, error } = await supabase
       .from('users')
-      .insert({
-        username: cleanUsername,
-        password_hash: userData.password,
-        full_name: userData.fullName,
-        role: userData.role,
-        station_id: userData.stationId
-      })
+      .insert(insertPayload)
       .select('id, full_name, username, role, station_id')
       .single();
+
+    if (error && (error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('password'))) {
+      if (error.message?.includes('password_hash')) {
+        delete insertPayload.password_hash;
+      } else if (error.message?.includes('password')) {
+        delete insertPayload.password;
+      }
+      const retry = await supabase
+        .from('users')
+        .insert(insertPayload)
+        .select('id, full_name, username, role, station_id')
+        .single();
+      data = retry.data;
+      error = retry.error;
+    }
 
     if (error) throw new Error(error.message);
 
@@ -890,10 +908,29 @@ export class SupabaseRepository implements ITreasuryRepository {
   }
 
   async resetUserPassword(id: string | number, newPassword: string, adminUsername = 'admin'): Promise<{ message: string }> {
-    const { error } = await supabase
+    const updatePayload: Record<string, unknown> = {
+      password: newPassword,
+      password_hash: newPassword
+    };
+
+    let { error } = await supabase
       .from('users')
-      .update({ password_hash: newPassword })
+      .update(updatePayload)
       .eq('id', id);
+
+    if (error && (error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('password'))) {
+      if (error.message?.includes('password_hash')) {
+        delete updatePayload.password_hash;
+      } else if (error.message?.includes('password')) {
+        delete updatePayload.password;
+      }
+      const retry = await supabase
+        .from('users')
+        .update(updatePayload)
+        .eq('id', id);
+      error = retry.error;
+    }
+
     if (error) throw error;
 
     await this.logSecurityEvent({
