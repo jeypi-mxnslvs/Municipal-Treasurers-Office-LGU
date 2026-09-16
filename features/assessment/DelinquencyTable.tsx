@@ -34,7 +34,7 @@ interface DelinquencyTableProps {
   onSelectionChange?: (selected: TaxYearRecord[], subtotal: number) => void;
 }
 
-type EditableField = 'BASIC_TAX' | 'SEF_TAX' | 'DISCOUNT_RATE';
+type EditableField = 'BASIC_TAX' | 'SEF_TAX' | 'DISCOUNT_RATE' | 'ASSESSED_VALUE';
 type OrganizerTab = 'OUTSTANDING' | 'COMPLETED' | 'ALL';
 
 const DelinquencyTable: React.FC<DelinquencyTableProps> = ({ 
@@ -126,6 +126,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
   const [editingRecord, setEditingRecord] = useState<TaxYearRecord | null>(null);
   const [editingField, setEditingField] = useState<EditableField | null>(null);
   const [editValue, setEditValue] = useState<string>('');
+  const [rptarRefInput, setRptarRefInput] = useState<string>('');
   const [editReason, setEditReason] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -177,8 +178,11 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
     setEditingField(field);
     setErrorMessage(null);
     setEditReason('');
+    setRptarRefInput(record.rptarReference || '');
 
-    if (field === 'BASIC_TAX') {
+    if (field === 'ASSESSED_VALUE') {
+      setEditValue(record.assessedValue !== undefined && record.assessedValue > 0 ? String(record.assessedValue) : '');
+    } else if (field === 'BASIC_TAX') {
       setEditValue(String(record.basicTax ?? (record.baseTax / 2)));
     } else if (field === 'SEF_TAX') {
       setEditValue(String(record.sefTax ?? (record.baseTax / 2)));
@@ -202,13 +206,26 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
       return;
     }
 
+    let finalAssessedValue = editingRecord.assessedValue;
+    let finalRptarReference = editingRecord.rptarReference;
+    let isMissingValuation = editingRecord.isMissingValuation;
     let finalBasicTax = editingRecord.basicTax ?? (editingRecord.baseTax / 2);
     let finalSefTax = editingRecord.sefTax ?? (editingRecord.baseTax / 2);
     let finalDiscountRate = editingRecord.discountRate ?? 0;
     let originalValue = 0;
     let newValue = 0;
 
-    if (editingField === 'BASIC_TAX') {
+    if (editingField === 'ASSESSED_VALUE') {
+      originalValue = editingRecord.assessedValue ?? 0;
+      newValue = numericVal;
+      finalAssessedValue = numericVal;
+      finalRptarReference = rptarRefInput.trim() || undefined;
+      isMissingValuation = numericVal <= 0;
+
+      const yearsMultiplier = editingRecord.yearsCovered?.length || (editingRecord.quarterSpan ? 0.5 : 1);
+      finalBasicTax = isMissingValuation ? 0 : Math.round(numericVal * 0.01 * yearsMultiplier * 100) / 100;
+      finalSefTax = isMissingValuation ? 0 : Math.round(numericVal * 0.01 * yearsMultiplier * 100) / 100;
+    } else if (editingField === 'BASIC_TAX') {
       originalValue = editingRecord.systemBasicTax ?? (editingRecord.baseTax / 2);
       newValue = numericVal;
       finalBasicTax = numericVal;
@@ -224,17 +241,24 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
 
     // Recalculate derived fields
     const appliedBaseTax = Math.round((finalBasicTax + finalSefTax) * 100) / 100;
-    const discountAmount = Math.round(appliedBaseTax * finalDiscountRate * 100) / 100;
-    const totalDue = Math.max(0, Math.round((appliedBaseTax + editingRecord.penaltyAmount - discountAmount) * 100) / 100);
+    const penaltyAmount = isMissingValuation ? 0 : Math.round(appliedBaseTax * editingRecord.penaltyRate * 100) / 100;
+    const discountAmount = isMissingValuation ? 0 : Math.round(appliedBaseTax * finalDiscountRate * 100) / 100;
+    const totalDue = isMissingValuation ? 0 : Math.max(0, Math.round((appliedBaseTax + penaltyAmount - discountAmount) * 100) / 100);
+    const isPayable = !isMissingValuation;
 
     const updatedRecord: TaxYearRecord = {
       ...editingRecord,
+      assessedValue: finalAssessedValue,
+      isMissingValuation,
+      rptarReference: finalRptarReference,
       basicTax: finalBasicTax,
       sefTax: finalSefTax,
       baseTax: appliedBaseTax,
+      penaltyAmount,
       discountRate: finalDiscountRate,
       discountAmount,
       totalDue,
+      isPayable,
       isManuallyEdited: true,
       editReason: editReason.trim(),
     };
@@ -403,26 +427,28 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
       </div>
       
       {/* Itemized Table - Scrollable container for multi-year delinquency rolls (e.g. 1971-2026) */}
-      <div className="overflow-y-auto overflow-x-hidden max-h-[560px] flex-grow relative [&>div]:overflow-x-hidden">
-        <Table className="w-full table-fixed text-sm font-sans">
+      <div className="overflow-y-auto overflow-x-auto max-h-[560px] flex-grow relative">
+        <Table className="w-full min-w-[900px] table-fixed text-sm font-sans">
           <TableHeader className="bg-slate-100/95 backdrop-blur-xs sticky top-0 z-10 shadow-2xs">
             <TableRow className="hover:bg-transparent border-b border-slate-200">
-              <TableHead className="w-[7%] min-w-[48px] text-center font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 pl-3 pr-2">Select</TableHead>
+              <TableHead className="w-[6%] min-w-[44px] text-center font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 pl-3 pr-2">Select</TableHead>
               <TableHead className="w-[13%] text-left font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 pl-2 pr-1.5">Period</TableHead>
-              <TableHead className="w-[10%] text-left font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 px-1.5">Status</TableHead>
-              <TableHead className="w-[13%] text-right font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 px-1.5">Basic (1%)</TableHead>
-              <TableHead className="w-[13%] text-right font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 px-1.5">SEF (1%)</TableHead>
-              <TableHead className="w-[13%] text-right font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 px-1.5">
+              <TableHead className="w-[9%] text-left font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 px-1.5">Status</TableHead>
+              <TableHead className="w-[14%] text-right font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 px-1.5">Assessed Value</TableHead>
+              <TableHead className="w-[11%] text-right font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 px-1.5">Basic (1%)</TableHead>
+              <TableHead className="w-[11%] text-right font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 px-1.5">SEF (1%)</TableHead>
+              <TableHead className="w-[12%] text-right font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 px-1.5">
                 Penalty <span className="text-slate-500 font-normal text-[10px]">(Rate)</span>
               </TableHead>
-              <TableHead className="w-[13%] text-right font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 px-1.5">Discount</TableHead>
-              <TableHead className="w-[18%] text-right font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 pl-2 pr-6">Net Due</TableHead>
+              <TableHead className="w-[9%] text-right font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 px-1.5">Discount</TableHead>
+              <TableHead className="w-[15%] text-right font-bold text-slate-700 uppercase tracking-wider text-[11px] py-3 pl-2 pr-6">Net Due</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody className="divide-y divide-slate-100">
             {displayedRecords.map((record, idx) => {
               const isCleared = record.status === 'Cleared';
               const isDelinquent = record.status === 'Delinquent';
+              const isUnassessed = Boolean(record.isMissingValuation);
               const hasDiscount = Boolean(record.discountAmount && record.discountAmount > 0);
 
               const isBasicOverridden = !isCleared && record.systemBasicTax !== undefined && record.basicTax !== record.systemBasicTax;
@@ -440,13 +466,15 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
               return (
                 <TableRow 
                   key={record.periodLabel ? `${record.year}-${record.periodLabel}-${idx}` : `${record.year}-${idx}`} 
-                  onClick={() => !isCleared && outstandingIndex !== -1 && handleCheckboxClick(outstandingIndex)}
+                  onClick={() => !isCleared && !isUnassessed && outstandingIndex !== -1 && handleCheckboxClick(outstandingIndex)}
                   className={`transition-colors ${
                     isCleared
                       ? 'bg-slate-50/60 hover:bg-slate-100/60 cursor-default'
-                      : isSelected 
-                        ? 'bg-emerald-50/40 hover:bg-emerald-50/60 font-medium cursor-pointer' 
-                        : 'opacity-40 hover:opacity-75 bg-slate-50/20 cursor-pointer'
+                      : isUnassessed
+                        ? 'bg-amber-50/20 hover:bg-amber-50/40 cursor-default'
+                        : isSelected 
+                          ? 'bg-emerald-50/40 hover:bg-emerald-50/60 font-medium cursor-pointer' 
+                          : 'opacity-40 hover:opacity-75 bg-slate-50/20 cursor-pointer'
                   }`}
                 >
                   <TableCell className="text-center py-2.5 pl-3 pr-2">
@@ -457,9 +485,11 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
                     ) : (
                       <input
                         type="checkbox"
-                        checked={isSelected}
-                        onChange={() => outstandingIndex !== -1 && handleCheckboxClick(outstandingIndex)}
-                        className="w-4.5 h-4.5 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600 transition-transform active:scale-95"
+                        checked={isSelected && !isUnassessed}
+                        disabled={isUnassessed}
+                        onChange={() => !isUnassessed && outstandingIndex !== -1 && handleCheckboxClick(outstandingIndex)}
+                        title={isUnassessed ? "Must verify historical Assessed Value from Physical RPTAR before selecting." : undefined}
+                        className="w-4.5 h-4.5 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600 transition-transform active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
                       />
                     )}
                   </TableCell>
@@ -508,57 +538,113 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
                     )}
                   </TableCell>
 
-                  {/* Basic Tax with Default vs Applied */}
+                  {/* Assessed Value (Output Precedence: AV -> Basic/SEF) */}
                   <TableCell className="text-right py-2.5 px-1.5">
-                    <div className="flex flex-col items-end">
+                    {isUnassessed ? (
                       <div className="flex items-center justify-end gap-1">
-                        <span className={`text-xs sm:text-sm font-bold tabular-nums ${isBasicOverridden ? 'text-amber-800 underline decoration-dotted font-black' : isCleared ? 'text-slate-700' : 'text-slate-900'}`}>
-                          ₱{(record.basicTax ?? (record.baseTax / 2)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                        </span>
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-amber-50 text-amber-800 border-amber-300 font-bold font-mono">
+                          ⚠️ Unset (RPTAR)
+                        </Badge>
                         {canEdit && !isCleared && (
-                          <button
+                          <Button
                             type="button"
-                            onClick={(e) => handleOpenEditModal(record, 'BASIC_TAX', e)}
-                            className="text-slate-400 hover:text-blue-700 p-0.5 rounded transition-colors cursor-pointer"
-                            title="Manually adjust Basic Tax"
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => handleOpenEditModal(record, 'ASSESSED_VALUE', e)}
+                            className="h-6 px-1.5 text-[10px] bg-amber-600 hover:bg-amber-700 text-white font-bold rounded shadow-xs cursor-pointer"
+                            title="Input historical Assessed Value from Physical RPTAR"
                           >
-                            <Pencil size={11} />
-                          </button>
+                            + AV
+                          </Button>
                         )}
                       </div>
-                      <span className="text-[10px] text-slate-400 font-normal tabular-nums truncate max-w-full">
-                        {isCleared ? 'Settled' : `Def: ₱${(record.systemBasicTax ?? (record.baseTax / 2)).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
-                      </span>
-                    </div>
+                    ) : (
+                      <div className="flex flex-col items-end">
+                        <div className="flex items-center justify-end gap-1">
+                          <span className={`text-xs sm:text-sm font-bold tabular-nums ${isCleared ? 'text-slate-700' : 'text-slate-900'}`}>
+                            ₱{(record.assessedValue ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </span>
+                          {canEdit && !isCleared && (
+                            <button
+                              type="button"
+                              onClick={(e) => handleOpenEditModal(record, 'ASSESSED_VALUE', e)}
+                              className="text-slate-400 hover:text-blue-700 p-0.5 rounded transition-colors cursor-pointer"
+                              title="Adjust Assessed Value (Physical RPTAR)"
+                            >
+                              <Pencil size={11} />
+                            </button>
+                          )}
+                        </div>
+                        {record.rptarReference && (
+                          <span className="text-[9px] text-emerald-700 font-medium tracking-tight truncate max-w-[130px]" title={record.rptarReference}>
+                            ✓ {record.rptarReference}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </TableCell>
+
+                  {/* Basic Tax with Default vs Applied */}
+                  <TableCell className="text-right py-2.5 px-1.5">
+                    {isUnassessed ? (
+                      <span className="text-slate-400 font-mono italic text-xs">Pending AV</span>
+                    ) : (
+                      <div className="flex flex-col items-end">
+                        <div className="flex items-center justify-end gap-1">
+                          <span className={`text-xs sm:text-sm font-bold tabular-nums ${isBasicOverridden ? 'text-amber-800 underline decoration-dotted font-black' : isCleared ? 'text-slate-700' : 'text-slate-900'}`}>
+                            ₱{(record.basicTax ?? (record.baseTax / 2)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </span>
+                          {canEdit && !isCleared && (
+                            <button
+                              type="button"
+                              onClick={(e) => handleOpenEditModal(record, 'BASIC_TAX', e)}
+                              className="text-slate-400 hover:text-blue-700 p-0.5 rounded transition-colors cursor-pointer"
+                              title="Manually adjust Basic Tax"
+                            >
+                              <Pencil size={11} />
+                            </button>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-slate-400 font-normal tabular-nums truncate max-w-full">
+                          {isCleared ? 'Settled' : `Def: ₱${(record.systemBasicTax ?? (record.baseTax / 2)).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                        </span>
+                      </div>
+                    )}
                   </TableCell>
 
                   {/* SEF Tax with Default vs Applied */}
                   <TableCell className="text-right py-2.5 px-1.5">
-                    <div className="flex flex-col items-end">
-                      <div className="flex items-center justify-end gap-1">
-                        <span className={`text-xs sm:text-sm font-bold tabular-nums ${isSefOverridden ? 'text-amber-800 underline decoration-dotted font-black' : isCleared ? 'text-slate-700' : 'text-slate-900'}`}>
-                          ₱{(record.sefTax ?? (record.baseTax / 2)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    {isUnassessed ? (
+                      <span className="text-slate-400 font-mono italic text-xs">Pending AV</span>
+                    ) : (
+                      <div className="flex flex-col items-end">
+                        <div className="flex items-center justify-end gap-1">
+                          <span className={`text-xs sm:text-sm font-bold tabular-nums ${isSefOverridden ? 'text-amber-800 underline decoration-dotted font-black' : isCleared ? 'text-slate-700' : 'text-slate-900'}`}>
+                            ₱{(record.sefTax ?? (record.baseTax / 2)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </span>
+                          {canEdit && !isCleared && (
+                            <button
+                              type="button"
+                              onClick={(e) => handleOpenEditModal(record, 'SEF_TAX', e)}
+                              className="text-slate-400 hover:text-blue-700 p-0.5 rounded transition-colors cursor-pointer"
+                              title="Manually adjust SEF Tax"
+                            >
+                              <Pencil size={11} />
+                            </button>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-slate-400 font-normal tabular-nums truncate max-w-full">
+                          {isCleared ? 'Settled' : `Def: ₱${(record.systemSefTax ?? (record.baseTax / 2)).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
                         </span>
-                        {canEdit && !isCleared && (
-                          <button
-                            type="button"
-                            onClick={(e) => handleOpenEditModal(record, 'SEF_TAX', e)}
-                            className="text-slate-400 hover:text-blue-700 p-0.5 rounded transition-colors cursor-pointer"
-                            title="Manually adjust SEF Tax"
-                          >
-                            <Pencil size={11} />
-                          </button>
-                        )}
                       </div>
-                      <span className="text-[10px] text-slate-400 font-normal tabular-nums truncate max-w-full">
-                        {isCleared ? 'Settled' : `Def: ₱${(record.systemSefTax ?? (record.baseTax / 2)).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
-                      </span>
-                    </div>
+                    )}
                   </TableCell>
 
                   {/* Penalty */}
                   <TableCell className="text-right py-2.5 px-1.5">
-                    {record.penaltyAmount > 0 ? (
+                    {isUnassessed ? (
+                      <span className="text-slate-400 font-mono italic text-xs">Pending AV</span>
+                    ) : record.penaltyAmount > 0 ? (
                       <div className="flex flex-col items-end">
                         <span className={`text-xs sm:text-sm font-bold tabular-nums ${isCleared ? 'text-slate-700' : 'text-rose-700'}`}>
                           +₱{record.penaltyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
@@ -574,34 +660,42 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
 
                   {/* Discount Rate & Derived Amount */}
                   <TableCell className="text-right py-2.5 px-1.5">
-                    <div className="flex flex-col items-end">
-                      <div className="flex items-center justify-end gap-1">
-                        <span className={`text-xs sm:text-sm font-bold flex items-center gap-0.5 tabular-nums ${isDiscountOverridden ? 'text-amber-800 underline decoration-dotted font-black' : (hasDiscount ? 'text-emerald-700' : 'text-slate-500')}`}>
-                          {hasDiscount && <Tag size={10} className="text-emerald-600" />}
-                          {((record.discountRate ?? 0) * 100).toFixed(1)}%
+                    {isUnassessed ? (
+                      <span className="text-slate-400 font-mono italic text-xs">—</span>
+                    ) : (
+                      <div className="flex flex-col items-end">
+                        <div className="flex items-center justify-end gap-1">
+                          <span className={`text-xs sm:text-sm font-bold flex items-center gap-0.5 tabular-nums ${isDiscountOverridden ? 'text-amber-800 underline decoration-dotted font-black' : (hasDiscount ? 'text-emerald-700' : 'text-slate-500')}`}>
+                            {hasDiscount && <Tag size={10} className="text-emerald-600" />}
+                            {((record.discountRate ?? 0) * 100).toFixed(1)}%
+                          </span>
+                          {canEdit && !isDelinquent && !isCleared && (
+                            <button
+                              type="button"
+                              onClick={(e) => handleOpenEditModal(record, 'DISCOUNT_RATE', e)}
+                              className="text-slate-400 hover:text-blue-700 p-0.5 rounded transition-colors cursor-pointer"
+                              title="Manually adjust Discount Rate"
+                            >
+                              <Pencil size={11} />
+                            </button>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-slate-400 font-normal tabular-nums truncate max-w-full">
+                          {hasDiscount 
+                            ? `-₱${(record.discountAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                            : (isCleared ? 'Settled' : isDelinquent ? '0% Delq' : `Def: ${((record.systemDiscountRate ?? 0) * 100).toFixed(0)}%`)}
                         </span>
-                        {canEdit && !isDelinquent && !isCleared && (
-                          <button
-                            type="button"
-                            onClick={(e) => handleOpenEditModal(record, 'DISCOUNT_RATE', e)}
-                            className="text-slate-400 hover:text-blue-700 p-0.5 rounded transition-colors cursor-pointer"
-                            title="Manually adjust Discount Rate"
-                          >
-                            <Pencil size={11} />
-                          </button>
-                        )}
                       </div>
-                      <span className="text-[10px] text-slate-400 font-normal tabular-nums truncate max-w-full">
-                        {hasDiscount 
-                          ? `-₱${(record.discountAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
-                          : (isCleared ? 'Settled' : isDelinquent ? '0% Delq' : `Def: ${((record.systemDiscountRate ?? 0) * 100).toFixed(0)}%`)}
-                      </span>
-                    </div>
+                    )}
                   </TableCell>
 
                   {/* Net Total Due */}
-                  <TableCell className={`font-black text-right text-xs sm:text-sm tabular-nums py-2.5 pl-2 pr-6 ${isCleared ? 'text-emerald-800' : 'text-slate-950'}`}>
-                    ₱{record.totalDue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  <TableCell className={`font-black text-right text-xs sm:text-sm tabular-nums py-2.5 pl-2 pr-6 ${isCleared ? 'text-emerald-800' : isUnassessed ? 'text-amber-700' : 'text-slate-950'}`}>
+                    {isUnassessed ? (
+                      <span className="text-amber-700 font-mono font-bold text-xs">Requires RPTAR</span>
+                    ) : (
+                      `₱${record.totalDue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                    )}
                   </TableCell>
                 </TableRow>
               );
@@ -711,10 +805,14 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
           <DialogHeader>
             <DialogTitle className="text-base font-bold flex items-center gap-2 text-slate-900">
               <Pencil size={18} className="text-blue-600" />
-              Authorized Assessor Adjustment ({editingRecord?.periodLabel ? `Period: ${editingRecord.periodLabel}` : `Year ${editingRecord?.year}`})
+              {editingField === 'ASSESSED_VALUE'
+                ? `Historical Assessed Value (Physical RPTAR Input)`
+                : `Authorized Assessor Adjustment (${editingRecord?.periodLabel ? `Period: ${editingRecord.periodLabel}` : `Year ${editingRecord?.year}`})`}
             </DialogTitle>
             <DialogDescription className="text-xs text-slate-500">
-              Manually modify populated {editingField === 'BASIC_TAX' ? 'Basic Tax' : editingField === 'SEF_TAX' ? 'SEF Tax' : 'Discount Rate'}. Totals will recalculate immediately and a field-level audit record will be logged.
+              {editingField === 'ASSESSED_VALUE'
+                ? `Input historical assessed valuation for period ${editingRecord?.periodLabel || editingRecord?.year} from physical RPTAR archive books. Basic Tax (1%) and SEF (1%) will recalculate automatically.`
+                : `Manually modify populated ${editingField === 'BASIC_TAX' ? 'Basic Tax' : editingField === 'SEF_TAX' ? 'SEF Tax' : 'Discount Rate'}. Totals will recalculate immediately and a field-level audit record will be logged.`}
             </DialogDescription>
           </DialogHeader>
 
@@ -728,34 +826,92 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
 
             {/* Current System Calculated Value */}
             <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex justify-between items-center">
-              <span className="text-slate-600 font-medium">System Calculated Default:</span>
+              <span className="text-slate-600 font-medium">
+                {editingField === 'ASSESSED_VALUE' ? 'Current Recorded Valuation:' : 'System Calculated Default:'}
+              </span>
               <span className="font-bold text-slate-800 tabular-nums">
-                {editingField === 'DISCOUNT_RATE'
-                  ? `${((editingRecord?.systemDiscountRate ?? 0) * 100).toFixed(2)}%`
-                  : `₱${(editingField === 'BASIC_TAX' ? editingRecord?.systemBasicTax : editingRecord?.systemSefTax ?? (editingRecord?.baseTax ? editingRecord.baseTax / 2 : 0))?.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                {editingField === 'ASSESSED_VALUE'
+                  ? editingRecord?.assessedValue && editingRecord.assessedValue > 0
+                    ? `₱${editingRecord.assessedValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                    : 'Unset / Unassessed'
+                  : editingField === 'DISCOUNT_RATE'
+                    ? `${((editingRecord?.systemDiscountRate ?? 0) * 100).toFixed(2)}%`
+                    : `₱${(editingField === 'BASIC_TAX' ? editingRecord?.systemBasicTax : editingRecord?.systemSefTax ?? (editingRecord?.baseTax ? editingRecord.baseTax / 2 : 0))?.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
               </span>
             </div>
 
             {/* Editable Field */}
             <div>
               <label className="block font-bold text-slate-700 mb-1 uppercase tracking-wider text-[10px]">
-                New Applied Value {editingField === 'DISCOUNT_RATE' ? '(Percentage %)' : '(₱)'} *
+                {editingField === 'ASSESSED_VALUE'
+                  ? 'Historical Assessed Value (₱) *'
+                  : `New Applied Value ${editingField === 'DISCOUNT_RATE' ? '(Percentage %)' : '(₱)'} *`}
               </label>
               <Input
                 type="number"
                 step={editingField === 'DISCOUNT_RATE' ? '0.1' : '1'}
                 value={editValue}
                 onChange={(e) => setEditValue(e.target.value)}
+                placeholder={editingField === 'ASSESSED_VALUE' ? 'e.g. 10000' : '0'}
                 className="text-sm font-bold bg-white text-slate-900 tabular-nums"
                 autoFocus
               />
               <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
                 <Info size={12} />
-                {editingField === 'DISCOUNT_RATE' 
-                  ? 'Discount Amount will be derived from: (Basic Tax + SEF Tax) × Discount Rate' 
-                  : 'Total Due will recalculate automatically from the new tax base.'}
+                {editingField === 'ASSESSED_VALUE'
+                  ? `Basic (1%) and SEF (1%) will be calculated across ${editingRecord?.yearsCovered?.length || 1} year(s).`
+                  : editingField === 'DISCOUNT_RATE' 
+                    ? 'Discount Amount will be derived from: (Basic Tax + SEF Tax) × Discount Rate' 
+                    : 'Total Due will recalculate automatically from the new tax base.'}
               </p>
             </div>
+
+            {/* Physical RPTAR Archive Reference (Volume / Page) */}
+            {editingField === 'ASSESSED_VALUE' && (
+              <div>
+                <label className="block font-bold text-slate-700 mb-1 uppercase tracking-wider text-[10px]">
+                  Physical RPTAR Archive Reference (Volume, Folio, Page)
+                </label>
+                <Input
+                  type="text"
+                  placeholder="e.g. RPTAR Vol. 14, Page 22, Line 4"
+                  value={rptarRefInput}
+                  onChange={(e) => setRptarRefInput(e.target.value)}
+                  className="text-xs"
+                />
+              </div>
+            )}
+
+            {/* Live Calculation Preview Card for Assessed Value */}
+            {editingField === 'ASSESSED_VALUE' && !isNaN(parseFloat(editValue)) && parseFloat(editValue) > 0 && (
+              <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-xs space-y-1">
+                <p className="font-bold text-emerald-900 text-[11px] uppercase tracking-wider">Live Assessment Preview</p>
+                <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-700">
+                  <div>
+                    <span className="text-slate-500">Basic Tax (1%):</span>{' '}
+                    <strong className="text-slate-900">
+                      ₱{(parseFloat(editValue) * 0.01 * (editingRecord?.yearsCovered?.length || 1)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">SEF Tax (1%):</span>{' '}
+                    <strong className="text-slate-900">
+                      ₱{(parseFloat(editValue) * 0.01 * (editingRecord?.yearsCovered?.length || 1)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Base Tax Total:</span>{' '}
+                    <strong className="text-slate-900">
+                      ₱{(parseFloat(editValue) * 0.02 * (editingRecord?.yearsCovered?.length || 1)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Penalty Rate:</span>{' '}
+                    <strong className="text-slate-900">{((editingRecord?.penaltyRate ?? 0) * 100).toFixed(0)}%</strong>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Mandatory Reason */}
             <div>
@@ -764,7 +920,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
               </label>
               <Input
                 type="text"
-                placeholder="e.g. Certified Assessor reduction per Ordinance 2026-04"
+                placeholder={editingField === 'ASSESSED_VALUE' ? 'e.g. Verified from physical RPTAR archive ledger card' : 'e.g. Certified Assessor adjustment per Ordinance 2026-04'}
                 value={editReason}
                 onChange={(e) => setEditReason(e.target.value)}
                 className="text-xs"
