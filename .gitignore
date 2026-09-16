@@ -35,3 +35,7 @@ build/
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Agent custom workflows and skills
+.agents/rules/frequent-commit-push/
+frequent-commit-push/

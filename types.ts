@@ -32,6 +32,9 @@ export interface TaxYearRecord {
   clearedAt?: string;
   clearedBy?: string;
   clearanceReference?: string;
+  assessedValue?: number;        // Period-specific assessed valuation (e.g. 10000 for 1987-1991)
+  isMissingValuation?: boolean;  // True if AV has not yet been retrieved from physical RPTAR
+  rptarReference?: string;       // E.g. "RPTAR Vol. 14, Page 22"
   basicTax?: number;
   sefTax?: number;
   baseTax: number;
@@ -74,6 +77,25 @@ export interface User {
   username?: string;
   role: 'Cashier' | 'Assessor' | 'Admin' | 'Viewer';
   stationId: string;
+}
+
+export interface PropertyAssessmentPeriod {
+  id?: number;
+  propertyId: number | string;
+  tdNumber: string;
+  startYear: number;
+  endYear: number;
+  assessedValue: number;
+  marketValue?: number;
+  source?: 'CSV_IMPORT' | 'PHYSICAL_RPTAR' | 'SYSTEM_DEFAULT';
+  importBatchId?: number;
+  status?: 'VALID' | 'MISSING' | 'CONFLICTING';
+  isMissing?: boolean;
+  remarks?: string;
+  createdBy?: string;
+  updatedBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface AccountableFormBooklet {
