@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Property } from '@/types';
+import { Property, User } from '@/types';
 import { BARANGAYS, PROPERTY_CLASSES } from '@/constants';
+import { mergeEncoderLabel } from '@/utils/encoderAttribution';
 import {
   Dialog,
   DialogContent,
@@ -19,6 +20,7 @@ interface RptarModalProps {
   onClose: () => void;
   onSave: (property: Partial<Property>) => void;
   initialData?: Property | null;
+  currentUser?: User;
 }
 
 // Official 5-Digit Barangay Codes for Santa Rosa, Nueva Ecija (23001 - 23033)
@@ -69,7 +71,7 @@ const getBarangayCode = (brgy?: string): string => {
   return foundKey ? SANTA_ROSA_BARANGAY_CODES[foundKey] : '23001';
 };
 
-const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initialData }) => {
+const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initialData, currentUser }) => {
   const [formData, setFormData] = useState<Partial<Property>>({
     tdNumber: '',
     previousTdNumber: '',
@@ -211,6 +213,12 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
     const finalLotArea = parseFloat(lotAreaStr) || 100;
     const finalLastPaid = parseInt(lastPaidYearStr, 10) || 2025;
 
+    const finalEncoderLabel = mergeEncoderLabel(
+      formData.encoderLabel,
+      currentUser?.name || 'Assessor',
+      true
+    );
+
     onSave({
       ...formData,
       lotAreaSqm: finalLotArea,
@@ -218,6 +226,8 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
       assessedValue: finalAssessed,
       marketValue: finalMarket,
       isShellRecord: finalAssessed <= 0,
+      entryType: 'MANUAL',
+      encoderLabel: finalEncoderLabel,
     });
   };
 
@@ -246,27 +256,36 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
         </DialogHeader>
 
         {/* Status Banner */}
-        {isExisting && (
-          <div
-            className={`px-6 py-2.5 flex items-center justify-between border-b ${
-              isShell
+        <div
+          className={`px-6 py-2.5 flex items-center justify-between border-b ${
+            isExisting
+              ? isShell
                 ? 'bg-amber-50 text-amber-900 border-amber-200'
                 : 'bg-blue-50 text-blue-900 border-blue-200'
-            }`}
-          >
-            <div className="flex items-center gap-2 text-xs font-semibold">
-              <Info size={14} className={isShell ? 'text-amber-600' : 'text-blue-600'} />
-              <span>
-                {isShell
+              : 'bg-emerald-50 text-emerald-900 border-emerald-200'
+          }`}
+        >
+          <div className="flex items-center gap-2 text-xs font-semibold">
+            <Info size={14} className={isShell ? 'text-amber-600' : isExisting ? 'text-blue-600' : 'text-emerald-600'} />
+            <span>
+              {isExisting
+                ? isShell
                   ? 'Provisional Shell Record — Set Full Appraised Valuation'
-                  : 'Existing Masterlist Record'}
+                  : 'Existing Masterlist Record'
+                : 'Manual Singular Encoding — Positioned #1 in Masterlist'}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            {formData.encoderLabel && (
+              <span className="text-[10px] text-slate-500 font-sans">
+                By: <strong className="text-slate-700">{formData.encoderLabel}</strong>
               </span>
-            </div>
-            <Badge variant={isShell ? 'warning' : 'secondary'} className="text-[10px]">
-              {isShell ? 'SHELL RECORD' : 'VERIFIED'}
+            )}
+            <Badge variant={isShell ? 'warning' : isExisting ? 'secondary' : 'success'} className="text-[10px]">
+              {isShell ? 'SHELL RECORD' : isExisting ? 'VERIFIED' : 'MANUAL #1'}
             </Badge>
           </div>
-        )}
+        </div>
 
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto space-y-4 text-xs flex-1">
