@@ -215,7 +215,12 @@ const App: React.FC = () => {
       await loadData();
     } catch (err) {
       console.error('Failed to save property:', err);
-      alert(err instanceof Error ? err.message : 'Failed to save property. Please check required fields.');
+      const errMsg = err instanceof Error
+        ? err.message
+        : (err && typeof err === 'object' && 'message' in err)
+          ? String((err as Record<string, unknown>).message)
+          : 'Failed to save property. Please check required fields.';
+      alert(errMsg);
     }
   };
 

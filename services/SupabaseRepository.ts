@@ -191,7 +191,7 @@ export class SupabaseRepository implements ITreasuryRepository {
   }
 
   async saveProperty(propertyData: Partial<Property>): Promise<Property> {
-    const row = {
+    const row: Record<string, unknown> = {
       td_number: propertyData.tdNumber,
       previous_td_number: propertyData.previousTdNumber,
       pin: propertyData.pin,
@@ -199,51 +199,76 @@ export class SupabaseRepository implements ITreasuryRepository {
       address: propertyData.address,
       barangay: propertyData.barangay,
       property_class: propertyData.propertyClass,
-      assessed_value: propertyData.assessedValue,
-      last_paid_year: propertyData.lastPaidYear,
-      last_paid_quarter: propertyData.lastPaidQuarter !== undefined && propertyData.lastPaidQuarter !== null ? propertyData.lastPaidQuarter : 4,
-      is_shell_record: propertyData.isShellRecord,
+      lot_area_sqm: propertyData.lotAreaSqm !== undefined ? propertyData.lotAreaSqm : 100,
+      market_value: propertyData.marketValue !== undefined ? propertyData.marketValue : 0,
+      assessed_value: propertyData.assessedValue !== undefined ? propertyData.assessedValue : 0,
+      last_paid_year: propertyData.lastPaidYear !== undefined ? propertyData.lastPaidYear : 2025,
+      is_shell_record: Boolean(propertyData.isShellRecord),
       updated_at: new Date().toISOString()
     };
 
-    let resultData;
-    if (propertyData.id && !String(propertyData.id).startsWith('csv-') && !String(propertyData.id).startsWith('prop-')) {
-      const { data, error } = await supabase
-        .from('properties')
-        .update(row)
-        .eq('id', propertyData.id)
-        .select()
-        .single();
-      if (error) throw error;
-      resultData = data;
-    } else {
-      const { data, error } = await supabase
-        .from('properties')
-        .insert(row)
-        .select()
-        .single();
-      if (error) throw error;
-      resultData = data;
+    if (propertyData.lastPaidQuarter !== undefined && propertyData.lastPaidQuarter !== null) {
+      row.last_paid_quarter = propertyData.lastPaidQuarter;
     }
 
+    const isUpdate = Boolean(propertyData.id && !String(propertyData.id).startsWith('csv-') && !String(propertyData.id).startsWith('prop-'));
+
+    const executeSave = async (payload: Record<string, unknown>) => {
+      if (isUpdate) {
+        return supabase
+          .from('properties')
+          .update(payload)
+          .eq('id', propertyData.id)
+          .select()
+          .single();
+      } else {
+        return supabase
+          .from('properties')
+          .insert(payload)
+          .select()
+          .single();
+      }
+    };
+
+    let { data, error } = await executeSave(row);
+    if (error && (error.message?.includes('last_paid_quarter') || error.code === 'PGRST204')) {
+      delete row.last_paid_quarter;
+      const retry = await executeSave(row);
+      data = retry.data;
+      error = retry.error;
+    }
+
+    if (error) {
+      const errMsg = error.message || (typeof error === 'object' ? JSON.stringify(error) : 'Database error saving property');
+      throw new Error(errMsg);
+    }
+    const resultData = data;
+
     // Log audit
-    await supabase.from('rptar_audit_logs').insert({
-      property_id: resultData.id,
-      td_number: resultData.td_number,
-      action_type: propertyData.id ? 'UPDATED' : 'CREATED',
-      assessor_name: 'Juan Reyes',
-      station_id: 'Assessor-Desk-02',
-      details: `Saved property ${resultData.td_number} (${resultData.owner_name})`
-    });
+    try {
+      await supabase.from('rptar_audit_logs').insert({
+        property_id: resultData.id,
+        td_number: resultData.td_number,
+        action_type: isUpdate ? 'UPDATED' : 'CREATED',
+        assessor_name: 'Juan Reyes',
+        station_id: 'Assessor-Desk-02',
+        details: `Saved property ${resultData.td_number} (${resultData.owner_name})`
+      });
+    } catch {
+      // Non-blocking audit log
+    }
 
     return {
       id: String(resultData.id),
       tdNumber: resultData.td_number,
       previousTdNumber: resultData.previous_td_number,
+      pin: resultData.pin,
       ownerName: resultData.owner_name,
       address: resultData.address,
       barangay: resultData.barangay,
       propertyClass: resultData.property_class,
+      lotAreaSqm: resultData.lot_area_sqm !== undefined ? Number(resultData.lot_area_sqm) : 100,
+      marketValue: resultData.market_value !== undefined ? Number(resultData.market_value) : 0,
       assessedValue: Number(resultData.assessed_value),
       lastPaidYear: Number(resultData.last_paid_year),
       lastPaidQuarter: resultData.last_paid_quarter !== undefined && resultData.last_paid_quarter !== null ? Number(resultData.last_paid_quarter) : 4,
