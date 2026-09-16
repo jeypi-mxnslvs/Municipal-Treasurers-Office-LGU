@@ -735,6 +735,137 @@ describe("taxLogic - Municipal Payment-Date Policy & Assessor Overrides", () => 
       expect(result.grandTotal).toBe(5000);
     });
   });
+
+  describe("Historical Assessment Eras & Multi-Bracket Period Valuations", () => {
+    const legacyProperty: Property = {
+      id: "prop-legacy-multi-era",
+      tdNumber: "03-0001-00101",
+      previousTdNumber: "PREV-87-0101",
+      ownerName: "Juan Dela Cruz",
+      address: "124 Rizal St.",
+      barangay: "Poblacion",
+      propertyClass: "Residential",
+      assessedValue: 40000, // Modern valuation
+      lastPaidYear: 1986,
+      lastPaidQuarter: 4,
+      isShellRecord: false,
+    };
+
+    it("calculates accurate period-specific taxes across historical General Revision eras", () => {
+      const result = calculateTaxLiability(legacyProperty, {
+        periodValuations: {
+          "1987-1991": { assessedValue: 10000, rptarReference: "RPTAR Vol. 14, Page 22" },
+          "1992-1993": { assessedValue: 15000, rptarReference: "RPTAR Vol. 18, Page 05" },
+          "1994-2005": { assessedValue: 25000, rptarReference: "1994 General Revision Roll" },
+          "2006-11": { assessedValue: 40000 },
+        },
+      });
+
+      // 1. Era 1987-1991 (5 Yrs at AV ₱10,000, 24% penalty cap)
+      const b87 = result.records.find((r) => r.periodLabel === "1987-1991");
+      expect(b87).toBeDefined();
+      expect(b87!.assessedValue).toBe(10000);
+      expect(b87!.isMissingValuation).toBe(false);
+      expect(b87!.rptarReference).toBe("RPTAR Vol. 14, Page 22");
+      expect(b87!.basicTax).toBe(500); // 10,000 * 0.01 * 5
+      expect(b87!.sefTax).toBe(500);
+      expect(b87!.baseTax).toBe(1000);
+      expect(b87!.penaltyAmount).toBe(240); // 1,000 * 0.24
+      expect(b87!.totalDue).toBe(1240);
+      expect(b87!.isPayable).toBe(true);
+
+      // 2. Era 1992-1993 (2 Yrs at AV ₱15,000, 24% penalty cap)
+      const b92 = result.records.find((r) => r.periodLabel === "1992-1993");
+      expect(b92).toBeDefined();
+      expect(b92!.assessedValue).toBe(15000);
+      expect(b92!.basicTax).toBe(300); // 15,000 * 0.01 * 2
+      expect(b92!.sefTax).toBe(300);
+      expect(b92!.penaltyAmount).toBe(144); // 600 * 0.24
+      expect(b92!.totalDue).toBe(744);
+
+      // 3. Era 1994-2005 (12 Yrs at AV ₱25,000, 72% penalty cap)
+      const b94 = result.records.find((r) => r.periodLabel === "1994-2005");
+      expect(b94).toBeDefined();
+      expect(b94!.assessedValue).toBe(25000);
+      expect(b94!.basicTax).toBe(3000); // 25,000 * 0.01 * 12
+      expect(b94!.sefTax).toBe(3000);
+      expect(b94!.penaltyAmount).toBe(4320); // 6,000 * 0.72
+      expect(b94!.totalDue).toBe(10320);
+
+      // 4. Era 2006-2011 (6 Yrs at AV ₱40,000, 72% penalty cap)
+      const b06 = result.records.find((r) => r.periodLabel === "2006-11");
+      expect(b06).toBeDefined();
+      expect(b06!.assessedValue).toBe(40000);
+      expect(b06!.basicTax).toBe(2400); // 40,000 * 0.01 * 6
+      expect(b06!.sefTax).toBe(2400);
+      expect(b06!.penaltyAmount).toBe(3456); // 4,800 * 0.72
+      expect(b06!.totalDue).toBe(8256);
+    });
+
+    it("correctly flags unassessed historical eras as isMissingValuation requiring physical RPTAR", () => {
+      const result = calculateTaxLiability(legacyProperty, {
+        periodValuations: {
+          "1987-1991": { assessedValue: 0, isMissing: true },
+          "1992-1993": { assessedValue: 15000 },
+        },
+      });
+
+      const b87 = result.records.find((r) => r.periodLabel === "1987-1991");
+      expect(b87).toBeDefined();
+      expect(b87!.isMissingValuation).toBe(true);
+      expect(b87!.assessedValue).toBe(0);
+      expect(b87!.basicTax).toBe(0);
+      expect(b87!.sefTax).toBe(0);
+      expect(b87!.penaltyAmount).toBe(0);
+      expect(b87!.totalDue).toBe(0);
+      expect(b87!.isPayable).toBe(false); // Prohibits payment before AV verification
+    });
+
+    it("supports structured assessmentPeriods array with remarks citation", () => {
+      const result = calculateTaxLiability(legacyProperty, {
+        assessmentPeriods: [
+          {
+            startYear: 1987,
+            endYear: 1991,
+            assessedValue: 12000,
+            remarks: "RPTAR Archive Vol. 9, Folio 15",
+          },
+        ],
+      });
+
+      const b87 = result.records.find((r) => r.periodLabel === "1987-1991");
+      expect(b87).toBeDefined();
+      expect(b87!.assessedValue).toBe(12000);
+      expect(b87!.rptarReference).toBe("RPTAR Archive Vol. 9, Folio 15");
+      expect(b87!.basicTax).toBe(600); // 12,000 * 0.01 * 5
+      expect(b87!.sefTax).toBe(600);
+      expect(b87!.totalDue).toBe(1488); // 1200 + (1200 * 0.24)
+    });
+
+    it("defaults to property.assessedValue when no periodValuations are provided (backward compatibility)", () => {
+      const modernProperty: Property = {
+        id: "prop-modern",
+        tdNumber: "03-0001-00200",
+        previousTdNumber: "",
+        ownerName: "Modern Taxpayer",
+        address: "Barangay San Joseph",
+        barangay: "San Joseph",
+        propertyClass: "Residential",
+        assessedValue: 50000,
+        lastPaidYear: 2023,
+        lastPaidQuarter: 4,
+        isShellRecord: false,
+      };
+
+      const result = calculateTaxLiability(modernProperty);
+      const r24 = result.records.find((r) => r.year === 2024);
+      expect(r24).toBeDefined();
+      expect(r24!.assessedValue).toBe(50000);
+      expect(r24!.isMissingValuation).toBe(false);
+      expect(r24!.basicTax).toBe(500);
+      expect(r24!.sefTax).toBe(500);
+    });
+  });
 });
 
 

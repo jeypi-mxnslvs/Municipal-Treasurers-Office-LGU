@@ -1,4 +1,4 @@
-import { Property, TaxYearRecord, CalculationResult, MunicipalTaxSettings, TaxSummary } from '../types';
+import { Property, TaxYearRecord, CalculationResult, MunicipalTaxSettings, TaxSummary, PropertyAssessmentPeriod } from '../types';
 import { 
   CURRENT_YEAR, 
   PENALTY_RATE_PER_MONTH, 
@@ -77,6 +77,13 @@ export const SANTA_ROSA_MUNICIPAL_PENALTY_SCHEDULE: Record<string, number> = {
   '2027': 0.00, // advance discount 0.20
 };
 
+export interface PeriodValuationItem {
+  assessedValue: number;
+  marketValue?: number;
+  rptarReference?: string;
+  isMissing?: boolean;
+}
+
 export interface TaxCalculationOptions {
   paymentDate?: Date;
   settings?: Partial<MunicipalTaxSettings>;
@@ -86,6 +93,8 @@ export interface TaxCalculationOptions {
   discountCurrentQuarters?: boolean;  // If true, enables prompt discount on 3-4 Q (defaults to false for Notice of Delinquency)
   completedPeriodLabels?: string[];   // Filter out already settled partial quarters/periods
   penaltyScheduleOverride?: Record<string, number>; // Dynamic municipal penalty schedule override
+  periodValuations?: Record<string, PeriodValuationItem | number>; // Period-specific historical valuations
+  assessmentPeriods?: Array<Partial<PropertyAssessmentPeriod> & { startYear: number; endYear: number; assessedValue: number }>;                  // Structured assessment periods
   overrides?: Record<number | string, {
     basicTax?: number;
     sefTax?: number;
@@ -159,8 +168,73 @@ export const calculateTaxLiability = (
     };
   }
 
-  const annualBasicTax = Math.round(property.assessedValue * 0.01 * 100) / 100;
-  const annualSefTax = Math.round(property.assessedValue * 0.01 * 100) / 100;
+  // Helper to resolve period-specific assessed value, RPTAR citation, and missing status
+  const resolvePeriodValuation = (params: {
+    year: number;
+    periodLabel?: string;
+    startYear: number;
+    endYear: number;
+  }): {
+    assessedValue: number;
+    isMissingValuation: boolean;
+    rptarReference?: string;
+  } => {
+    const { year, periodLabel, startYear: sYear, endYear: eYear } = params;
+
+    // 1. Direct match by periodLabel or year in options.periodValuations
+    if (options?.periodValuations) {
+      const entry = (periodLabel && options.periodValuations[periodLabel] !== undefined)
+        ? options.periodValuations[periodLabel]
+        : options.periodValuations[year] !== undefined
+          ? options.periodValuations[year]
+          : options.periodValuations[String(year)];
+
+      if (entry !== undefined) {
+        if (typeof entry === 'number') {
+          return {
+            assessedValue: entry,
+            isMissingValuation: entry <= 0,
+          };
+        }
+        return {
+          assessedValue: entry.assessedValue ?? 0,
+          isMissingValuation: Boolean(entry.isMissing || (entry.assessedValue !== undefined && entry.assessedValue <= 0)),
+          rptarReference: entry.rptarReference,
+        };
+      }
+    }
+
+    // 2. Overlapping match in options.assessmentPeriods
+    if (options?.assessmentPeriods && options.assessmentPeriods.length > 0) {
+      const matched = options.assessmentPeriods.find(p => 
+        (p.startYear <= sYear && p.endYear >= eYear) ||
+        (p.startYear <= year && p.endYear >= year) ||
+        (sYear <= p.endYear && eYear >= p.startYear)
+      );
+      if (matched) {
+        return {
+          assessedValue: matched.assessedValue ?? 0,
+          isMissingValuation: Boolean(matched.isMissing || (matched.assessedValue !== undefined && matched.assessedValue <= 0)),
+          rptarReference: matched.remarks,
+        };
+      }
+    }
+
+    // 3. If caller explicitly passed a periodValuations dictionary, and this historical bracket (< 2012) is absent from it:
+    if (options?.periodValuations && eYear < 2012) {
+      return {
+        assessedValue: 0,
+        isMissingValuation: true,
+      };
+    }
+
+    // 4. Default: Modern era (>= 2012) or standard baseline without periodValuations:
+    // Falls back to property.assessedValue for 100% backward compatibility
+    return {
+      assessedValue: property.assessedValue,
+      isMissingValuation: property.assessedValue <= 0,
+    };
+  };
 
   // Helper to generate a single TaxYearRecord for any period / bracket
   const createRecord = (params: {
@@ -182,6 +256,14 @@ export const calculateTaxLiability = (
       return;
     }
 
+    const valuation = resolvePeriodValuation({ year, periodLabel, startYear: sYear, endYear: eYear });
+    const periodAssessedValue = valuation.assessedValue;
+    const isMissingVal = valuation.isMissingValuation;
+    const rptarRef = valuation.rptarReference;
+
+    const annualBasicTax = isMissingVal ? 0 : Math.round(periodAssessedValue * 0.01 * 100) / 100;
+    const annualSefTax = isMissingVal ? 0 : Math.round(periodAssessedValue * 0.01 * 100) / 100;
+
     const systemBasicTax = Math.round(annualBasicTax * multiplier * 100) / 100;
     const systemSefTax = Math.round(annualSefTax * multiplier * 100) / 100;
     const systemBaseTax = systemBasicTax + systemSefTax;
@@ -193,7 +275,7 @@ export const calculateTaxLiability = (
 
     const activePenaltySchedule = options?.penaltyScheduleOverride || SANTA_ROSA_MUNICIPAL_PENALTY_SCHEDULE;
 
-    if (isDelinquent) {
+    if (isDelinquent && !isMissingVal) {
       if (periodLabel && activePenaltySchedule[periodLabel] !== undefined) {
         // Direct rate from active Santa Rosa Treasury Municipal Schedule
         penaltyRate = activePenaltySchedule[periodLabel];
@@ -219,7 +301,7 @@ export const calculateTaxLiability = (
 
     // Discount Calculation
     let systemDiscountRate: number;
-    if (isDelinquent) {
+    if (isDelinquent || isMissingVal) {
       systemDiscountRate = delinquentRate; // 0%
     } else if (isAdvance) {
       systemDiscountRate = earlyDiscountRate; // 20% advance discount
@@ -251,7 +333,8 @@ export const calculateTaxLiability = (
 
     const appliedBaseTax = Math.round((appliedBasicTax + appliedSefTax) * 100) / 100;
     const discountAmount = Math.round(appliedBaseTax * appliedDiscountRate * 100) / 100;
-    const totalDue = Math.max(0, Math.round((appliedBaseTax + penaltyAmount - discountAmount) * 100) / 100);
+    const totalDue = isMissingVal ? 0 : Math.max(0, Math.round((appliedBaseTax + penaltyAmount - discountAmount) * 100) / 100);
+    const isPayable = !isMissingVal;
 
     const status: TaxYearRecord['status'] = isAdvance 
       ? 'Advance' 
@@ -268,6 +351,9 @@ export const calculateTaxLiability = (
       quarterSpan,
       quarter,
       status,
+      assessedValue: periodAssessedValue,
+      isMissingValuation: isMissingVal,
+      rptarReference: rptarRef,
       basicTax: appliedBasicTax,
       sefTax: appliedSefTax,
       baseTax: appliedBaseTax,
@@ -282,15 +368,17 @@ export const calculateTaxLiability = (
       discountRate: appliedDiscountRate,
       discountAmount,
       totalDue,
-      isPayable: true,
+      isPayable,
     });
 
-    totalBasicTax += appliedBasicTax;
-    totalSefTax += appliedSefTax;
-    totalBaseTax += appliedBaseTax;
-    totalPenalty += penaltyAmount;
-    totalDiscount += discountAmount;
-    grandTotal += totalDue;
+    if (!isMissingVal) {
+      totalBasicTax += appliedBasicTax;
+      totalSefTax += appliedSefTax;
+      totalBaseTax += appliedBaseTax;
+      totalPenalty += penaltyAmount;
+      totalDiscount += discountAmount;
+      grandTotal += totalDue;
+    }
   };
 
   // 1. Process Historical Brackets (< 2012)
