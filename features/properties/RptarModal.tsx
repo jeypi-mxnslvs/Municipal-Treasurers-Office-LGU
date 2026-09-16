@@ -414,23 +414,23 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
             </div>
 
             {/* Primary Tax Base: Taxable Assessed Value */}
-            <div className="md:col-span-2 p-4 bg-emerald-50/70 rounded-xl border border-emerald-200">
-              <div className="flex items-center justify-between mb-1">
-                <label className="block font-bold text-emerald-950 text-xs tracking-wider">
+            <div className="md:col-span-2 p-4 bg-[#f4f7f5] rounded-xl border border-slate-200/80 space-y-2">
+              <div className="flex items-center justify-between mb-0.5">
+                <label className="block font-bold text-slate-800 text-xs tracking-wider">
                   Taxable Assessed Value (₱) *
                 </label>
-                <Badge variant="outline" className="bg-white border-emerald-300 text-emerald-800 text-[10px] font-bold">
+                <Badge variant="outline" className="bg-white border-slate-300 text-slate-600 text-[10px] font-semibold">
                   Primary Tax Base
                 </Badge>
               </div>
-              <p className="text-[11px] text-emerald-700/90 mb-2.5">
+              <p className="text-[11px] text-slate-500 leading-relaxed">
                 Official tax base from Tax Declaration. Real Property Tax (1% Basic + 1% SEF) and delinquency penalties are computed exclusively on this figure.
               </p>
               <Input
                 type="number"
                 min="0"
                 step="any"
-                className="h-11 font-bold text-slate-900 font-mono text-base bg-white border-emerald-300 focus-visible:ring-emerald-600/30 focus-visible:border-emerald-600 rounded-lg shadow-2xs"
+                className="h-11 font-bold text-slate-900 font-mono text-base bg-white border-slate-300/90 focus-visible:ring-emerald-600/20 focus-visible:border-emerald-600 rounded-lg shadow-2xs"
                 value={assessedValueStr}
                 onChange={(e) => handleAssessedValueChange(e.target.value)}
                 onFocus={(e) => {
