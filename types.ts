@@ -16,6 +16,10 @@ export interface Property {
   totalDebt?: number;
   status?: 'CLEARED' | 'PARTIAL' | 'DELINQUENT';
   assessmentPeriods?: PropertyAssessmentPeriod[];
+  encoderLabel?: string; // e.g. "Assessor 1, Assessor 2"
+  entryType?: 'MANUAL' | 'CSV_IMPORT'; // 'MANUAL' entries prioritized in #1 position
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface TaxYearRecord {
