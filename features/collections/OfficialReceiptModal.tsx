@@ -12,7 +12,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Printer, CheckCircle2, Building, Ban, ShieldAlert, Lock, AlertTriangle, ArrowLeft, FileText } from 'lucide-react';
+import { Printer, CheckCircle2, Building, Ban, ShieldAlert, Lock, AlertTriangle, ArrowLeft, FileText, FileSpreadsheet, FileDown } from 'lucide-react';
+import { generateReceiptCsv, downloadReceiptWordDoc, downloadCsvFile } from '@/utils/documentExport';
 
 interface ClearanceModalProps {
   isOpen?: boolean;
@@ -50,6 +51,18 @@ const OfficialReceiptModal: React.FC<ClearanceModalProps> = ({
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleExportCsv = () => {
+    if (!activeReceipt) return;
+    const csv = generateReceiptCsv(activeReceipt);
+    const filename = `Clearance_Slip_${activeReceipt.receiptNo}_${activeReceipt.property.tdNumber}.csv`;
+    downloadCsvFile(csv, filename);
+  };
+
+  const handleExportWord = () => {
+    if (!activeReceipt) return;
+    downloadReceiptWordDoc(activeReceipt);
   };
 
   const handleExecuteVoid = async (e: React.FormEvent) => {
@@ -155,6 +168,28 @@ const OfficialReceiptModal: React.FC<ClearanceModalProps> = ({
                   Void Receipt (COA)
                 </Button>
               )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleExportCsv}
+                className="bg-slate-800 hover:bg-slate-700 text-white border-slate-700 text-xs font-bold rounded-xl shadow-sm gap-1.5 cursor-pointer"
+                title="Export structured CSV format"
+              >
+                <FileSpreadsheet className="h-4 w-4 text-emerald-400" />
+                Export CSV
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleExportWord}
+                className="bg-slate-800 hover:bg-slate-700 text-white border-slate-700 text-xs font-bold rounded-xl shadow-sm gap-1.5 cursor-pointer"
+                title="Export Microsoft Word (.doc) format"
+              >
+                <FileDown className="h-4 w-4 text-blue-400" />
+                Export Word (.doc)
+              </Button>
               <Button
                 type="button"
                 onClick={handlePrint}

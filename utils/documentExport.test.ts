@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { Property, TaxYearRecord } from '../types';
+import { Property, TaxYearRecord, OfficialReceipt } from '../types';
 import {
   generateNoticeOfDelinquencyCsv,
   generateWordHtml,
+  generateReceiptCsv,
+  generateReceiptWordHtml,
   formatPesos,
   DocumentExportTotals,
 } from './documentExport';
@@ -134,5 +136,100 @@ describe('utils/documentExport', () => {
     expect(wordHtml).toContain('₱6,160.00');
     expect(wordHtml).toContain('₱12,320.00');
     expect(wordHtml).toContain('Myra V. Cunanan');
+  });
+
+  const mockReceipt: OfficialReceipt = {
+    receiptNo: 'AF51-4500013',
+    date: '2026-09-16T11:59:51.000Z',
+    status: 'ISSUED',
+    property: {
+      id: 'prop-test-01',
+      tdNumber: '17-23001-84332',
+      pin: '956-20-517-60-872',
+      ownerName: 'Adoracion Aquino',
+      address: '39 Aguinaldo',
+      barangay: 'Aguinaldo',
+      propertyClass: 'Machinery',
+      assessedValue: 1718200,
+    },
+    itemizedRecords: [
+      {
+        year: 2005,
+        periodLabel: '2005',
+        startYear: 2005,
+        endYear: 2005,
+        yearsCovered: [2005],
+        status: 'Delinquent',
+        assessedValue: 1718200,
+        baseTax: 200,
+        basicTax: 100,
+        sefTax: 100,
+        monthsDelayed: 36,
+        penaltyRate: 0.72,
+        penaltyAmount: 144,
+        discountRate: 0,
+        discountAmount: 0,
+        totalDue: 344,
+        isPayable: true,
+      },
+    ],
+    summary: {
+      basicTax: 100,
+      sefTax: 100,
+      baseTaxTotal: 200,
+      penalty: 144,
+      discount: 0,
+      totalPaid: 344,
+    },
+    tenderType: 'CASH',
+    postedBy: 'Helen Abejuro (Assessor • Assessor-Desk-03)',
+  };
+
+  it('generates Accountable Form 51 Clearance Slip CSV with statutory fields', () => {
+    const csv = generateReceiptCsv(mockReceipt);
+
+    expect(csv).toContain('REPUBLIC OF THE PHILIPPINES');
+    expect(csv).toContain('OFFICIAL REAL PROPERTY TAX CLEARANCE SLIP & LEDGER');
+    expect(csv).toContain('ACCOUNTABLE FORM NO. 51 REF:,"AF51-4500013"');
+    expect(csv).toContain('STATUS:,"OFFICIALLY ISSUED (RA 7160)"');
+    expect(csv).toContain('Tax Declaration No. (TDN):,"17-23001-84332"');
+    expect(csv).toContain('Property Index No. (PIN):,"956-20-517-60-872"');
+    expect(csv).toContain('Declared Owner:,"Adoracion Aquino"');
+    expect(csv).toContain('Machinery');
+    expect(csv).toContain('"2005",100.00,100.00,144.00,0.00,344.00');
+    expect(csv).toContain('Grand Totals:,100.00,100.00,144.00,0.00,344.00');
+    expect(csv).toContain('OFFICIALLY CLEARED UNDER RA 7160');
+    expect(csv).toContain('Helen Abejuro (Assessor • Assessor-Desk-03)');
+  });
+
+  it('generates Microsoft Word compatible Clearance Slip with MSO Word XML and VOID banner support', () => {
+    const wordHtml = generateReceiptWordHtml(mockReceipt);
+
+    expect(wordHtml).toContain('xmlns:w="urn:schemas-microsoft-com:office:word"');
+    expect(wordHtml).toContain('<w:WordDocument>');
+    expect(wordHtml).toContain('OFFICIAL REAL PROPERTY TAX CLEARANCE SLIP & LEDGER');
+    expect(wordHtml).toContain('AF51-4500013');
+    expect(wordHtml).toContain('17-23001-84332');
+    expect(wordHtml).toContain('Adoracion Aquino');
+    expect(wordHtml).toContain('₱344.00');
+    expect(wordHtml).toContain('Helen Abejuro (Assessor • Assessor-Desk-03)');
+
+    // Test voided receipt handling
+    const voidedReceipt: OfficialReceipt = {
+      ...mockReceipt,
+      status: 'VOIDED',
+      voidReason: 'Supervisory correction',
+      voidedBy: 'Treasury Admin',
+      voidedAt: '2026-09-16T12:30:00.000Z',
+    };
+
+    const voidedWordHtml = generateReceiptWordHtml(voidedReceipt);
+    expect(voidedWordHtml).toContain('*** OFFICIAL RECEIPT VOIDED & CANCELLED (COA AUDIT PROTOCOL) ***');
+    expect(voidedWordHtml).toContain('Supervisory correction');
+
+    const voidedCsv = generateReceiptCsv(voidedReceipt);
+    expect(voidedCsv).toContain('STATUS:,"VOIDED / CANCELLED (COA)"');
+    expect(voidedCsv).toContain('CANCELLATION REASON:,"Supervisory correction"');
+    expect(voidedCsv).toContain('CANCELLED / VOIDED UNDER COA PROTOCOLS');
   });
 });

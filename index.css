@@ -123,6 +123,9 @@
   /* Remove modal/dialog chrome when printing from inside Radix dialog */
   [role="dialog"], [data-radix-portal] {
     position: static !important;
+    transform: none !important;
+    left: auto !important;
+    top: auto !important;
     overflow: visible !important;
     max-height: none !important;
     max-width: 100% !important;
