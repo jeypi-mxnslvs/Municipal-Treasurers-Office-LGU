@@ -61,4 +61,46 @@ describe('Phase 6: Regulatory Reporting & Statutory Compliance', () => {
     expect(sefPortion).toBe(250000);
     expect(basicPortion + sefPortion).toBe(totalCollected);
   });
+
+  it('reflects period-dependent historical assessed values and unassessed flags on delinquency roll records', () => {
+    const multiEraProperty: Property = {
+      ...mockDelinquentProperty,
+      lastPaidYear: 1986,
+      assessedValue: 85000 // Modern base AV
+    };
+
+    const periods = [
+      { startYear: 1987, endYear: 1991, assessedValue: 10000 },
+      { startYear: 1992, endYear: 2005, assessedValue: 25000 },
+      { startYear: 2006, endYear: 2011, assessedValue: 40000 }
+    ];
+
+    const result = calculateTaxLiability(multiEraProperty, { assessmentPeriods: periods });
+
+    // Verify 1987-1991 roll record carries era-specific AV of 10,000 across 5 years
+    const rec1987 = result.records.find(r => r.year === 1987);
+    expect(rec1987).toBeDefined();
+    expect(rec1987?.assessedValue).toBe(10000);
+    expect(rec1987?.baseTax).toBe(1000); // 2% of 10,000 * 5 years (1987-1991)
+    expect(rec1987?.basicTax).toBe(500); // 1% of 10,000 * 5 years
+    expect(rec1987?.sefTax).toBe(500); // 1% of 10,000 * 5 years
+
+    // Verify 2006-2011 roll record carries era-specific AV of 40,000 across 6 years
+    const rec2006 = result.records.find(r => r.year === 2006);
+    expect(rec2006).toBeDefined();
+    expect(rec2006?.assessedValue).toBe(40000);
+    expect(rec2006?.baseTax).toBe(4800); // 2% of 40,000 * 6 years (2006-2011)
+    expect(rec2006?.basicTax).toBe(2400); // 1% of 40,000 * 6 years
+    expect(rec2006?.sefTax).toBe(2400); // 1% of 40,000 * 6 years
+
+    // Verify unassessed era correctly flags isMissingValuation
+    const unassessedPeriods = [
+      { startYear: 1987, endYear: 1991, assessedValue: 0, isMissingValuation: true }
+    ];
+    const unassessedResult = calculateTaxLiability(multiEraProperty, { assessmentPeriods: unassessedPeriods });
+    const unassessedRec = unassessedResult.records.find(r => r.year === 1987);
+    expect(unassessedRec?.isMissingValuation).toBe(true);
+    expect(unassessedRec?.totalDue).toBe(0);
+    expect(unassessedRec?.isPayable).toBe(false);
+  });
 });

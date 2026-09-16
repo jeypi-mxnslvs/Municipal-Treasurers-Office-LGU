@@ -6,14 +6,14 @@ import {
   DialogContent,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import {
   Printer,
   Download,
   FileText,
   ChevronLeft,
   ChevronRight,
-  ShieldAlert
+  ShieldAlert,
+  X
 } from 'lucide-react';
 
 interface NoticeOfDelinquencyModalProps {
@@ -100,9 +100,12 @@ export const NoticeOfDelinquencyModal: React.FC<NoticeOfDelinquencyModalProps> =
       const unpaidTaxes = r.baseTax / 2;
       const penaltyOrDiscount = (r.penaltyAmount - (r.discountAmount || 0)) / 2;
       const totalDelinquency = r.totalDue / 2;
+      const assessedValStr = r.isMissingValuation
+        ? 'Pending RPTAR'
+        : (r.assessedValue ?? activeProperty.assessedValue).toFixed(2);
 
       lines.push(
-        `"${activeProperty.tdNumber}",,"${activeProperty.lotAreaSqm || 'N/A'}","${activeProperty.assessedValue}","${activeProperty.barangay}, Santa Rosa",,"${activeProperty.propertyClass}",,,,${yearLabel},${unpaidTaxes.toFixed(2)},,${penaltyOrDiscount.toFixed(2)},,${totalDelinquency.toFixed(2)},,`
+        `"${activeProperty.tdNumber}",,"${activeProperty.lotAreaSqm || 'N/A'}","${assessedValStr}","${activeProperty.barangay}, Santa Rosa",,"${activeProperty.propertyClass}",,,,${yearLabel},${unpaidTaxes.toFixed(2)},,${penaltyOrDiscount.toFixed(2)},,${totalDelinquency.toFixed(2)},,`
       );
     });
 
@@ -138,35 +141,33 @@ export const NoticeOfDelinquencyModal: React.FC<NoticeOfDelinquencyModalProps> =
             <span className="font-bold text-sm tracking-wide">
               Notice of Delinquency (RA 7160 Sec. 254)
             </span>
-            <Badge variant="outline" className="text-xs bg-slate-800 border-slate-700 text-slate-300">
-              Record {currentIndex + 1} of {properties.length}
-            </Badge>
           </div>
 
           <div className="flex items-center gap-2">
             {properties.length > 1 && (
-              <div className="flex items-center gap-1 mr-2">
+              <div className="flex items-center gap-1 mr-2 text-xs text-slate-400">
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   disabled={currentIndex === 0}
-                  onClick={() => setCurrentIndex(prev => Math.max(prev - 1, 0))}
-                  className="h-8 px-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
-                  title="Previous Property"
+                  onClick={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
+                  className="h-8 px-2 bg-slate-800 border-slate-700 text-white hover:bg-slate-700"
                 >
-                  <ChevronLeft size={16} />
+                  <ChevronLeft size={14} />
                 </Button>
+                <span className="px-2">
+                  {currentIndex + 1} of {properties.length}
+                </span>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  disabled={currentIndex >= properties.length - 1}
-                  onClick={() => setCurrentIndex(prev => Math.min(prev + 1, properties.length - 1))}
-                  className="h-8 px-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
-                  title="Next Property"
+                  disabled={currentIndex === properties.length - 1}
+                  onClick={() => setCurrentIndex((prev) => Math.min(properties.length - 1, prev + 1))}
+                  className="h-8 px-2 bg-slate-800 border-slate-700 text-white hover:bg-slate-700"
                 >
-                  <ChevronRight size={16} />
+                  <ChevronRight size={14} />
                 </Button>
               </div>
             )}
@@ -176,87 +177,77 @@ export const NoticeOfDelinquencyModal: React.FC<NoticeOfDelinquencyModalProps> =
               variant="outline"
               size="sm"
               onClick={handleExportCsv}
-              className="h-8 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-emerald-300 border-slate-700 gap-1.5"
+              className="h-8 px-3 bg-slate-800 border-slate-700 text-white hover:bg-slate-700 gap-1 text-xs"
             >
               <Download size={14} />
-              <span>Export CSV</span>
+              Export CSV
             </Button>
-
             <Button
               type="button"
               size="sm"
               onClick={handlePrint}
-              className="h-8 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5 shadow-sm"
+              className="h-8 px-3 bg-emerald-600 text-white hover:bg-emerald-500 gap-1 text-xs shadow-sm"
             >
               <Printer size={14} />
-              <span>Print Demand Notice</span>
+              Print Notice
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onClose}
+              className="h-8 px-2 text-slate-400 hover:text-white hover:bg-slate-800"
+            >
+              <X size={16} />
             </Button>
           </div>
         </div>
 
-        {/* Official Printable Statutory Notice Document */}
-        <div className="p-8 sm:p-10 font-serif leading-relaxed text-slate-900 bg-white">
-          {/* Header Section */}
-          <div className="text-center space-y-1 pb-4 border-b-2 border-slate-800">
-            <div className="flex justify-center items-center gap-3">
-              <img
-                src="/santa-rosa-seal.png"
-                alt="Seal of Santa Rosa"
-                className="w-16 h-16 object-contain"
-              />
-              <div>
-                <p className="text-xs uppercase tracking-widest font-semibold text-slate-600">
-                  Republic of the Philippines
-                </p>
-                <p className="text-xs uppercase tracking-wider font-semibold text-slate-700">
-                  Province of Nueva Ecija
-                </p>
-                <h2 className="text-base sm:text-lg font-black tracking-tight uppercase text-slate-900 font-sans">
-                  Municipality of Santa Rosa
-                </h2>
-                <p className="text-xs font-bold uppercase tracking-wider text-emerald-900">
-                  Office of the Municipal Treasurer
-                </p>
-              </div>
+        {/* Printable Notice Sheet (Styled strictly after LGU Santa Rosa AF Form) */}
+        <div id="printable-notice" className="p-8 sm:p-12 print:p-6 bg-white max-w-[850px] mx-auto text-slate-900 leading-tight">
+          {/* Header */}
+          <div className="text-center border-b-2 border-slate-900 pb-4 mb-4">
+            <p className="text-[11px] uppercase tracking-widest text-slate-600 font-semibold font-sans">Republic of the Philippines</p>
+            <p className="text-[11px] uppercase tracking-widest text-slate-600 font-semibold font-sans">Province of Nueva Ecija</p>
+            <h1 className="text-base font-extrabold tracking-tight uppercase text-slate-900 mt-0.5">
+              Municipality of Santa Rosa
+            </h1>
+            <p className="text-xs font-bold uppercase tracking-wider text-emerald-800 mt-0.5">
+              Office of the Municipal Treasurer
+            </p>
+            <div className="mt-3 inline-block bg-slate-900 text-white px-4 py-1 text-xs font-bold uppercase tracking-widest rounded-sm">
+              Notice of Delinquency in the Payment of Real Property Tax
             </div>
-
-            <div className="pt-3">
-              <h1 className="text-sm sm:text-base font-extrabold uppercase tracking-wide text-slate-950 font-sans">
-                Notice of Delinquency in the Payment of Real Property Tax
-              </h1>
-              <p className="text-[11px] font-sans font-medium text-slate-500">
-                Issued pursuant to Section 254, Title II of Republic Act No. 7160 (Local Government Code of 1991)
-              </p>
-            </div>
-          </div>
-
-          {/* Notice Metadata */}
-          <div className="flex justify-between items-center text-xs font-sans py-3 border-b border-slate-200">
-            <div>
-              <span className="font-bold text-slate-700">Effective Roll Billing Date: </span>
-              <span className="font-mono text-slate-900">
-                {new Date().toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
-              </span>
-            </div>
-            <div>
-              <span className="font-bold text-slate-700">Last Recorded Clearance: </span>
-              <span className="font-mono font-bold text-emerald-800">
-                Year {activeProperty.lastPaidYear} (Q{activeProperty.lastPaidQuarter || 4})
-              </span>
-            </div>
-          </div>
-
-          {/* Statutory Notice Demand Paragraph */}
-          <div className="py-4 text-xs sm:text-sm text-justify space-y-2">
-            <p>
-              <strong>NOTICE IS HEREBY SERVED</strong> to the declared owner and/or person having legal interest in the real property
-              described below that pursuant to <strong>Section 254 of Republic Act No. 7160</strong>, the Real Property Tax for Calendar
-              Year <strong>{activeProperty.lastPaidYear + 1}</strong> and prior unpaid years has become delinquent with respect to the
-              statutory liabilities itemized herein:
+            <p className="text-[10px] text-slate-500 mt-1 italic">
+              Pursuant to Section 254, Republic Act No. 7160 (Local Government Code of 1991)
             </p>
           </div>
 
-          {/* Property Master Summary Card */}
+          {/* Date and Reference Bar */}
+          <div className="flex justify-between items-center text-xs font-sans my-3 text-slate-700">
+            <div>
+              <span className="font-bold text-slate-900">Notice Ref Date: </span>
+              {new Date().toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
+            </div>
+            <div>
+              <span className="font-bold text-slate-900">Last Recorded Payment: </span>
+              <span className="font-mono font-semibold text-emerald-900">
+                {activeProperty.lastPaidYear} (Quarter {activeProperty.lastPaidQuarter || 4})
+              </span>
+            </div>
+          </div>
+
+          {/* Statutory Formal Notice Salutation */}
+          <div className="my-3 text-xs leading-relaxed text-slate-800 font-sans text-justify">
+            <p>
+              <strong>NOTICE IS HEREBY SERVED</strong> that pursuant to the provisions of Section 254 of Republic Act No. 7160,
+              otherwise known as the <em>Local Government Code of 1991</em>, the Real Property Tax due and payable for calendar
+              year <strong>{activeProperty.lastPaidYear + 1}</strong> and prior delinquent calendar years has become delinquent
+              with respect to the real property declared under your name as itemized below:
+            </p>
+          </div>
+
+          {/* Property Assessment Summary Card */}
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs font-sans grid grid-cols-2 sm:grid-cols-4 gap-3 my-2">
             <div>
               <p className="text-[10px] text-slate-500 uppercase font-bold">Tax Declaration No.</p>
@@ -271,7 +262,7 @@ export const NoticeOfDelinquencyModal: React.FC<NoticeOfDelinquencyModalProps> =
               <p className="font-semibold text-slate-800">{activeProperty.propertyClass}</p>
             </div>
             <div>
-              <p className="text-[10px] text-slate-500 uppercase font-bold">Assessed Value</p>
+              <p className="text-[10px] text-slate-500 uppercase font-bold">Base Assessed Value</p>
               <p className="font-mono font-bold text-emerald-900">
                 ₱{activeProperty.assessedValue.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
               </p>
@@ -293,6 +284,7 @@ export const NoticeOfDelinquencyModal: React.FC<NoticeOfDelinquencyModalProps> =
               <thead>
                 <tr className="bg-slate-100 text-slate-800 font-bold border-b border-slate-300 text-[11px]">
                   <th className="py-2 px-3">Assessment Era / Roll Period</th>
+                  <th className="py-2 px-3 text-right">Assessed Value (AV)</th>
                   <th className="py-2 px-3 text-right">Unpaid Taxes (1% Fund Base)</th>
                   <th className="py-2 px-3 text-right">Penalties / Discounts</th>
                   <th className="py-2 px-3 text-right">Total Delinquency (Per Fund)</th>
@@ -314,15 +306,37 @@ export const NoticeOfDelinquencyModal: React.FC<NoticeOfDelinquencyModalProps> =
                         {r.status === 'Cleared' && (
                           <span className="ml-2 text-[10px] font-normal text-emerald-600 font-sans">(Cleared)</span>
                         )}
+                        {r.isMissingValuation && (
+                          <span className="ml-2 text-[10px] font-semibold text-amber-700 font-sans bg-amber-100 px-1 py-0.5 rounded">⚠️ RPTAR Req.</span>
+                        )}
                       </td>
                       <td className="py-1.5 px-3 text-right font-mono text-slate-700">
-                        {formatCurrency(unpaidTaxes)}
+                        {r.isMissingValuation ? (
+                          <span className="text-amber-700 italic font-sans text-[10px]">Pending RPTAR</span>
+                        ) : (
+                          formatCurrency(r.assessedValue ?? activeProperty.assessedValue)
+                        )}
                       </td>
                       <td className="py-1.5 px-3 text-right font-mono text-slate-700">
-                        {formatCurrency(penaltyOrDiscount)}
+                        {r.isMissingValuation ? (
+                          <span className="text-slate-400 italic text-[10px]">--</span>
+                        ) : (
+                          formatCurrency(unpaidTaxes)
+                        )}
+                      </td>
+                      <td className="py-1.5 px-3 text-right font-mono text-slate-700">
+                        {r.isMissingValuation ? (
+                          <span className="text-slate-400 italic text-[10px]">--</span>
+                        ) : (
+                          formatCurrency(penaltyOrDiscount)
+                        )}
                       </td>
                       <td className="py-1.5 px-3 text-right font-mono font-bold text-slate-900">
-                        {formatCurrency(totalDelinquency)}
+                        {r.isMissingValuation ? (
+                          <span className="text-slate-400 italic text-[10px]">--</span>
+                        ) : (
+                          formatCurrency(totalDelinquency)
+                        )}
                       </td>
                     </tr>
                   );
@@ -330,7 +344,7 @@ export const NoticeOfDelinquencyModal: React.FC<NoticeOfDelinquencyModalProps> =
               </tbody>
               <tfoot className="border-t-2 border-slate-800 bg-slate-100/80 font-bold text-slate-900">
                 <tr>
-                  <td colSpan={3} className="py-2 px-3 text-right uppercase tracking-wider text-[11px]">
+                  <td colSpan={4} className="py-2 px-3 text-right uppercase tracking-wider text-[11px]">
                     Basic Real Property Tax (1% General Fund):
                   </td>
                   <td className="py-2 px-3 text-right font-mono text-sm font-bold text-slate-900">
@@ -338,7 +352,7 @@ export const NoticeOfDelinquencyModal: React.FC<NoticeOfDelinquencyModalProps> =
                   </td>
                 </tr>
                 <tr>
-                  <td colSpan={3} className="py-1.5 px-3 text-right uppercase tracking-wider text-[11px]">
+                  <td colSpan={4} className="py-1.5 px-3 text-right uppercase tracking-wider text-[11px]">
                     Special Education Fund (1% Local School Board):
                   </td>
                   <td className="py-1.5 px-3 text-right font-mono text-sm font-bold text-slate-900">
@@ -346,7 +360,7 @@ export const NoticeOfDelinquencyModal: React.FC<NoticeOfDelinquencyModalProps> =
                   </td>
                 </tr>
                 <tr className="bg-emerald-100/70 text-emerald-950 text-sm border-t border-emerald-300">
-                  <td colSpan={3} className="py-2.5 px-3 text-right uppercase tracking-wider font-extrabold">
+                  <td colSpan={4} className="py-2.5 px-3 text-right uppercase tracking-wider font-extrabold">
                     Grand Total Tax Delinquency Payable:
                   </td>
                   <td className="py-2.5 px-3 text-right font-mono font-extrabold text-base text-emerald-950">
