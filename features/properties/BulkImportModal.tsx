@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Property, User, CsvImportRowState, CsvImportBatch } from '@/types';
 import { BARANGAYS, PROPERTY_CLASSES } from '@/constants';
 import { api } from '@/services/api';
+import { mergeEncoderLabel } from '@/utils/encoderAttribution';
 import {
   Dialog,
   DialogContent,
@@ -66,6 +67,8 @@ interface ParsedRow {
   existingProperty?: Property;
   diffs: RowDiff[];
   error?: string;
+  encoderLabel: string;
+  entryType: 'MANUAL' | 'CSV_IMPORT';
 }
 
 /**
@@ -405,6 +408,11 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
 
       const isShell = r.assessedValue === 0;
 
+      const resolvedEncoderLabel = existingProperty
+        ? mergeEncoderLabel(existingProperty.encoderLabel, currentUser.name, false)
+        : mergeEncoderLabel('', currentUser.name, false);
+      const resolvedEntryType = existingProperty?.entryType || 'CSV_IMPORT';
+
       rows.push({
         line: r.line,
         tdNumber: r.tdNumber,
@@ -423,6 +431,8 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
         existingProperty,
         diffs,
         error: error || undefined,
+        encoderLabel: resolvedEncoderLabel,
+        entryType: resolvedEntryType,
       });
     }
 
@@ -466,10 +476,10 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
 
   const handleExportMasterlist = () => {
     const header =
-      'TD_Number,Previous_TD,PIN,Owner_Name,Address,Barangay,Property_Class,Lot_Area_Sqm,Market_Value,Assessed_Value,Last_Paid_Year,Status,Outstanding_Debt\n';
+      'TD_Number,Previous_TD,PIN,Owner_Name,Address,Barangay,Property_Class,Lot_Area_Sqm,Market_Value,Assessed_Value,Last_Paid_Year,Status,Outstanding_Debt,Encoded_By,Entry_Type\n';
     const rows = properties
       .map((p) => {
-        return `"${p.tdNumber}","${p.previousTdNumber || ''}","${p.pin || ''}","${p.ownerName}","${p.address}","${p.barangay}","${p.propertyClass}",${p.lotAreaSqm || 100},${p.marketValue || 0},${p.assessedValue},${p.lastPaidYear},"${p.status || 'CLEARED'}",${p.totalDebt || 0}`;
+        return `"${p.tdNumber}","${p.previousTdNumber || ''}","${p.pin || ''}","${p.ownerName}","${p.address}","${p.barangay}","${p.propertyClass}",${p.lotAreaSqm || 100},${p.marketValue || 0},${p.assessedValue},${p.lastPaidYear},"${p.status || 'CLEARED'}",${p.totalDebt || 0},"${p.encoderLabel || ''}","${p.entryType || 'CSV_IMPORT'}"`;
       })
       .join('\n');
 
@@ -504,6 +514,8 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
         assessedValue: r.assessedValue,
         lastPaidYear: r.lastPaidYear,
         isShellRecord: r.isShell,
+        encoderLabel: r.encoderLabel,
+        entryType: r.entryType,
       }));
 
       const detectedBarangay =
@@ -844,6 +856,7 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
                           <TableHead className="text-right">Assessed Val</TableHead>
                           <TableHead>Reconciliation State</TableHead>
                           <TableHead>Assessment Diffs</TableHead>
+                          <TableHead>Attribution</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -927,6 +940,31 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
                                   ⚠️ Pending Physical RPTAR Valuation
                                 </span>
                               ) : (
+                                <span className="text-slate-400 text-[10px]">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-[10px]">
+                              {row.state === 'VALID_NEW' && (
+                                <span className="inline-flex items-center gap-1 font-semibold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                  {row.encoderLabel}
+                                </span>
+                              )}
+                              {row.state === 'VALID_UPDATE' && (
+                                <div className="space-y-0.5">
+                                  <div className="text-slate-400 text-[9px]">
+                                    Prev: {row.existingProperty?.encoderLabel || 'Unspecified'}
+                                  </div>
+                                  <div className="text-blue-800 font-semibold">
+                                    {row.encoderLabel}
+                                  </div>
+                                </div>
+                              )}
+                              {row.state === 'UNCHANGED' && (
+                                <span className="text-slate-500 text-[10px]">
+                                  {row.encoderLabel || row.existingProperty?.encoderLabel || 'Existing'}
+                                </span>
+                              )}
+                              {!['VALID_NEW', 'VALID_UPDATE', 'UNCHANGED'].includes(row.state) && (
                                 <span className="text-slate-400 text-[10px]">—</span>
                               )}
                             </TableCell>
