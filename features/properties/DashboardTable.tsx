@@ -430,7 +430,7 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
                         </p>
                       )}
                     </TableCell>
-                    <TableCell className="font-semibold text-slate-800 uppercase py-3.5">
+                    <TableCell className="font-semibold text-slate-800 py-3.5">
                       {property.ownerName}
                     </TableCell>
                     <TableCell className="text-slate-600 py-3.5">

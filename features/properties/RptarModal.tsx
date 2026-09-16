@@ -252,51 +252,44 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
           </div>
         </DialogHeader>
 
-        {/* Status Banner */}
-        <div
-          className={`px-6 py-2.5 flex items-center justify-between border-b ${
-            isExisting
-              ? isShell
+        {/* Status Banner - only displayed for existing/shell records */}
+        {isExisting && (
+          <div
+            className={`px-6 py-2.5 flex items-center justify-between border-b ${
+              isShell
                 ? 'bg-amber-50 text-amber-900 border-amber-200'
                 : 'bg-blue-50 text-blue-900 border-blue-200'
-              : 'bg-emerald-50 text-emerald-900 border-emerald-200'
-          }`}
-        >
-          <div className="flex items-center gap-2 text-xs font-semibold">
-            <Info size={14} className={isShell ? 'text-amber-600' : isExisting ? 'text-blue-600' : 'text-emerald-600'} />
-            <span>
-              {isExisting
-                ? isShell
+            }`}
+          >
+            <div className="flex items-center gap-2 text-xs font-semibold">
+              <Info size={14} className={isShell ? 'text-amber-600' : 'text-blue-600'} />
+              <span>
+                {isShell
                   ? 'Provisional Shell Record — Set Full Appraised Valuation'
-                  : 'Existing Masterlist Record'
-                : 'Manual Singular Encoding — Positioned #1 in Masterlist'}
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            {formData.encoderLabel && (
-              <span className="text-[10px] text-slate-500 font-sans">
-                By: <strong className="text-slate-700">{formData.encoderLabel}</strong>
+                  : 'Existing Masterlist Record'}
               </span>
-            )}
-            <Badge variant={isShell ? 'warning' : isExisting ? 'secondary' : 'success'} className="text-[10px]">
-              {isShell ? 'SHELL RECORD' : isExisting ? 'VERIFIED' : 'MANUAL #1'}
-            </Badge>
+            </div>
+            <div className="flex items-center gap-1.5">
+              {formData.encoderLabel && (
+                <span className="text-[10px] text-slate-500 font-sans">
+                  By: <strong className="text-slate-700">{formData.encoderLabel}</strong>
+                </span>
+              )}
+              <Badge variant={isShell ? 'warning' : 'secondary'} className="text-[10px]">
+                {isShell ? 'SHELL RECORD' : 'VERIFIED'}
+              </Badge>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto space-y-4 text-xs flex-1">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* TD Number */}
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block font-bold text-slate-700 uppercase">
-                  TD-00000-00000 *
-                </label>
-                <span className="text-[10px] font-mono text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 font-semibold">
-                  Brgy: {getBarangayCode(formData.barangay)}
-                </span>
-              </div>
+              <label className="block font-bold text-slate-700 mb-1">
+                Tax-Declaration (TD) No. *
+              </label>
               <Input
                 type="text"
                 className="bg-slate-50 font-mono font-semibold"
@@ -312,7 +305,7 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
 
             {/* Cadastral PIN */}
             <div>
-              <label className="block font-bold text-slate-700 uppercase mb-1">
+              <label className="block font-bold text-slate-700 mb-1">
                 Cadastral PIN Number
               </label>
               <Input
@@ -326,22 +319,22 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
 
             {/* Owner Name */}
             <div className="md:col-span-2">
-              <label className="block font-bold text-slate-700 uppercase mb-1">
+              <label className="block font-bold text-slate-700 mb-1">
                 Declared Property Owner *
               </label>
               <Input
                 type="text"
-                className="font-semibold uppercase"
+                className="font-semibold"
                 value={formData.ownerName || ''}
                 onChange={(e) => setFormData({ ...formData, ownerName: e.target.value })}
-                placeholder="JUAN DELA CRUZ"
+                placeholder="Juan Dela Cruz"
                 required
               />
             </div>
 
             {/* Address */}
             <div className="md:col-span-2">
-              <label className="block font-bold text-slate-700 uppercase mb-1">
+              <label className="block font-bold text-slate-700 mb-1">
                 Property Location / Street Address *
               </label>
               <Input
@@ -355,7 +348,7 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
 
             {/* Barangay */}
             <div>
-              <label className="block font-bold text-slate-700 uppercase mb-1">Barangay</label>
+              <label className="block font-bold text-slate-700 mb-1">Barangay</label>
               <select
                 className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring font-medium"
                 value={formData.barangay}
@@ -371,7 +364,7 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
 
             {/* Property Class */}
             <div>
-              <label className="block font-bold text-slate-700 uppercase mb-1">
+              <label className="block font-bold text-slate-700 mb-1">
                 Classification *
               </label>
               <select
@@ -389,7 +382,7 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
 
             {/* Lot Area */}
             <div>
-              <label className="block font-bold text-slate-700 uppercase mb-1">
+              <label className="block font-bold text-slate-700 mb-1">
                 Lot Area (sq. meters)
               </label>
               <Input
@@ -408,7 +401,7 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
 
             {/* Previous TD */}
             <div>
-              <label className="block font-bold text-slate-700 uppercase mb-1">
+              <label className="block font-bold text-slate-700 mb-1">
                 Previous ARP/TD Reference
               </label>
               <Input
@@ -423,7 +416,7 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
             {/* Primary Tax Base: Taxable Assessed Value */}
             <div className="md:col-span-2 p-4 bg-emerald-50/70 rounded-xl border border-emerald-200">
               <div className="flex items-center justify-between mb-1">
-                <label className="block font-bold text-emerald-950 uppercase text-xs tracking-wider">
+                <label className="block font-bold text-emerald-950 text-xs tracking-wider">
                   Taxable Assessed Value (₱) *
                 </label>
                 <Badge variant="outline" className="bg-white border-emerald-300 text-emerald-800 text-[10px] font-bold">
@@ -452,7 +445,7 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
             <div className="md:col-span-2 p-4 bg-slate-50/90 rounded-xl border border-slate-200/90 space-y-2.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <label className="font-bold text-slate-800 uppercase text-xs tracking-wider">
+                  <label className="font-bold text-slate-800 text-xs tracking-wider">
                     Market Valuation (BLGF & Audit Reference)
                   </label>
                   <Badge variant="outline" className="text-[10px] font-semibold text-slate-500 bg-white border-slate-300">
@@ -468,7 +461,7 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                  <label className="block text-[10px] font-bold text-slate-600 mb-1">
                     Fair Market Value (₱)
                   </label>
                   <Input
@@ -485,7 +478,7 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                  <label className="block text-[10px] font-bold text-slate-600 mb-1">
                     Statutory Ceiling Ratio
                   </label>
                   <div className="h-9 px-3 flex items-center bg-white border border-slate-200 rounded-md text-xs font-mono text-slate-600">
@@ -497,7 +490,7 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
 
             {/* Last Year Paid */}
             <div className="md:col-span-2">
-              <label className="block font-bold text-slate-700 uppercase mb-1">
+              <label className="block font-bold text-slate-700 mb-1">
                 Last Year Paid (for Historical Tracking)
               </label>
               <Input
