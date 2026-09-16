@@ -2,7 +2,12 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Property, User } from '@/types';
 import { BARANGAYS, CURRENT_YEAR } from '@/constants';
 import { calculateTaxLiability } from '@/utils/taxLogic';
-import { sortPropertiesWithManualFirst, isManualProperty } from '@/utils/encoderAttribution';
+import {
+  sortPropertiesWithManualFirst,
+  isManualProperty,
+  PropertySortField,
+  PropertySortDirection,
+} from '@/utils/encoderAttribution';
 import {
   Table,
   TableHeader,
@@ -33,6 +38,9 @@ import {
   ChevronRight,
   History,
   FileSpreadsheet,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
 } from 'lucide-react';
 
 interface DashboardTableProps {
@@ -81,8 +89,33 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedBarangay, setSelectedBarangay] = useState<string>('All');
   const [selectedStatus, setSelectedStatus] = useState<string>('All');
+  const [sortField, setSortField] = useState<PropertySortField>('ownerName');
+  const [sortDirection, setSortDirection] = useState<PropertySortDirection>('asc');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+
+  const handleSort = (field: PropertySortField) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+    setCurrentPage(1);
+  };
+
+  const renderSortIcon = (field: PropertySortField) => {
+    if (sortField !== field) {
+      return (
+        <ArrowUpDown className="h-3 w-3 text-slate-400 opacity-60 group-hover:opacity-100 transition-opacity" />
+      );
+    }
+    return sortDirection === 'asc' ? (
+      <ArrowUp className="h-3 w-3 text-emerald-700 font-bold" />
+    ) : (
+      <ArrowDown className="h-3 w-3 text-emerald-700 font-bold" />
+    );
+  };
 
   // 300ms search input debounce to prevent UI freezes on large parcel masterlists
   useEffect(() => {
@@ -113,8 +146,11 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
       return matchesSearch && matchesBarangay && matchesStatus;
     });
 
-    return sortPropertiesWithManualFirst(matched);
-  }, [properties, debouncedSearch, selectedBarangay, selectedStatus]);
+    return sortPropertiesWithManualFirst(matched, {
+      field: sortField,
+      direction: sortDirection,
+    });
+  }, [properties, debouncedSearch, selectedBarangay, selectedStatus, sortField, sortDirection]);
 
   // Pagination Math
   const totalPages = Math.ceil(filteredProperties.length / pageSize) || 1;
@@ -138,10 +174,26 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
       {/* Table Header / Filters */}
       <div className="p-5 border-b border-slate-200 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-slate-50">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-lg font-bold text-slate-800">RPTAR Property Masterlist</h2>
             <Badge variant="secondary" className="font-semibold text-xs text-emerald-800 bg-emerald-100/90 border border-emerald-200/70">
               {filteredProperties.length} of {properties.length} Accounts
+            </Badge>
+            <Badge
+              variant="outline"
+              className="text-xs font-normal text-slate-600 border-slate-300 hidden sm:inline-flex items-center gap-1 bg-white/70"
+            >
+              Sorted:{' '}
+              <span className="font-semibold text-slate-800">
+                {sortField === 'ownerName'
+                  ? "Owner's Name"
+                  : sortField === 'tdNumber'
+                  ? 'TD Number'
+                  : 'Barangay'}
+              </span>
+              <span className="text-emerald-700 font-semibold text-[10px]">
+                ({sortDirection === 'asc' ? 'A–Z' : 'Z–A'})
+              </span>
             </Badge>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
@@ -235,12 +287,39 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
       {/* Table Body */}
       <div className="overflow-x-auto overflow-y-visible flex-1">
         <Table>
-          <TableHeader className="bg-slate-100/75">
+          <TableHeader className="bg-slate-100/75 select-none">
             <TableRow>
               <TableHead className="w-16">Action</TableHead>
-              <TableHead>ARP / TD Number</TableHead>
-              <TableHead>Owner's Name</TableHead>
-              <TableHead>Barangay & Class</TableHead>
+              <TableHead
+                className="cursor-pointer group hover:text-slate-900 transition-colors"
+                onClick={() => handleSort('tdNumber')}
+                title="Click to sort by ARP / TD Number"
+              >
+                <div className="flex items-center gap-1.5 font-semibold">
+                  <span>ARP / TD Number</span>
+                  {renderSortIcon('tdNumber')}
+                </div>
+              </TableHead>
+              <TableHead
+                className="cursor-pointer group hover:text-slate-900 transition-colors"
+                onClick={() => handleSort('ownerName')}
+                title="Click to sort by Owner's Name (A–Z / Z–A)"
+              >
+                <div className="flex items-center gap-1.5 font-semibold">
+                  <span>Owner's Name</span>
+                  {renderSortIcon('ownerName')}
+                </div>
+              </TableHead>
+              <TableHead
+                className="cursor-pointer group hover:text-slate-900 transition-colors"
+                onClick={() => handleSort('barangay')}
+                title="Click to sort by Barangay (A–Z / Z–A)"
+              >
+                <div className="flex items-center gap-1.5 font-semibold">
+                  <span>Barangay & Class</span>
+                  {renderSortIcon('barangay')}
+                </div>
+              </TableHead>
               <TableHead className="text-right">Assessed Value</TableHead>
               <TableHead className="text-right">Payment Status</TableHead>
             </TableRow>

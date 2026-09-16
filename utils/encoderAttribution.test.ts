@@ -144,6 +144,71 @@ describe('Assessor Provenance Attribution & Manual Priority Engine', () => {
       const sorted = sortPropertiesWithManualFirst([pCsv, pManual]);
       expect(sorted[0].tdNumber).toBe('TD-MAN');
     });
+
+    it('defaults to sorting non-manual properties by Owner Name A-Z', () => {
+      const pManual = createProp('1', 'TD-MAN', 'MANUAL', 'Assessor (Manual)');
+      const pZach = { ...createProp('2', 'TD-002', 'CSV_IMPORT'), ownerName: 'Zachary Santos' };
+      const pAlice = { ...createProp('3', 'TD-003', 'CSV_IMPORT'), ownerName: 'Alice Cruz' };
+      const pBernardo = { ...createProp('4', 'TD-004', 'CSV_IMPORT'), ownerName: 'Bernardo Ramos' };
+
+      const sorted = sortPropertiesWithManualFirst([pZach, pManual, pBernardo, pAlice]);
+
+      // Manual is #1
+      expect(sorted[0].tdNumber).toBe('TD-MAN');
+      // Followed by Owner A-Z
+      expect(sorted[1].ownerName).toBe('Alice Cruz');
+      expect(sorted[2].ownerName).toBe('Bernardo Ramos');
+      expect(sorted[3].ownerName).toBe('Zachary Santos');
+    });
+
+    it('sorts non-manual properties by Owner Name Z-A when direction is desc', () => {
+      const pManual = createProp('1', 'TD-MAN', 'MANUAL', 'Assessor (Manual)');
+      const pZach = { ...createProp('2', 'TD-002', 'CSV_IMPORT'), ownerName: 'Zachary Santos' };
+      const pAlice = { ...createProp('3', 'TD-003', 'CSV_IMPORT'), ownerName: 'Alice Cruz' };
+
+      const sorted = sortPropertiesWithManualFirst([pAlice, pManual, pZach], {
+        field: 'ownerName',
+        direction: 'desc',
+      });
+
+      expect(sorted[0].tdNumber).toBe('TD-MAN');
+      expect(sorted[1].ownerName).toBe('Zachary Santos');
+      expect(sorted[2].ownerName).toBe('Alice Cruz');
+    });
+
+    it('sorts by TD Number naturally when field is tdNumber', () => {
+      const p1 = { ...createProp('1', '17-23001-0002', 'CSV_IMPORT'), ownerName: 'Owner B' };
+      const p2 = { ...createProp('2', '17-23001-0001', 'CSV_IMPORT'), ownerName: 'Owner Z' };
+      const p3 = { ...createProp('3', '17-23001-0010', 'CSV_IMPORT'), ownerName: 'Owner A' };
+
+      const sorted = sortPropertiesWithManualFirst([p1, p2, p3], {
+        field: 'tdNumber',
+        direction: 'asc',
+      });
+
+      expect(sorted.map((p) => p.tdNumber)).toEqual([
+        '17-23001-0001',
+        '17-23001-0002',
+        '17-23001-0010',
+      ]);
+    });
+
+    it('sorts by Barangay with secondary tie-breaker on Owner Name', () => {
+      const p1 = { ...createProp('1', 'TD-1', 'CSV_IMPORT'), barangay: 'Rizal', ownerName: 'Carla' };
+      const p2 = { ...createProp('2', 'TD-2', 'CSV_IMPORT'), barangay: 'Aguinaldo', ownerName: 'Zack' };
+      const p3 = { ...createProp('3', 'TD-3', 'CSV_IMPORT'), barangay: 'Aguinaldo', ownerName: 'Ana' };
+
+      const sorted = sortPropertiesWithManualFirst([p1, p2, p3], {
+        field: 'barangay',
+        direction: 'asc',
+      });
+
+      expect(sorted[0].barangay).toBe('Aguinaldo');
+      expect(sorted[0].ownerName).toBe('Ana');
+      expect(sorted[1].barangay).toBe('Aguinaldo');
+      expect(sorted[1].ownerName).toBe('Zack');
+      expect(sorted[2].barangay).toBe('Rizal');
+    });
   });
 
   describe('parseEncoderChain', () => {

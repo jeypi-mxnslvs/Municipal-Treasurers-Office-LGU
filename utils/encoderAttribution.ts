@@ -90,13 +90,60 @@ export const mergeEncoderLabel = (
   return nonManualTokens.join(', ');
 };
 
+export type PropertySortField = 'ownerName' | 'tdNumber' | 'barangay';
+export type PropertySortDirection = 'asc' | 'desc';
+
+export interface PropertySortOptions {
+  field?: PropertySortField;
+  direction?: PropertySortDirection;
+}
+
+/**
+ * Compares two properties by a specific field with natural sorting.
+ */
+export const comparePropertiesByField = (
+  a: Property,
+  b: Property,
+  field: PropertySortField = 'ownerName',
+  direction: PropertySortDirection = 'asc'
+): number => {
+  let result = 0;
+  if (field === 'ownerName') {
+    result = (a.ownerName || '').localeCompare(b.ownerName || '', undefined, {
+      sensitivity: 'base',
+    });
+  } else if (field === 'tdNumber') {
+    result = (a.tdNumber || '').localeCompare(b.tdNumber || '', undefined, {
+      numeric: true,
+      sensitivity: 'base',
+    });
+  } else if (field === 'barangay') {
+    result = (a.barangay || '').localeCompare(b.barangay || '', undefined, {
+      sensitivity: 'base',
+    });
+    // Secondary tie-breaker by owner name
+    if (result === 0) {
+      result = (a.ownerName || '').localeCompare(b.ownerName || '', undefined, {
+        sensitivity: 'base',
+      });
+    }
+  }
+  return direction === 'asc' ? result : -result;
+};
+
 /**
  * Sorts properties prioritizing manually encoded properties to the 1st (#1) position.
  *
  * Within manual properties: sorts newest-first (by updatedAt, createdAt, or id).
- * Non-manual properties follow, preserving their order.
+ * Non-manual properties follow, sorted by the specified field (default: ownerName A-Z).
  */
-export const sortPropertiesWithManualFirst = (properties: Property[]): Property[] => {
+export const sortPropertiesWithManualFirst = (
+  properties: Property[],
+  options?: PropertySortOptions
+): Property[] => {
+  const field = options?.field || 'ownerName';
+  const direction = options?.direction || 'asc';
+
   return [...properties].sort((a, b) => {
     const aManual = isManualProperty(a);
     const bManual = isManualProperty(b);
@@ -118,8 +165,8 @@ export const sortPropertiesWithManualFirst = (properties: Property[]): Property[
       return String(b.id).localeCompare(String(a.id));
     }
 
-    // 3. For bulk CSV records: preserve stable order
-    return 0;
+    // 3. For bulk/CSV records: sort by specified field and direction (default: ownerName A-Z)
+    return comparePropertiesByField(a, b, field, direction);
   });
 };
 
