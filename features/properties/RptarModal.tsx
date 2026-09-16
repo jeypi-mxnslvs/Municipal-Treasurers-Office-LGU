@@ -80,7 +80,7 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
     barangay: BARANGAYS[0],
     address: '',
     propertyClass: 'Residential',
-    lotAreaSqm: 100,
+    lotAreaSqm: 0,
     marketValue: 0,
     assessedValue: 0,
     lastPaidYear: 2025,
@@ -94,7 +94,7 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
   // String state for numerical inputs to allow seamless backspacing without persistent '0'
   const [assessedValueStr, setAssessedValueStr] = useState<string>('0');
   const [marketValueStr, setMarketValueStr] = useState<string>('0');
-  const [lotAreaStr, setLotAreaStr] = useState<string>('100');
+  const [lotAreaStr, setLotAreaStr] = useState<string>('0');
   const [lastPaidYearStr, setLastPaidYearStr] = useState<string>('2025');
 
   const getAssessmentLevel = (propertyClass?: string) => {
@@ -109,20 +109,19 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
       setIsCustomMarketValue(Boolean(initialData.marketValue && initialData.marketValue > 0));
       setAssessedValueStr(initialData.assessedValue !== undefined ? String(initialData.assessedValue) : '0');
       setMarketValueStr(initialData.marketValue !== undefined ? String(initialData.marketValue) : '0');
-      setLotAreaStr(initialData.lotAreaSqm !== undefined ? String(initialData.lotAreaSqm) : '100');
+      setLotAreaStr(initialData.lotAreaSqm !== undefined ? String(initialData.lotAreaSqm) : '0');
       setLastPaidYearStr(initialData.lastPaidYear !== undefined ? String(initialData.lastPaidYear) : '2025');
     } else {
       const defaultBrgy = BARANGAYS[0];
-      const defaultCode = getBarangayCode(defaultBrgy);
       setFormData({
-        tdNumber: `17-${defaultCode}-`,
+        tdNumber: '',
         previousTdNumber: '',
         pin: '',
         ownerName: '',
         barangay: defaultBrgy,
         address: '',
         propertyClass: 'Residential',
-        lotAreaSqm: 100,
+        lotAreaSqm: 0,
         marketValue: 0,
         assessedValue: 0,
         lastPaidYear: 2025,
@@ -133,12 +132,12 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
       setIsCustomMarketValue(false);
       setAssessedValueStr('0');
       setMarketValueStr('0');
-      setLotAreaStr('100');
+      setLotAreaStr('0');
       setLastPaidYearStr('2025');
     }
   }, [initialData, isOpen]);
 
-  // When barangay changes, update barangay code in TD number if following the standard pattern
+  // When barangay changes, only update barangay code in TD number if an existing 17-23xxx pattern was already entered
   const handleBarangayChange = (newBrgy: string) => {
     const newCode = getBarangayCode(newBrgy);
     setFormData((prev) => {
@@ -146,8 +145,6 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
       const tdPattern = /^((?:17|TD|td)-)23\d{3}(.*)$/;
       if (tdPattern.test(updatedTd)) {
         updatedTd = updatedTd.replace(tdPattern, `$1${newCode}$2`);
-      } else if (!updatedTd || updatedTd.trim() === '') {
-        updatedTd = `17-${newCode}-`;
       }
       return {
         ...prev,
@@ -294,7 +291,7 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="block font-bold text-slate-700 uppercase">
-                  Tax Declaration (TD) No. *
+                  TD-00000-00000 *
                 </label>
                 <span className="text-[10px] font-mono text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 font-semibold">
                   Brgy: {getBarangayCode(formData.barangay)}
@@ -305,11 +302,11 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
                 className="bg-slate-50 font-mono font-semibold"
                 value={formData.tdNumber || ''}
                 onChange={(e) => setFormData({ ...formData, tdNumber: e.target.value })}
-                placeholder={`17-${getBarangayCode(formData.barangay)}-20329`}
+                placeholder="17-12345-67890"
                 required
               />
               <p className="text-[10px] text-slate-500 mt-1">
-                Format: <span className="font-mono font-bold text-slate-700">17-{getBarangayCode(formData.barangay)}-[Property]</span> (e.g. 17-{getBarangayCode(formData.barangay)}-20329)
+                Format: <span className="font-mono font-bold text-slate-700">17-12345-67890</span> (e.g. 17-{getBarangayCode(formData.barangay)}-20329)
               </p>
             </div>
 
