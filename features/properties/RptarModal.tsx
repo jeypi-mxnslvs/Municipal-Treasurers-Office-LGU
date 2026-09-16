@@ -295,11 +295,11 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
                 className="bg-slate-50 font-mono font-semibold"
                 value={formData.tdNumber || ''}
                 onChange={(e) => setFormData({ ...formData, tdNumber: e.target.value })}
-                placeholder="17-12345-67890"
+                placeholder={`TD-${getBarangayCode(formData.barangay)}-00000`}
                 required
               />
               <p className="text-[10px] text-slate-500 mt-1">
-                Format: <span className="font-mono font-bold text-slate-700">17-12345-67890</span> (e.g. 17-{getBarangayCode(formData.barangay)}-20329)
+                Format: <span className="font-mono font-bold text-slate-700">17-{getBarangayCode(formData.barangay)}-00000</span>
               </p>
             </div>
 
