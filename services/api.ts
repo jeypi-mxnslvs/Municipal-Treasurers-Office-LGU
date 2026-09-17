@@ -29,6 +29,7 @@ export { offlineStorage, offlineSyncService };
  * Controlled seamlessly via VITE_BACKEND_DRIVER environment variable.
  */
 const backendDriver = import.meta.env.VITE_BACKEND_DRIVER || 'supabase';
+export const isSupabaseBackend = backendDriver === 'supabase';
 const localBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
 
 const baseDriver: ITreasuryRepository =

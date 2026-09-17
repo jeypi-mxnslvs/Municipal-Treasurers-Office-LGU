@@ -58,7 +58,7 @@ const WORKSTATION_ACCOUNTS: Record<string, WorkstationAccount> = {
 };
 
 const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, sessionWarning }) => {
-  const [username, setUsername] = useState('');
+  const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -85,7 +85,6 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, sessionWarning })
       // Authenticate strictly via API / database authentication engine
       const selectedStation = matchedAccount?.stationId || 'Workstation';
       const res = await api.login(cleanUsername, cleanPassword, selectedStation);
-      localStorage.setItem('lgu_token', res.token);
       localStorage.setItem('lgu_user', JSON.stringify(res.user));
       onLoginSuccess(res.user);
     } catch (err) {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Property, TaxYearRecord, User, OfficialReceipt, DashboardStatsData, TaxSummary } from './types';
-import { api } from './services/api';
+import { api, isSupabaseBackend } from './services/api';
 import Header from './components/Header';
 import { BreakdownAlertModal } from '@/components/common/BreakdownAlertModal';
 import type { AlertSeverity } from '@/components/common/BreakdownAlertModal';
@@ -13,16 +13,14 @@ import { OfficialReceiptModal, BookletManagerModal } from '@/features/collection
 import { AuditLogModal } from '@/features/audit';
 import { NoticeOfDelinquencyModal, BlgfForm3Modal } from '@/features/reports';
 import { Printer, ArrowLeft, CheckCircle2, ShieldCheck, CheckCircle, RefreshCw, FileText, FileSpreadsheet } from 'lucide-react';
-import { verifySessionToken, DEFAULT_SESSION_TIMEOUT_MS } from './lib/crypto';
+import { DEFAULT_SESSION_TIMEOUT_MS } from './lib/crypto';
+import { supabase } from './services/supabase';
 import { mergeEncoderLabel } from './utils/encoderAttribution';
 import { downloadWordDoc, downloadNoticeOfDelinquencyXls } from '@/utils/documentExport';
 
 const App: React.FC = () => {
   // Authentication State
-  const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('lgu_user');
-    return saved ? JSON.parse(saved) : null;
-  });
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [sessionWarning, setSessionWarning] = useState<string | null>(null);
 
   const [view, setView] = useState<'dashboard' | 'posting'>('dashboard');
@@ -324,6 +322,7 @@ const App: React.FC = () => {
   };
 
   const handleLogout = useCallback((reason?: unknown) => {
+    if (isSupabaseBackend) void supabase.auth.signOut();
     localStorage.removeItem('lgu_user');
     localStorage.removeItem('lgu_token');
     localStorage.removeItem('lgu_active_td');
@@ -339,16 +338,28 @@ const App: React.FC = () => {
 
   // 1. Initial boot session verification
   useEffect(() => {
-    const token = localStorage.getItem('lgu_token');
-    if (token) {
-      verifySessionToken(token).then((payload) => {
-        if (!payload) {
-          handleLogout('Your session has expired. Please sign in again.');
-        }
-      });
-    } else if (currentUser) {
-      handleLogout('No active session token found. Please sign in again.');
-    }
+    let active = true;
+    if (!isSupabaseBackend) return () => { active = false; };
+
+    const restoreUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!active || !session?.user.email) return;
+      const profile = await api.lookupUser(session.user.email);
+      if (active && profile) setCurrentUser(profile);
+    };
+
+    void restoreUser();
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) {
+        if (currentUser) handleLogout('Your session has expired. Please sign in again.');
+        return;
+      }
+      void restoreUser();
+    });
+    return () => {
+      active = false;
+      listener.subscription.unsubscribe();
+    };
   }, [currentUser, handleLogout]);
 
   // 2. 15-Minute Inactivity Auto-Logout Timer (Terminal Protection)
