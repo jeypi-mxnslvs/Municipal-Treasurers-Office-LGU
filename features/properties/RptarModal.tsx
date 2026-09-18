@@ -148,7 +148,7 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
       ...prev,
       assessedValue: aVal,
       marketValue: isCustomMarketValue ? prev.marketValue : Math.round(aVal / level),
-      isShellRecord: aVal <= 0,
+      isShellRecord: aVal <= 0 || !formData.pin?.trim(),
     }));
     if (!isCustomMarketValue) {
       const autoMv = isNaN(num) || num <= 0 ? 0 : Math.round(num / level);
@@ -225,7 +225,7 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
       lastPaidYear: finalLastPaid,
       assessedValue: finalAssessed,
       marketValue: finalMarket,
-      isShellRecord: finalAssessed <= 0,
+      isShellRecord: finalAssessed <= 0 || !formData.pin?.trim(),
       entryType: 'MANUAL',
       encoderLabel: finalEncoderLabel,
     });

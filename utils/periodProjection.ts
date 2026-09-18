@@ -6,6 +6,7 @@ import {
   TaxYearRecord
 } from '../types';
 import { calculateTaxLiability, TaxCalculationOptions } from './taxLogic';
+import { getPropertyCompleteness } from './propertyCompleteness';
 
 export type EffectivePeriodState = DelinquencyPeriodStatus;
 
@@ -114,7 +115,7 @@ export function projectPropertyPeriods(
   options?: TaxCalculationOptions
 ): PropertyPeriodProjection {
   const propertyId = String(property.id);
-  const isShell = Boolean(property.isShellRecord || !property.pin?.trim() || property.assessedValue <= 0);
+  const isShell = getPropertyCompleteness(property).isShellRecord;
 
   // 1. Resolve append-only verification events. A row referenced by supersedesId
   // is historical and cannot remain the effective state for its period.

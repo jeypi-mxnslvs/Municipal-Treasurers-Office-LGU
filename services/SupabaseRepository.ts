@@ -19,6 +19,7 @@ import {
 import { calculateTaxLiability as localCalculateTaxLiability } from '@/utils/taxLogic';
 import { createSessionToken } from '@/lib/crypto';
 import { mergeEncoderLabel } from '@/utils/encoderAttribution';
+import { getPropertyCompleteness } from '@/utils/propertyCompleteness';
 
 const mapPropertyRow = (row: Record<string, unknown>): Property => ({
   id: String(row.id),
@@ -567,7 +568,14 @@ export class SupabaseRepository implements ITreasuryRepository {
       p_station_id: payload.stationId || 'Verification-Desk',
     });
 
-    if (error) throw error;
+    if (error) {
+      throw new Error([
+        error.message,
+        error.code ? `code=${error.code}` : '',
+        error.details ? `details=${error.details}` : '',
+        error.hint ? `hint=${error.hint}` : '',
+      ].filter(Boolean).join(' | '));
+    }
     if (!data || typeof data !== 'object') {
       throw new Error('Verification batch returned no authoritative result.');
     }
@@ -687,34 +695,47 @@ export class SupabaseRepository implements ITreasuryRepository {
     const list = props || [];
 
     const totalProperties = list.length;
-    const shellRecordsCount = list.filter(p => p.is_shell_record).length;
-    const clearedCount = list.filter(p => !p.is_shell_record && (p.last_paid_year || 0) >= 2026 && (p.last_paid_quarter === null || p.last_paid_quarter === undefined || p.last_paid_quarter >= 4)).length;
-    const delinquentCount = list.filter(p => !p.is_shell_record && ((p.last_paid_year || 0) < 2026 || (p.last_paid_year === 2026 && (p.last_paid_quarter || 4) < 4))).length;
+    const mappedProperties = list.map((p): Property => ({
+      id: String(p.id),
+      tdNumber: String(p.td_number || ''),
+      previousTdNumber: String(p.previous_td_number || ''),
+      pin: p.pin as string | undefined,
+      ownerName: String(p.owner_name || ''),
+      address: String(p.address || ''),
+      barangay: String(p.barangay || ''),
+      propertyClass: String(p.property_class || 'Residential'),
+      assessedValue: Number(p.assessed_value) || 0,
+      marketValue: Number(p.market_value) || 0,
+      lastPaidYear: Number(p.last_paid_year) || 0,
+      lastPaidQuarter: p.last_paid_quarter == null ? 4 : Number(p.last_paid_quarter),
+      isShellRecord: Boolean(p.is_shell_record),
+      delinquencyStartYear: p.delinquency_start_year == null ? undefined : Number(p.delinquency_start_year),
+      parcelOriginYear: p.parcel_origin_year == null ? null : Number(p.parcel_origin_year),
+      historicalAssessedValues: (p.historical_assessed_values as Property['historicalAssessedValues']) || {},
+    }));
+    const completeness = mappedProperties.map(property => getPropertyCompleteness(property));
+    const shellRecordsCount = completeness.filter(result => result.isShellRecord).length;
+    const clearedCount = mappedProperties.filter((property, index) =>
+      !completeness[index].isShellRecord &&
+      (property.lastPaidYear > 2026 || (property.lastPaidYear === 2026 && (property.lastPaidQuarter || 4) >= 4))
+    ).length;
+    const delinquentCount = mappedProperties.filter((property, index) =>
+      completeness[index].isShellRecord || property.lastPaidYear < 2026 ||
+      (property.lastPaidYear === 2026 && (property.lastPaidQuarter || 4) < 4)
+    ).length;
 
     let totalDelinquentDebt = 0;
     const barangayMap = new Map<string, { properties: number; outstandingDebt: number }>();
 
     for (const p of list) {
       const bgy = p.barangay || 'Unassigned';
-      const isDelinquent = !p.is_shell_record && ((p.last_paid_year || 0) < 2026 || (p.last_paid_year === 2026 && (p.last_paid_quarter || 4) < 4));
+      const propertyIndex = list.indexOf(p);
+      const mappedProperty = mappedProperties[propertyIndex];
+      const isShell = completeness[propertyIndex].isShellRecord;
+      const isDelinquent = !isShell && (mappedProperty.lastPaidYear < 2026 || (mappedProperty.lastPaidYear === 2026 && (mappedProperty.lastPaidQuarter || 4) < 4));
       let debt = 0;
 
-      if (!p.is_shell_record) {
-        const mappedProperty: Property = {
-          id: String(p.id),
-          tdNumber: p.td_number,
-          previousTdNumber: p.previous_td_number || '',
-          pin: p.pin,
-          ownerName: p.owner_name,
-          address: p.address || '',
-          barangay: p.barangay || '',
-          propertyClass: p.property_class || 'Residential',
-          assessedValue: Number(p.assessed_value) || 0,
-          marketValue: Number(p.market_value) || 0,
-          lastPaidYear: p.last_paid_year || 2020,
-          lastPaidQuarter: p.last_paid_quarter !== null && p.last_paid_quarter !== undefined ? Number(p.last_paid_quarter) : 4,
-          isShellRecord: p.is_shell_record || false
-        };
+      if (!isShell) {
         debt = localCalculateTaxLiability(mappedProperty).grandTotal;
       }
 

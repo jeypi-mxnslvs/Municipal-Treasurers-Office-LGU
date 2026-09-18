@@ -3,6 +3,7 @@ import { Property, User, CsvImportRowState, CsvImportBatch } from '@/types';
 import { BARANGAYS, PROPERTY_CLASSES, HISTORICAL_BASELINE_YEAR } from '@/constants';
 import { api } from '@/services/api';
 import { mergeEncoderLabel } from '@/utils/encoderAttribution';
+import { getPropertyCompleteness } from '@/utils/propertyCompleteness';
 import { BreakdownAlertModal } from '@/components/common/BreakdownAlertModal';
 import {
   Dialog,
@@ -132,6 +133,11 @@ const parseImportNumber = (raw: string | undefined, fallback: number): number =>
   if (!value) return fallback;
   if (!/^[-+]?\d+(?:\.\d+)?$/.test(value.replace(/,/g, ''))) return Number.NaN;
   return Number(value.replace(/,/g, ''));
+};
+
+const csvEscape = (value: unknown): string => {
+  const text = String(value ?? '');
+  return `"${text.replace(/"/g, '""')}"`;
 };
 
 /**
@@ -518,7 +524,11 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
         gapRange = `${effectiveOrigin}–${resolvedDelinquencyStartYear - 1}`;
       }
 
-      const isShell = r.assessedValue === 0;
+      const isShell = getPropertyCompleteness({
+        isShellRecord: false,
+        pin: r.pin,
+        assessedValue: r.assessedValue,
+      }).isShellRecord;
 
       const resolvedEncoderLabel = existingProperty
         ? mergeEncoderLabel(existingProperty.encoderLabel, currentUser.name, false)
@@ -595,7 +605,23 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
       'TD_Number,Previous_TD,PIN,Owner_Name,Address,Barangay,Property_Class,Lot_Area_Sqm,Market_Value,Assessed_Value,Last_Paid_Year,Status,Outstanding_Debt,Encoded_By,Entry_Type\n';
     const rows = properties
       .map((p) => {
-        return `"${p.tdNumber}","${p.previousTdNumber || ''}","${p.pin || ''}","${p.ownerName}","${p.address}","${p.barangay}","${p.propertyClass}",${p.lotAreaSqm || 100},${p.marketValue || 0},${p.assessedValue},${p.lastPaidYear},"${p.status || 'CLEARED'}",${p.totalDebt || 0},"${p.encoderLabel || ''}","${p.entryType || 'CSV_IMPORT'}"`;
+        return [
+          p.tdNumber,
+          p.previousTdNumber || '',
+          p.pin || '',
+          p.ownerName,
+          p.address,
+          p.barangay,
+          p.propertyClass,
+          p.lotAreaSqm || 100,
+          p.marketValue || 0,
+          p.assessedValue,
+          p.lastPaidYear,
+          p.status || 'CLEARED',
+          p.totalDebt || 0,
+          p.encoderLabel || '',
+          p.entryType || 'CSV_IMPORT',
+        ].map(csvEscape).join(',');
       })
       .join('\n');
 

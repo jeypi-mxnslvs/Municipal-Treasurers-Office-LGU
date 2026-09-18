@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Property, User } from '@/types';
 import { BARANGAYS, CURRENT_YEAR } from '@/constants';
 import { calculateTaxLiability } from '@/utils/taxLogic';
+import { getPropertyCompleteness } from '@/utils/propertyCompleteness';
 import {
   sortPropertiesWithManualFirst,
   isManualProperty,
@@ -57,7 +58,7 @@ interface DashboardTableProps {
 const DEFAULT_PAGE_SIZE = 25;
 
 const getPropertyStatus = (property: Property): 'CLEARED' | 'PARTIAL' | 'DELINQUENT' => {
-  if (property.status) return property.status;
+  if (getPropertyCompleteness(property).isShellRecord) return 'DELINQUENT';
   const lastPaid = Number(property.lastPaidYear) || 0;
   const lastQuarter = property.lastPaidQuarter !== undefined && property.lastPaidQuarter !== null
     ? Number(property.lastPaidQuarter)
@@ -133,6 +134,10 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
         !term ||
         p.ownerName.toLowerCase().includes(term) ||
         p.tdNumber.toLowerCase().includes(term) ||
+        p.address.toLowerCase().includes(term) ||
+        p.barangay.toLowerCase().includes(term) ||
+        p.propertyClass.toLowerCase().includes(term) ||
+        (p.previousTdNumber && p.previousTdNumber.toLowerCase().includes(term)) ||
         (p.pin && p.pin.toLowerCase().includes(term)) ||
         (p.encoderLabel && p.encoderLabel.toLowerCase().includes(term));
 
@@ -158,6 +163,10 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
   const paginatedProperties = useMemo(() => {
     return filteredProperties.slice(startIndex, startIndex + pageSize);
   }, [filteredProperties, startIndex, pageSize]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
 
   const handlePageChange = (page: number) => {
     if (page >= 1 && page <= totalPages) {
