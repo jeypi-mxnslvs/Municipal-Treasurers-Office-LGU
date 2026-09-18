@@ -88,7 +88,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
   const selectedRecords = React.useMemo(
     () => records
       .slice(0, selectedMaxIndex + 1)
-      .filter(r => !r.isUnverifiedHistorical && r.isPayable !== false && r.totalDue !== null),
+      .filter(r => !r.isUnverifiedHistorical && r.isPayable !== false && r.totalDue != null),
     [records, selectedMaxIndex]
   );
   const selectedSubtotal = React.useMemo(
@@ -182,14 +182,14 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
   };
 
   const handleSelectAll = () => {
-    const firstBlockedIndex = records.findIndex(r => r.isUnverifiedHistorical || r.isPayable === false || r.totalDue === null);
+    const firstBlockedIndex = records.findIndex(r => r.isUnverifiedHistorical || r.isPayable === false || r.totalDue == null);
     setSelectedMaxIndex(firstBlockedIndex === -1 ? records.length - 1 : firstBlockedIndex - 1);
   };
 
   const handleCheckboxClick = (index: number) => {
-    if (index < 0 || records[index]?.isUnverifiedHistorical || records[index]?.isPayable === false || records[index]?.totalDue === null) return;
+    if (index < 0 || records[index]?.isUnverifiedHistorical || records[index]?.isPayable === false || records[index]?.totalDue == null) return;
     const hasEarlierBlocker = records.slice(0, index).some(record =>
-      record.isUnverifiedHistorical || record.isPayable === false || record.totalDue === null
+      record.isUnverifiedHistorical || record.isPayable === false || record.totalDue == null
     );
     if (hasEarlierBlocker) return;
     setSelectedMaxIndex((current) => index === current ? index - 1 : index);
@@ -620,7 +620,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
             {displayedRecords.map((record, idx) => {
               const isCleared = record.status === 'Cleared';
               const isDelinquent = record.status === 'Delinquent';
-              const isUnassessed = Boolean(record.isMissingValuation || record.isUnverifiedHistorical || record.baseTax === null);
+              const isUnassessed = Boolean(record.isMissingValuation || record.isUnverifiedHistorical || record.baseTax == null || record.totalDue == null);
               const hasDiscount = Boolean(record.discountAmount && record.discountAmount > 0);
 
               const isBasicOverridden = !isCleared && record.systemBasicTax !== undefined && record.basicTax !== record.systemBasicTax;
@@ -791,7 +791,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
                       <div className="flex flex-col items-end">
                         <div className="flex items-center justify-end gap-1">
                           <span className={`text-xs sm:text-sm font-bold tabular-nums ${isBasicOverridden ? 'text-amber-800 underline decoration-dotted font-black' : isCleared ? 'text-slate-700' : 'text-slate-900'}`}>
-                            ₱{(record.basicTax ?? (record.baseTax / 2)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            ₱{(record.basicTax ?? ((record.baseTax ?? 0) / 2)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </span>
                           {canEdit && !isCleared && (
                             <button
@@ -805,7 +805,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
                           )}
                         </div>
                         <span className="text-[10px] text-slate-400 font-normal tabular-nums truncate max-w-full">
-                          {isCleared ? 'Settled' : (record.systemBasicTax !== null && record.systemBasicTax !== undefined) ? `Def: ₱${record.systemBasicTax.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'Def: Pending AV'}
+                          {isCleared ? 'Settled' : (record.systemBasicTax != null) ? `Def: ₱${record.systemBasicTax.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'Def: Pending AV'}
                         </span>
                       </div>
                     )}
@@ -833,7 +833,7 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
                           )}
                         </div>
                         <span className="text-[10px] text-slate-400 font-normal tabular-nums truncate max-w-full">
-                          {isCleared ? 'Settled' : (record.systemSefTax !== null && record.systemSefTax !== undefined) ? `Def: ₱${record.systemSefTax.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'Def: Pending AV'}
+                          {isCleared ? 'Settled' : (record.systemSefTax != null) ? `Def: ₱${record.systemSefTax.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'Def: Pending AV'}
                         </span>
                       </div>
                     )}
@@ -892,10 +892,10 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
                   <TableCell className={`text-right text-xs sm:text-sm tabular-nums py-2.5 pl-2 pr-6 font-normal ${
                     isCleared ? 'text-emerald-800' : isUnassessed ? 'text-amber-700' : 'text-slate-800'
                   }`}>
-                    {isUnassessed || record.totalDue === null ? (
+                    {isUnassessed || record.totalDue == null ? (
                       <span className="text-amber-700 font-mono text-xs font-semibold">Requires RPTAR</span>
                     ) : (
-                      `₱${record.totalDue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                      `₱${(record.totalDue ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
                     )}
                   </TableCell>
                 </TableRow>

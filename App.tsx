@@ -16,7 +16,7 @@ import { NoticeOfDelinquencyModal, TaxClearanceModal } from '@/features/reports'
 import { Printer, ArrowLeft, CheckCircle2, ShieldCheck, CheckCircle, RefreshCw, FileText } from 'lucide-react';
 import { verifySessionToken, DEFAULT_SESSION_TIMEOUT_MS } from './lib/crypto';
 import { mergeEncoderLabel } from './utils/encoderAttribution';
-import { projectPropertyPeriods } from './utils/periodProjection';
+import { projectPropertyPeriods, derivePeriodKeyFromRecord } from './utils/periodProjection';
 import type { PropertyPeriodProjection } from './utils/periodProjection';
 
 const App: React.FC = () => {
@@ -165,7 +165,7 @@ const App: React.FC = () => {
       });
       const projectedByKey = new Map(projection.periods.map(period => [period.periodKey, period]));
       const projectedRecords = result.records.map(record => {
-        const key = (record.periodKey || record.periodLabel || String(record.year)).toLowerCase().replace(/\s+/g, '-');
+        const key = derivePeriodKeyFromRecord(record);
         const projected = projectedByKey.get(key);
         return projected ? { ...record, verificationStatus: projected.status, sourceReference: projected.sourceReference, clearanceReference: projected.sourceReference, totalDue: projected.totalDue, isPayable: projected.isPayable } : record;
       });
@@ -213,24 +213,27 @@ const App: React.FC = () => {
     loadData();
   }, [loadData]);
 
-  // Restore Statement of Account on page reload / refresh if previously viewing a property
+  // Restore Statement of Account on page reload / refresh if explicitly viewing a property via URL query
   useEffect(() => {
     if (!currentUser || properties.length === 0 || initialRestoredRef.current) return;
 
     try {
       const searchParams = new URLSearchParams(window.location.search);
-      const savedTd = searchParams.get('td') || localStorage.getItem('lgu_active_td');
-      const savedView = searchParams.get('view') || localStorage.getItem('lgu_active_view');
+      const urlTd = searchParams.get('td');
+      const urlView = searchParams.get('view');
 
-      if (savedTd && (savedView === 'posting' || savedView === 'soa')) {
+      // Only restore property statement if the URL explicitly specifies a property
+      if (urlTd && (urlView === 'posting' || urlView === 'soa' || !urlView)) {
         const targetProperty = properties.find(
-          (p) => p.tdNumber === savedTd || String(p.id) === savedTd
+          (p) => p.tdNumber === urlTd || String(p.id) === urlTd
         );
         if (targetProperty) {
           initialRestoredRef.current = true;
           handlePostPaymentView(targetProperty);
+          return;
         }
       }
+      initialRestoredRef.current = true;
     } catch {
       // Non-blocking
     }
@@ -354,7 +357,7 @@ const App: React.FC = () => {
       });
       const updatedProjectedByKey = new Map(updatedProjection.periods.map(period => [period.periodKey, period]));
       const updatedProjectedRecords = updatedResult.records.map(record => {
-        const key = (record.periodKey || record.periodLabel || String(record.year)).toLowerCase().replace(/\s+/g, '-');
+        const key = derivePeriodKeyFromRecord(record);
         const projected = updatedProjectedByKey.get(key);
         return projected ? { ...record, verificationStatus: projected.status, sourceReference: projected.sourceReference, clearanceReference: projected.sourceReference, totalDue: projected.totalDue, isPayable: projected.isPayable } : record;
       });
