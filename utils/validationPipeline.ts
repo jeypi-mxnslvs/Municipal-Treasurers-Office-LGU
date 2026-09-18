@@ -13,6 +13,8 @@
  *  - Shell Record payment prohibition: SSOT.md §4.3
  */
 
+import type { Property } from '@/types';
+
 // ─── Canonical Santa Rosa Barangay Code Registry ─────────────────────────────
 export const SANTA_ROSA_BARANGAY_CODES: Record<string, string> = {
   'Rizal (Poblacion)': '23001',
@@ -156,16 +158,53 @@ export function validateOwnerName(name: string | undefined): ValidationResult {
 }
 
 /**
+ * Authoritative numeric parser under Phase 3.
+ * Stricter than parseFloat: rejects trailing characters like "100000abc", non-numeric tokens, or malformed strings.
+ */
+export function parseAuthoritativeNumeric(value: unknown): { value: number; isValid: boolean; error?: string } {
+  if (value === null || value === undefined || value === '') {
+    return { value: NaN, isValid: false, error: 'Value is required.' };
+  }
+  if (typeof value === 'number') {
+    if (isNaN(value) || !isFinite(value)) {
+      return { value: NaN, isValid: false, error: 'Value is not a finite number.' };
+    }
+    return { value, isValid: true };
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return { value: NaN, isValid: false, error: 'Value cannot be empty or whitespace.' };
+    }
+    // Clean currency symbols and thousands separators (commas)
+    const cleaned = trimmed.replace(/^[₱$]\s*/, '').replace(/,/g, '');
+    // Reject strings with trailing alphabetic or non-numeric tokens e.g. "100000abc"
+    const strictPattern = /^-?\d+(\.\d+)?$/;
+    if (!strictPattern.test(cleaned)) {
+      return { value: NaN, isValid: false, error: `Malformed numeric input: "${trimmed}". Must contain only digits and optional decimal point.` };
+    }
+    const parsed = Number(cleaned);
+    if (isNaN(parsed) || !isFinite(parsed)) {
+      return { value: NaN, isValid: false, error: 'Value is not a valid number.' };
+    }
+    return { value: parsed, isValid: true };
+  }
+  return { value: NaN, isValid: false, error: 'Unsupported value type.' };
+}
+
+/**
  * Validates Taxable Assessed Value.
  * Must be a finite, non-negative number.
  * A value of 0 is technically valid but triggers an advisory (shell record).
  */
 export function validateAssessedValue(value: number | string | undefined): ValidationResult {
-  const num = typeof value === 'string' ? parseFloat(value) : (value ?? NaN);
+  const parsed = parseAuthoritativeNumeric(value);
 
-  if (isNaN(num) || !isFinite(num)) {
-    return { isValid: false, error: 'Assessed value must be a valid number.' };
+  if (!parsed.isValid) {
+    return { isValid: false, error: parsed.error ? `Assessed value must be a valid number: ${parsed.error}` : 'Assessed value must be a valid number.' };
   }
+
+  const num = parsed.value;
 
   if (num < 0) {
     return { isValid: false, error: 'Assessed value cannot be negative.' };
@@ -183,17 +222,83 @@ export function validateAssessedValue(value: number | string | undefined): Valid
 }
 
 /**
+ * Validates Market Value (₱).
+ */
+export function validateMarketValue(value: number | string | undefined): ValidationResult {
+  const parsed = parseAuthoritativeNumeric(value);
+  if (!parsed.isValid) {
+    return { isValid: false, error: parsed.error ? `Market value must be a valid number: ${parsed.error}` : 'Market value must be a valid number.' };
+  }
+  if (parsed.value < 0) {
+    return { isValid: false, error: 'Market value cannot be negative.' };
+  }
+  return { isValid: true };
+}
+
+/**
+ * Validates Property Identification Number (PIN).
+ * Philippine standard cadastral format: 3-2-3-2-3 or 3-2-4-2-3 digits (e.g. 024-05-004-10-070).
+ */
+export function validatePin(pin: string | undefined): ValidationResult {
+  const raw = (pin ?? '').trim();
+  if (!raw) {
+    return {
+      isValid: false,
+      error: 'Cadastral PIN is required (e.g. 024-XX-XXX-XX-XXX).',
+      advisory: 'Parcels lacking a verified PIN are classified as unverified Shell Records.',
+    };
+  }
+
+  // Santa Rosa / Nueva Ecija format: XXX-XX-XXX-XX-XXX or XXX-XX-XXXX-XX-XXX
+  const pinPattern = /^\d{3}-\d{2}-\d{3,4}-\d{2}-\d{3,4}$/;
+  if (!pinPattern.test(raw)) {
+    return {
+      isValid: false,
+      error: `PIN "${raw}" must follow cadastral format: 024-XX-XXX-XX-XXX (e.g. 024-05-001-01-001).`,
+    };
+  }
+
+  return { isValid: true };
+}
+
+/**
+ * Canonical property classifications under RA 7160 Sec. 218.
+ */
+export const VALID_PROPERTY_CLASSES = [
+  'Residential',
+  'Commercial',
+  'Industrial',
+  'Agricultural',
+  'Special',
+  'Machinery',
+] as const;
+
+export function validatePropertyClass(propertyClass: string | undefined): ValidationResult {
+  const raw = (propertyClass ?? '').trim();
+  if (!raw) {
+    return { isValid: false, error: 'Property classification is required.' };
+  }
+  if (!VALID_PROPERTY_CLASSES.includes(raw as typeof VALID_PROPERTY_CLASSES[number])) {
+    return {
+      isValid: false,
+      error: `Invalid classification "${raw}". Must be one of: ${VALID_PROPERTY_CLASSES.join(', ')}.`,
+    };
+  }
+  return { isValid: true };
+}
+
+/**
  * Validates lot area in square metres.
  * Must be a non-negative finite number. Zero is allowed (unmetered land).
  */
 export function validateLotArea(area: number | string | undefined): ValidationResult {
-  const num = typeof area === 'string' ? parseFloat(area) : (area ?? NaN);
+  const parsed = parseAuthoritativeNumeric(area);
 
-  if (isNaN(num) || !isFinite(num)) {
-    return { isValid: false, error: 'Lot area must be a valid number.' };
+  if (!parsed.isValid) {
+    return { isValid: false, error: parsed.error || 'Lot area must be a valid number.' };
   }
 
-  if (num < 0) {
+  if (parsed.value < 0) {
     return { isValid: false, error: 'Lot area cannot be negative.' };
   }
 
@@ -237,15 +342,18 @@ export function validateLastPaidYear(year: number | string | undefined): Validat
 
 export interface PropertyFormInput {
   tdNumber?: string;
+  pin?: string;
   ownerName?: string;
   assessedValue?: number | string;
+  marketValue?: number | string;
   lotAreaSqm?: number | string;
   lastPaidYear?: number | string;
   barangay?: string;
+  propertyClass?: string;
 }
 
 /**
- * Validates all required fields on the Property Encoding form (RptarModal).
+ * Validates all required and provided fields on the Property Encoding form (RptarModal).
  * Returns an error dictionary keyed by field name.
  * An empty dictionary means the form is valid.
  */
@@ -257,6 +365,13 @@ export function validatePropertyForm(data: PropertyFormInput): FormErrors {
     errors.tdNumber = tdResult.error;
   }
 
+  if (data.pin && data.pin.trim()) {
+    const pinResult = validatePin(data.pin);
+    if (!pinResult.isValid && pinResult.error) {
+      errors.pin = pinResult.error;
+    }
+  }
+
   const ownerResult = validateOwnerName(data.ownerName);
   if (!ownerResult.isValid && ownerResult.error) {
     errors.ownerName = ownerResult.error;
@@ -265,6 +380,20 @@ export function validatePropertyForm(data: PropertyFormInput): FormErrors {
   const assessedResult = validateAssessedValue(data.assessedValue);
   if (!assessedResult.isValid && assessedResult.error) {
     errors.assessedValue = assessedResult.error;
+  }
+
+  if (data.marketValue !== undefined && data.marketValue !== '') {
+    const mvResult = validateMarketValue(data.marketValue);
+    if (!mvResult.isValid && mvResult.error) {
+      errors.marketValue = mvResult.error;
+    }
+  }
+
+  if (data.propertyClass) {
+    const classResult = validatePropertyClass(data.propertyClass);
+    if (!classResult.isValid && classResult.error) {
+      errors.propertyClass = classResult.error;
+    }
   }
 
   const lotResult = validateLotArea(data.lotAreaSqm);
@@ -399,3 +528,98 @@ export function validateUserDeletion(
 
   return { isValid: true };
 }
+
+// ─── Comprehensive Field Audit Diagnostics ────────────────────────────────────
+
+export interface FieldFailureDetail {
+  field: string;
+  currentValue?: string;
+  requirement: string;
+  ruleBasis?: string;
+}
+
+/**
+ * Audits a property against all statutory and municipal cadastral requirements
+ * before delinquency verification or statement certification can proceed.
+ * Returns an itemized list of failed fields and missing requirements.
+ */
+export function auditPropertyForVerification(property: Partial<Property> | null | undefined): {
+  canVerify: boolean;
+  failures: FieldFailureDetail[];
+} {
+  const failures: FieldFailureDetail[] = [];
+
+  if (!property) {
+    return {
+      canVerify: false,
+      failures: [{
+        field: 'Property Record',
+        currentValue: '[None]',
+        requirement: 'A valid property must be selected from the RPTAR masterlist.',
+        ruleBasis: 'Treasury Record Selection Rule',
+      }],
+    };
+  }
+
+  // 1. PIN Check
+  const pinResult = validatePin(property.pin);
+  if (!pinResult.isValid) {
+    failures.push({
+      field: 'Property Identification Number (PIN)',
+      currentValue: property.pin?.trim() ? property.pin : '[Missing / Empty]',
+      requirement: 'Must be an assigned, verified Cadastral PIN (format: 024-XX-XXX-XX-XXX).',
+      ruleBasis: 'Republic Act No. 7160 Sec. 219 & SSOT §2.8 (Shell Record Prohibition)',
+    });
+  }
+
+  // 2. Taxable Assessed Value Check
+  const avResult = validateAssessedValue(property.assessedValue);
+  if (!avResult.isValid || (property.assessedValue ?? 0) <= 0) {
+    failures.push({
+      field: 'Taxable Assessed Value (₱)',
+      currentValue: property.assessedValue !== undefined ? `₱${Number(property.assessedValue).toLocaleString()}` : '[Unassigned]',
+      requirement: 'Must have a positive taxable assessed valuation greater than ₱0.00.',
+      ruleBasis: 'Republic Act No. 7160 Sec. 218 & Santa Rosa Schedule of Market Values (SFMV)',
+    });
+  }
+
+  // 3. Explicit Shell Record Flag Check
+  if (property.isShellRecord) {
+    failures.push({
+      field: 'Parcel Verification Status (is_shell_record)',
+      currentValue: 'Active (Shell Record)',
+      requirement: 'Parcel must be formally surveyed and promoted from Shell Record to Active Masterlist by the Municipal Assessor.',
+      ruleBasis: 'AGENTS.md §4.3 & SSOT §2.8',
+    });
+  }
+
+  // 4. Tax Declaration (TD) Number Check
+  const tdResult = validateTdNumber(property.tdNumber, property.barangay);
+  if (!tdResult.isValid) {
+    failures.push({
+      field: 'Tax Declaration (TD) Number',
+      currentValue: property.tdNumber || '[Missing]',
+      requirement: tdResult.error || 'Must match standard TD format (17-XXXXX-XXXXX).',
+      ruleBasis: 'BLGF Provincial Assessor TD Numbering Standard',
+    });
+  }
+
+  // 5. Property Classification Check
+  if (property.propertyClass) {
+    const classResult = validatePropertyClass(property.propertyClass);
+    if (!classResult.isValid) {
+      failures.push({
+        field: 'Property Classification',
+        currentValue: property.propertyClass,
+        requirement: classResult.error || 'Must be a statutory classification (Residential, Commercial, Industrial, Agricultural, Special, Machinery).',
+        ruleBasis: 'Republic Act No. 7160 Sec. 218',
+      });
+    }
+  }
+
+  return {
+    canVerify: failures.length === 0,
+    failures,
+  };
+}
+

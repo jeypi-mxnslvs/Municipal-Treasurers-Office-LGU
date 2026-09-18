@@ -3,7 +3,7 @@ import { Property, TaxYearRecord, User, DashboardStatsData, TaxSummary } from '.
 import { api } from './services/api';
 import Header from './components/Header';
 import { BreakdownAlertModal } from '@/components/common/BreakdownAlertModal';
-import type { AlertSeverity } from '@/components/common/BreakdownAlertModal';
+import type { AlertSeverity, FieldFailureDetail } from '@/components/common/BreakdownAlertModal';
 import { useToast } from '@/components/common/Toast';
 import { LoginPage, UserManagementModal, PasswordConfirmationModal } from '@/features/auth';
 import { DashboardStats } from '@/features/dashboard';
@@ -13,11 +13,12 @@ import VerifyPeriodModal from '@/features/assessment/VerifyPeriodModal';
 import type { VerificationModalValue } from '@/features/assessment/VerifyPeriodModal';
 import { AuditLogModal } from '@/features/audit';
 import { NoticeOfDelinquencyModal, TaxClearanceModal } from '@/features/reports';
-import { Printer, ArrowLeft, CheckCircle2, ShieldCheck, CheckCircle, RefreshCw, FileText } from 'lucide-react';
+import { Printer, ArrowLeft, CheckCircle2, ShieldCheck, CheckCircle, RefreshCw, FileText, AlertTriangle } from 'lucide-react';
 import { verifySessionToken, DEFAULT_SESSION_TIMEOUT_MS } from './lib/crypto';
 import { mergeEncoderLabel } from './utils/encoderAttribution';
 import { projectPropertyPeriods, derivePeriodKeyFromRecord } from './utils/periodProjection';
 import type { PropertyPeriodProjection } from './utils/periodProjection';
+import { auditPropertyForVerification } from './utils/validationPipeline';
 
 const App: React.FC = () => {
   // Authentication State
@@ -65,6 +66,11 @@ const App: React.FC = () => {
     summary: string;
     guidance?: string;
     technicalDetail?: string;
+    fieldFailures?: FieldFailureDetail[];
+    actionButton?: {
+      label: string;
+      onClick: () => void;
+    };
   }>({
     isOpen: false,
     severity: 'error',
@@ -310,6 +316,28 @@ const App: React.FC = () => {
 
   const handleVerifySelectedDues = () => {
     if (!selectedProperty || selectedRecords.length === 0 || !currentUser) return;
+
+    const audit = auditPropertyForVerification(selectedProperty);
+    if (!audit.canVerify) {
+      setBreakdownAlert({
+        isOpen: true,
+        severity: 'policy',
+        title: 'Parcel Incomplete — Verification Blocked',
+        summary: `Property TD ${selectedProperty.tdNumber} has incomplete cadastral or assessment fields. Under Republic Act No. 7160 and municipal Treasury protocol, delinquency verifications and clearance certificates cannot be recorded on provisional shell records.`,
+        guidance: 'Review the missing or malformed fields listed below. Click "Update Parcel in Masterlist" to provide the required cadastral PIN or assessed valuation.',
+        technicalDetail: `Audit Rule: RA 7160 Sec. 219 / 254 (Shell Record Restriction) | Property ID: ${selectedProperty.id} | TD: ${selectedProperty.tdNumber}`,
+        fieldFailures: audit.failures,
+        actionButton: {
+          label: 'Update Parcel in Masterlist',
+          onClick: () => {
+            closeBreakdownAlert();
+            handleOpenEditModal(selectedProperty);
+          },
+        },
+      });
+      return;
+    }
+
     setIsVerifyPeriodModalOpen(true);
   };
 
@@ -392,13 +420,28 @@ const App: React.FC = () => {
       }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : 'Unknown error';
+      const audit = auditPropertyForVerification(selectedProperty);
+      const isShellError = errMsg.includes('Shell records cannot be verified') || !audit.canVerify;
+
       setBreakdownAlert({
         isOpen: true,
         severity: 'error',
-        title: 'Verification Failed',
-        summary: 'The sequential period verification could not be recorded.',
-        guidance: 'Verify database connectivity and permissions. Batch transaction was rejected; refresh before retrying.',
+        title: isShellError ? 'Verification Rejected: Incomplete Shell Record' : 'Verification Failed',
+        summary: isShellError
+          ? `This parcel (TD: ${selectedProperty.tdNumber}) cannot be verified because it lacks required cadastral data (verified PIN or non-zero assessed valuation) mandated by RA 7160.`
+          : 'The sequential period verification could not be recorded.',
+        guidance: isShellError
+          ? 'Update the parcel in the masterlist with a valid cadastral PIN and positive taxable valuation before recording verifications.'
+          : 'Verify database connectivity and permissions. Batch transaction was rejected; refresh before retrying.',
         technicalDetail: errMsg,
+        fieldFailures: audit.failures.length > 0 ? audit.failures : undefined,
+        actionButton: audit.failures.length > 0 ? {
+          label: 'Update Parcel in Masterlist',
+          onClick: () => {
+            closeBreakdownAlert();
+            handleOpenEditModal(selectedProperty);
+          },
+        } : undefined,
       });
     } finally {
       setIsProcessingClearance(false);
@@ -492,6 +535,8 @@ const App: React.FC = () => {
         summary={breakdownAlert.summary}
         guidance={breakdownAlert.guidance}
         technicalDetail={breakdownAlert.technicalDetail}
+        fieldFailures={breakdownAlert.fieldFailures}
+        actionButton={breakdownAlert.actionButton}
       />
 
       <main className="flex-grow container mx-auto px-4 py-6 max-w-7xl">
@@ -602,6 +647,39 @@ const App: React.FC = () => {
                           </button>
                         </div>
                       )}
+
+                      {/* Proactive Incomplete Parcel Warning Alert */}
+                      {(() => {
+                        const propertyAudit = selectedProperty ? auditPropertyForVerification(selectedProperty) : { canVerify: true, failures: [] };
+                        if (!propertyAudit.canVerify) {
+                          return (
+                            <div className="mt-3 p-3.5 bg-amber-50/90 border border-amber-300 rounded-xl text-amber-950 space-y-2">
+                              <div className="flex items-center gap-1.5 font-bold text-xs text-amber-900">
+                                <AlertTriangle size={15} className="text-amber-600 shrink-0" />
+                                <span>Incomplete Parcel Record ({propertyAudit.failures.length} {propertyAudit.failures.length === 1 ? 'requirement' : 'requirements'} incomplete)</span>
+                              </div>
+                              <p className="text-[11px] text-amber-800 leading-relaxed">
+                                Under RA 7160 Sec. 219 & 254, delinquency periods cannot be verified until all cadastral and valuation fields are satisfied.
+                              </p>
+                              <div className="space-y-1 pt-0.5">
+                                {propertyAudit.failures.map((f, i) => (
+                                  <div key={i} className="text-[11px] text-amber-900 bg-amber-100/80 px-2 py-1 rounded border border-amber-200">
+                                    <strong>{f.field}:</strong> {f.requirement}
+                                  </div>
+                                ))}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditModal(selectedProperty)}
+                                className="w-full mt-1.5 px-3 py-1.5 bg-amber-700 hover:bg-amber-800 text-white rounded-lg text-xs font-bold shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                              >
+                                Complete Parcel in Masterlist
+                              </button>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
                     </div>
 
                     {taxRecords.length > 0 && (

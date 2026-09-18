@@ -53,6 +53,9 @@ const mapPropertyRow = (row: Record<string, unknown>): Property => ({
  * All direct queries to Supabase tables and stored procedures are quarantined here.
  */
 export class SupabaseRepository implements ITreasuryRepository {
+  private mutationListeners = new Set<(mutation: { timestamp: string; author: string; action: string; tdNumber?: string }) => void>();
+  private mutationChannel: ReturnType<typeof supabase.channel> | null = null;
+
   // 1. Properties & Assessment
   async getProperties(search?: string, barangay?: string): Promise<Property[]> {
     let query = supabase.from('properties').select('*');
@@ -855,32 +858,60 @@ export class SupabaseRepository implements ITreasuryRepository {
   }
 
   subscribeToMutations(onMutation: (mutation: { timestamp: string; author: string; action: string; tdNumber?: string }) => void): () => void {
-    const channel = supabase
-      .channel('rptar_live_mutations')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'rptar_audit_logs' },
-        (payload) => {
-          const newLog = payload.new as {
-            created_at?: string;
-            assessor_name?: string;
-            action_type?: string;
-            td_number?: string;
-          };
-          if (newLog) {
-            onMutation({
-              timestamp: newLog.created_at || new Date().toISOString(),
-              author: newLog.assessor_name || 'Counter Staff',
-              action: newLog.action_type || 'MUTATION',
-              tdNumber: newLog.td_number || 'Masterlist'
-            });
-          }
-        }
-      )
-      .subscribe();
+    this.mutationListeners.add(onMutation);
+
+    if (!this.mutationChannel) {
+      try {
+        const channelName = `rptar_live_mutations_${Date.now()}`;
+        this.mutationChannel = supabase
+          .channel(channelName)
+          .on(
+            'postgres_changes',
+            { event: 'INSERT', schema: 'public', table: 'rptar_audit_logs' },
+            (payload) => {
+              const newLog = payload.new as {
+                created_at?: string;
+                assessor_name?: string;
+                action_type?: string;
+                td_number?: string;
+              };
+              if (newLog) {
+                const mutation = {
+                  timestamp: newLog.created_at || new Date().toISOString(),
+                  author: newLog.assessor_name || 'Counter Staff',
+                  action: newLog.action_type || 'MUTATION',
+                  tdNumber: newLog.td_number || 'Masterlist'
+                };
+                this.mutationListeners.forEach((listener) => {
+                  try {
+                    listener(mutation);
+                  } catch (err) {
+                    console.error('Error invoking mutation listener:', err);
+                  }
+                });
+              }
+            }
+          )
+          .subscribe((status, err) => {
+            if (err) {
+              console.warn(`Realtime subscription error on ${channelName}:`, err);
+            }
+          });
+      } catch (err) {
+        console.warn('Realtime subscription initialization failed, continuing with fallback:', err);
+      }
+    }
 
     return () => {
-      supabase.removeChannel(channel);
+      this.mutationListeners.delete(onMutation);
+      if (this.mutationListeners.size === 0 && this.mutationChannel) {
+        try {
+          void supabase.removeChannel(this.mutationChannel);
+        } catch {
+          // Non-blocking channel removal
+        }
+        this.mutationChannel = null;
+      }
     };
   }
 

@@ -158,6 +158,7 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
 
   // Optional handler: User can explicitly customize Market Value without overwriting Assessed Value
   const handleMarketValueChange = (valStr: string) => {
+    clearFieldError('marketValue');
     setIsCustomMarketValue(true);
     setMarketValueStr(valStr);
     const num = parseFloat(valStr);
@@ -168,6 +169,7 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
   };
 
   const handlePropertyClassChange = (newClass: string) => {
+    clearFieldError('propertyClass');
     const level = getAssessmentLevel(newClass);
     const aVal = parseFloat(assessedValueStr) || 0;
     setFormData((prev) => {
@@ -185,14 +187,17 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
   };
 
   const handleSave = () => {
-    // Execute validation pipeline constraints
+    // Execute validation pipeline constraints across all statutory fields
     const validationErrors = validatePropertyForm({
       tdNumber: formData.tdNumber,
+      pin: formData.pin,
       ownerName: formData.ownerName,
       assessedValue: assessedValueStr,
+      marketValue: marketValueStr,
       lotAreaSqm: lotAreaStr,
       lastPaidYear: lastPaidYearStr,
       barangay: formData.barangay,
+      propertyClass: formData.propertyClass,
     });
 
     if (Object.keys(validationErrors).length > 0) {
@@ -231,6 +236,8 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
     });
   };
 
+  const willBeShell = (parseFloat(assessedValueStr) || 0) <= 0 || !formData.pin?.trim();
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-2xl max-h-[92vh] p-0 flex flex-col overflow-hidden gap-0">
@@ -268,7 +275,7 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
               <Info size={14} className={isShell ? 'text-amber-600' : 'text-blue-600'} />
               <span>
                 {isShell
-                  ? 'Provisional Shell Record — Set Full Appraised Valuation'
+                  ? 'Provisional Shell Record — Set Full Appraised Valuation & Cadastral PIN'
                   : 'Existing Masterlist Record'}
               </span>
             </div>
@@ -288,9 +295,34 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto space-y-4 text-xs flex-1">
           {Object.keys(formErrors).length > 0 && (
-            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center gap-2">
-              <AlertCircle size={15} className="text-rose-600 shrink-0" />
-              <span>Please correct the highlighted fields before saving the record.</span>
+            <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-900 rounded-xl space-y-1.5">
+              <div className="flex items-center gap-2 font-bold text-xs text-rose-800">
+                <AlertCircle size={15} className="text-rose-600 shrink-0" />
+                <span>Form Validation Failed ({Object.keys(formErrors).length} {Object.keys(formErrors).length === 1 ? 'requirement' : 'requirements'} incomplete):</span>
+              </div>
+              <ul className="list-disc pl-5 space-y-0.5 text-[11px] text-rose-700">
+                {Object.entries(formErrors).map(([field, msg]) => (
+                  <li key={field}>
+                    <strong>{field}:</strong> {msg}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {willBeShell && Object.keys(formErrors).length === 0 && (
+            <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs flex items-start gap-2">
+              <Info size={15} className="text-amber-600 shrink-0 mt-0.5" />
+              <div className="space-y-0.5">
+                <p className="font-bold">Provisional Shell Record Notice</p>
+                <p className="text-[11px] text-amber-800 leading-relaxed">
+                  {(!formData.pin?.trim() && (parseFloat(assessedValueStr) || 0) <= 0)
+                    ? 'Both Cadastral PIN and Assessed Value are unassigned.'
+                    : !formData.pin?.trim()
+                    ? 'Cadastral PIN is unassigned.'
+                    : 'Taxable Assessed Value is ₱0.00.'} This parcel will be saved as an unverified shell record. Delinquency verification and Tax Clearance remain blocked under RA 7160 until fully populated.
+                </p>
+              </div>
             </div>
           )}
 
@@ -324,16 +356,33 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
 
             {/* Cadastral PIN */}
             <div>
-              <label className="block font-bold text-slate-700 mb-1">
-                Cadastral PIN Number
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block font-bold text-slate-700">
+                  Cadastral PIN Number
+                </label>
+                <span className="text-[10px] text-slate-500 font-medium">
+                  {formData.pin?.trim() ? 'Cadastral Format' : 'Required for Clearance'}
+                </span>
+              </div>
               <Input
                 type="text"
-                className="font-mono"
+                className={`font-mono ${
+                  formErrors.pin ? 'border-rose-500 focus-visible:ring-rose-500/20' : ''
+                }`}
                 value={formData.pin || ''}
-                onChange={(e) => setFormData({ ...formData, pin: e.target.value })}
+                onChange={(e) => {
+                  clearFieldError('pin');
+                  setFormData({ ...formData, pin: e.target.value });
+                }}
                 placeholder="024-05-001-01-001"
               />
+              {formErrors.pin ? (
+                <p className="text-[10px] text-rose-600 font-semibold mt-1">{formErrors.pin}</p>
+              ) : (
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Standard format: <span className="font-mono font-bold text-slate-700">024-XX-XXX-XX-XXX</span>. Required to clear delinquency.
+                </p>
+              )}
             </div>
 
             {/* Owner Name */}
@@ -395,7 +444,9 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
                 Classification *
               </label>
               <select
-                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring font-medium"
+                className={`flex h-9 w-full rounded-md border bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring font-medium ${
+                  formErrors.propertyClass ? 'border-rose-500 focus-visible:ring-rose-500/20' : 'border-input'
+                }`}
                 value={formData.propertyClass}
                 onChange={(e) => handlePropertyClassChange(e.target.value)}
               >
@@ -405,6 +456,9 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
                   </option>
                 ))}
               </select>
+              {formErrors.propertyClass && (
+                <p className="text-[10px] text-rose-600 font-semibold mt-1">{formErrors.propertyClass}</p>
+              )}
             </div>
 
             {/* Lot Area */}
@@ -510,7 +564,9 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
                     type="number"
                     min="0"
                     step="any"
-                    className="font-mono text-sm bg-white"
+                    className={`font-mono text-sm bg-white ${
+                      formErrors.marketValue ? 'border-rose-500 focus-visible:ring-rose-500/20' : ''
+                    }`}
                     value={marketValueStr}
                     onChange={(e) => handleMarketValueChange(e.target.value)}
                     onFocus={(e) => {
@@ -518,6 +574,9 @@ const RptarModal: React.FC<RptarModalProps> = ({ isOpen, onClose, onSave, initia
                     }}
                     placeholder="0"
                   />
+                  {formErrors.marketValue && (
+                    <p className="text-[10px] text-rose-600 font-semibold mt-1">{formErrors.marketValue}</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold text-slate-600 mb-1">

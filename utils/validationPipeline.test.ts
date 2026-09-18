@@ -20,6 +20,11 @@ import {
   validateVoidWorkflow,
   validatePassword,
   validateUserDeletion,
+  validatePin,
+  validateMarketValue,
+  validatePropertyClass,
+  auditPropertyForVerification,
+  parseAuthoritativeNumeric,
   MIN_STATUTORY_YEAR,
   MAX_STATUTORY_YEAR,
   SANTA_ROSA_BARANGAY_CODES,
@@ -450,3 +455,96 @@ describe('validateUserDeletion', () => {
     expect(r.isValid).toBe(true);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TC-VAL-06: parseAuthoritativeNumeric & PIN & Market Value & Property Class
+// ─────────────────────────────────────────────────────────────────────────────
+describe('parseAuthoritativeNumeric', () => {
+  it('TC-NUM-01: strictly rejects trailing characters and malformed inputs', () => {
+    expect(parseAuthoritativeNumeric('10000abc').isValid).toBe(false);
+    expect(parseAuthoritativeNumeric('abc10000').isValid).toBe(false);
+    expect(parseAuthoritativeNumeric('10,000.50').value).toBe(10000.5);
+    expect(parseAuthoritativeNumeric('₱ 250,000.00').value).toBe(250000);
+    expect(parseAuthoritativeNumeric('').isValid).toBe(false);
+    expect(parseAuthoritativeNumeric(null).isValid).toBe(false);
+  });
+});
+
+describe('validatePin', () => {
+  it('TC-PIN-01: accepts valid cadastral format', () => {
+    expect(validatePin('024-00-001-00-001').isValid).toBe(true);
+    expect(validatePin('024-23-012-03-0204').isValid).toBe(true);
+  });
+
+  it('TC-PIN-02: rejects empty or malformed cadastral PIN with informative message', () => {
+    const emptyRes = validatePin('');
+    expect(emptyRes.isValid).toBe(false);
+    expect(emptyRes.error).toMatch(/Cadastral PIN is required/i);
+
+    const malformedRes = validatePin('12345');
+    expect(malformedRes.isValid).toBe(false);
+    expect(malformedRes.error).toMatch(/024-XX-XXX-XX-XXX/);
+  });
+});
+
+describe('validateMarketValue & validatePropertyClass', () => {
+  it('TC-MV-01: validates market value', () => {
+    expect(validateMarketValue(150000).isValid).toBe(true);
+    expect(validateMarketValue(-50).isValid).toBe(false);
+    expect(validateMarketValue('invalid').isValid).toBe(false);
+  });
+
+  it('TC-CLS-01: validates standard property classification', () => {
+    expect(validatePropertyClass('Residential').isValid).toBe(true);
+    expect(validatePropertyClass('Commercial').isValid).toBe(true);
+    expect(validatePropertyClass('InvalidClass').isValid).toBe(false);
+  });
+});
+
+describe('auditPropertyForVerification', () => {
+  it('TC-AUD-01: allows verification for fully populated, non-shell parcel', () => {
+    const result = auditPropertyForVerification({
+      id: '1',
+      tdNumber: '17-23001-00123',
+      pin: '024-23-001-01-001',
+      ownerName: 'Juan Dela Cruz',
+      address: 'Rizal St.',
+      barangay: 'Rizal (Poblacion)',
+      propertyClass: 'Residential',
+      assessedValue: 150000,
+      marketValue: 750000,
+      lastPaidYear: 2024,
+      isShellRecord: false,
+    });
+    expect(result.canVerify).toBe(true);
+    expect(result.failures).toHaveLength(0);
+  });
+
+  it('TC-AUD-02: returns itemized field failures for shell record with empty PIN and zero AV', () => {
+    const result = auditPropertyForVerification({
+      id: '952',
+      tdNumber: '17-23012-30204',
+      pin: '',
+      ownerName: 'Severiano Mangusid',
+      address: 'Lourdes, Santa Rosa',
+      barangay: 'Lourdes',
+      propertyClass: 'Residential',
+      assessedValue: 0,
+      marketValue: 0,
+      lastPaidYear: 1973,
+      isShellRecord: true,
+    });
+    expect(result.canVerify).toBe(false);
+    expect(result.failures.length).toBeGreaterThanOrEqual(2);
+
+    const pinFailure = result.failures.find((f) => f.field.toLowerCase().includes('pin'));
+    expect(pinFailure).toBeDefined();
+    expect(pinFailure?.requirement).toContain('024-XX-XXX-XX-XXX');
+    expect(pinFailure?.ruleBasis).toMatch(/(RA|Republic Act No\.) 7160/);
+
+    const avFailure = result.failures.find((f) => f.field.toLowerCase().includes('assessed'));
+    expect(avFailure).toBeDefined();
+    expect(avFailure?.requirement).toContain('positive');
+  });
+});
+

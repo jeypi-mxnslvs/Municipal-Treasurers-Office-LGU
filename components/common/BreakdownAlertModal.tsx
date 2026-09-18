@@ -32,6 +32,13 @@ export interface BreakdownAlertAction {
   variant?: 'default' | 'outline' | 'destructive' | 'ghost';
 }
 
+export interface FieldFailureDetail {
+  field: string;
+  currentValue?: string;
+  requirement: string;
+  ruleBasis?: string;
+}
+
 export interface BreakdownAlertProps {
   isOpen: boolean;
   onClose: () => void;
@@ -41,10 +48,14 @@ export interface BreakdownAlertProps {
   summary: string;
   /** Optional statutory/operational context paragraph */
   guidance?: string;
+  /** Itemized list of failed fields, missing data, and statutory standards */
+  fieldFailures?: FieldFailureDetail[];
   /** Raw technical error string for support — shown in collapsible */
   technicalDetail?: string;
   /** Extra action buttons beside the default Dismiss */
   actions?: BreakdownAlertAction[];
+  /** Single convenience primary action button */
+  actionButton?: BreakdownAlertAction;
 }
 
 // ─── Severity Config ──────────────────────────────────────────────────────────
@@ -112,12 +123,15 @@ export const BreakdownAlertModal: React.FC<BreakdownAlertProps> = ({
   title,
   summary,
   guidance,
+  fieldFailures,
   technicalDetail,
   actions = [],
+  actionButton,
 }) => {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const cfg = SEVERITY_CONFIG[severity];
   const Icon = cfg.icon;
+  const effectiveActions = actionButton ? [actionButton, ...actions] : actions;
 
   const handleClose = () => {
     setIsDetailOpen(false);
@@ -148,11 +162,50 @@ export const BreakdownAlertModal: React.FC<BreakdownAlertProps> = ({
         </DialogHeader>
 
         {/* Body */}
-        <div className="px-6 py-5 space-y-4 flex-1 bg-white">
+        <div className="px-6 py-5 space-y-4 flex-1 bg-white max-h-[70vh] overflow-y-auto">
           {/* Summary */}
           <p className={`text-sm leading-relaxed ${cfg.summaryColor}`}>
             {summary}
           </p>
+
+          {/* Itemized Field Failures & Requirements */}
+          {fieldFailures && fieldFailures.length > 0 && (
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-rose-800 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block" />
+                  Action Required: Failed Field Requirements ({fieldFailures.length})
+                </p>
+              </div>
+              <div className="space-y-2">
+                {fieldFailures.map((item, idx) => (
+                  <div
+                    key={idx}
+                    className="p-3 bg-rose-50/70 border border-rose-200/90 rounded-xl text-xs space-y-1.5 shadow-xs"
+                  >
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="font-bold text-rose-950 text-xs">{item.field}</span>
+                      {item.currentValue && (
+                        <span className="font-mono text-[10px] px-2 py-0.5 rounded-md bg-rose-100/90 text-rose-800 border border-rose-200 truncate max-w-[200px]">
+                          Current: {item.currentValue}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-slate-700 leading-normal">
+                      <span className="font-semibold text-slate-800">Required: </span>
+                      {item.requirement}
+                    </div>
+                    {item.ruleBasis && (
+                      <div className="text-[10px] text-slate-500 italic">
+                        <span className="font-medium text-slate-600">Standard / Mandate: </span>
+                        {item.ruleBasis}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Statutory / Operational Guidance */}
           {guidance && (
@@ -194,7 +247,7 @@ export const BreakdownAlertModal: React.FC<BreakdownAlertProps> = ({
 
         {/* Footer Actions */}
         <DialogFooter className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex flex-row justify-end gap-2 shrink-0">
-          {actions.map((action, i) => (
+          {effectiveActions.map((action, i) => (
             <Button
               key={i}
               type="button"

@@ -4,6 +4,7 @@ import { BARANGAYS, PROPERTY_CLASSES, HISTORICAL_BASELINE_YEAR } from '@/constan
 import { api } from '@/services/api';
 import { mergeEncoderLabel } from '@/utils/encoderAttribution';
 import { getPropertyCompleteness } from '@/utils/propertyCompleteness';
+import { validatePin } from '@/utils/validationPipeline';
 import { BreakdownAlertModal } from '@/components/common/BreakdownAlertModal';
 import {
   Dialog,
@@ -375,6 +376,15 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
       if (![r.lotAreaSqm, r.marketValue, r.assessedValue].every(Number.isFinite) || r.assessedValue < 0 || r.marketValue < 0 || r.lotAreaSqm < 0) {
         state = 'INVALID_NUMERIC_VALUE';
         error = 'Lot Area, Market Value, and Assessed Value must be valid non-negative numbers';
+      }
+
+      // Cadastral PIN format validation if provided
+      if (!error && r.pin && r.pin.trim()) {
+        const pinCheck = validatePin(r.pin);
+        if (!pinCheck.isValid) {
+          state = 'INVALID_NUMERIC_VALUE';
+          error = pinCheck.error || 'Invalid Cadastral PIN format (024-XX-XXX-XX-XXX)';
+        }
       }
 
       // "Last Import Wins" duplicate resolution within same CSV file

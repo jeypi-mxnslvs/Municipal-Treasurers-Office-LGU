@@ -10,7 +10,8 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Printer, ShieldCheck, Download, CheckCircle2 } from 'lucide-react';
+import { Printer, ShieldCheck, Download, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { auditPropertyForVerification } from '@/utils/validationPipeline';
 
 interface TaxClearanceModalProps {
   isOpen: boolean;
@@ -40,13 +41,14 @@ export const TaxClearanceModal: React.FC<TaxClearanceModalProps> = ({
 
   if (!property) return null;
 
+  const propertyAudit = property ? auditPropertyForVerification(property) : { canVerify: true, failures: [] };
   const fallbackReasons = [
     ...(property.isShellRecord ? ['Property is a shell record and requires Assessor verification.'] : []),
-    ...(!property.pin?.trim() ? ['Property has no verified PIN.'] : []),
+    ...(!property.pin?.trim() ? ['Property has no verified PIN (format 024-XX-XXX-XX-XXX required).'] : []),
     ...(property.assessedValue <= 0 ? ['Property has no positive assessed value.'] : []),
   ];
   const eligibilityReasons = eligibility?.ineligibilityReasons || fallbackReasons;
-  const isEligible = Boolean(eligibility?.isEligible) && eligibilityReasons.length === 0;
+  const isEligible = Boolean(eligibility?.isEligible) && eligibilityReasons.length === 0 && propertyAudit.canVerify;
 
   const effectivePurpose = purpose === 'Other' ? customPurpose || 'General Reference' : purpose;
   const certificateDate = new Date().toLocaleDateString('en-US', {
@@ -140,12 +142,31 @@ export const TaxClearanceModal: React.FC<TaxClearanceModalProps> = ({
         </DialogHeader>
 
         {!isEligible && (
-          <div className="mx-5 mt-5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
-            <p className="font-bold">Ineligible for Tax Clearance</p>
-            <p className="mt-1 text-xs">Certification remains blocked until all statutory and archival conditions are satisfied.</p>
-            <ul className="mt-3 list-disc space-y-1 pl-5 text-xs">
-              {eligibilityReasons.length > 0 ? eligibilityReasons.map((reason) => <li key={reason}>{reason}</li>) : <li>Authoritative eligibility result is required before issuance.</li>}
-            </ul>
+          <div className="mx-5 mt-5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 space-y-2.5">
+            <div className="flex items-center gap-2 font-bold text-amber-900">
+              <AlertTriangle size={17} className="text-amber-600 shrink-0" />
+              <span>Ineligible for Real Property Tax Clearance Certificate</span>
+            </div>
+            <p className="text-xs text-amber-800">
+              Under RA 7160 Sec. 254, certification cannot be issued while unverified shell flags, missing cadastral records, or outstanding liabilities exist.
+            </p>
+            {propertyAudit.failures.length > 0 && (
+              <div className="space-y-1.5 pt-1">
+                <p className="text-[11px] font-bold text-amber-900 uppercase tracking-wider">Required Field Remediation:</p>
+                {propertyAudit.failures.map((f, i) => (
+                  <div key={i} className="text-xs bg-white/80 p-2.5 rounded-lg border border-amber-200">
+                    <span className="font-bold text-slate-800">{f.field}:</span>{' '}
+                    <span className="text-slate-700">{f.requirement}</span>
+                    <span className="block text-[10px] text-amber-800 font-mono mt-0.5">Legal Basis: {f.ruleBasis}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {eligibilityReasons.length > 0 && propertyAudit.failures.length === 0 && (
+              <ul className="list-disc space-y-1 pl-5 text-xs text-amber-900">
+                {eligibilityReasons.map((reason) => <li key={reason}>{reason}</li>)}
+              </ul>
+            )}
           </div>
         )}
 
