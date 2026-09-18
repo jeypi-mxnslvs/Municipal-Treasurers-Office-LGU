@@ -20,6 +20,7 @@ import { calculateTaxLiability as localCalculateTaxLiability } from '@/utils/tax
 import { createSessionToken } from '@/lib/crypto';
 import { mergeEncoderLabel } from '@/utils/encoderAttribution';
 import { getPropertyCompleteness } from '@/utils/propertyCompleteness';
+import { projectPropertyPeriods } from '@/utils/periodProjection';
 
 const mapPropertyRow = (row: Record<string, unknown>): Property => ({
   id: String(row.id),
@@ -693,6 +694,35 @@ export class SupabaseRepository implements ITreasuryRepository {
   async getDashboardStats(): Promise<DashboardStatsData> {
     const { data: props } = await supabase.from('properties').select('*');
     const list = props || [];
+    const { data: verificationRows } = await supabase
+      .from('delinquency_period_verifications')
+      .select('*')
+      .order('verified_at', { ascending: true });
+    const verificationsByProperty = new Map<string, DelinquencyPeriodVerification[]>();
+    for (const row of verificationRows || []) {
+      const key = String(row.property_id);
+      const entries = verificationsByProperty.get(key) || [];
+      entries.push({
+        id: row.id,
+        propertyId: row.property_id,
+        tdNumberSnapshot: row.td_number_snapshot,
+        periodKey: row.period_key,
+        taxYear: row.tax_year,
+        periodLabel: row.period_label,
+        status: row.status as DelinquencyPeriodStatus,
+        verificationType: row.verification_type as VerificationType,
+        sourceReference: row.source_reference,
+        remarks: row.remarks,
+        verifiedBy: row.verified_by,
+        verifierName: row.verified_by_name,
+        verifiedAt: row.verified_at,
+        stationId: row.station_id,
+        supersedesId: row.supersedes_id,
+        reversalReason: row.reversal_reason,
+        createdAt: row.created_at,
+      });
+      verificationsByProperty.set(key, entries);
+    }
 
     const totalProperties = list.length;
     const mappedProperties = list.map((p): Property => ({
@@ -715,14 +745,13 @@ export class SupabaseRepository implements ITreasuryRepository {
     }));
     const completeness = mappedProperties.map(property => getPropertyCompleteness(property));
     const shellRecordsCount = completeness.filter(result => result.isShellRecord).length;
-    const clearedCount = mappedProperties.filter((property, index) =>
-      !completeness[index].isShellRecord &&
-      (property.lastPaidYear > 2026 || (property.lastPaidYear === 2026 && (property.lastPaidQuarter || 4) >= 4))
-    ).length;
-    const delinquentCount = mappedProperties.filter((property, index) =>
-      completeness[index].isShellRecord || property.lastPaidYear < 2026 ||
-      (property.lastPaidYear === 2026 && (property.lastPaidQuarter || 4) < 4)
-    ).length;
+    const projections = mappedProperties.map(property => projectPropertyPeriods(
+      property,
+      verificationsByProperty.get(property.id) || [],
+      { splitCurrentYearQuarters: true }
+    ));
+    const clearedCount = projections.filter(projection => projection.isClearanceEligible).length;
+    const delinquentCount = projections.filter(projection => !projection.isClearanceEligible).length;
 
     let totalDelinquentDebt = 0;
     const barangayMap = new Map<string, { properties: number; outstandingDebt: number }>();
@@ -730,13 +759,13 @@ export class SupabaseRepository implements ITreasuryRepository {
     for (const p of list) {
       const bgy = p.barangay || 'Unassigned';
       const propertyIndex = list.indexOf(p);
-      const mappedProperty = mappedProperties[propertyIndex];
       const isShell = completeness[propertyIndex].isShellRecord;
-      const isDelinquent = !isShell && (mappedProperty.lastPaidYear < 2026 || (mappedProperty.lastPaidYear === 2026 && (mappedProperty.lastPaidQuarter || 4) < 4));
+      const projection = projections[propertyIndex];
+      const isDelinquent = !projection.isClearanceEligible;
       let debt = 0;
 
       if (!isShell) {
-        debt = localCalculateTaxLiability(mappedProperty).grandTotal;
+        debt = projection.outstandingTotal;
       }
 
       if (isDelinquent) {

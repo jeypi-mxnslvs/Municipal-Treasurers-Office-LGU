@@ -662,10 +662,10 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
         entryType: r.entryType,
       }));
 
-      const detectedBarangay =
-        selectedBarangayFilter !== 'All'
-          ? selectedBarangayFilter
-          : actionableRows[0]?.barangay || 'Multiple';
+      const importedBarangays = new Set(actionableRows.map(row => row.barangay));
+      const detectedBarangay = selectedBarangayFilter !== 'All'
+        ? selectedBarangayFilter
+        : importedBarangays.size === 1 ? [...importedBarangays][0] : 'Multiple';
 
       const res = await api.bulkImportProperties(
         payload,

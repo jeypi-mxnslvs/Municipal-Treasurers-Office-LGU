@@ -188,6 +188,15 @@ const App: React.FC = () => {
     }
   }, []);
 
+  useEffect(() => {
+    if (!currentUser || !selectedProperty) return;
+    const refreshActiveStatement = () => handlePostPaymentView(selectedProperty);
+    const unsubscribe = api.subscribeToMutations((mutation) => {
+      if (mutation.tdNumber === selectedProperty.tdNumber) refreshActiveStatement();
+    });
+    return unsubscribe;
+  }, [currentUser, selectedProperty, handlePostPaymentView]);
+
   const handleBackToDashboard = useCallback(() => {
     try {
       const url = new URL(window.location.href);
@@ -375,7 +384,7 @@ const App: React.FC = () => {
 
       await loadData(true);
 
-      if (updatedResult.records.length === 0) {
+      if (updatedResult.records.length === 0 && updatedProjection.isClearanceEligible) {
         setIsTaxClearanceModalOpen(true);
       }
     } catch (err) {
