@@ -249,7 +249,7 @@ export function validatePin(pin: string | undefined): ValidationResult {
     };
   }
 
-  // Santa Rosa / Nueva Ecija format: XXX-XX-XXX-XX-XXX or XXX-XX-XXXX-XX-XXX
+  // Philippine standard cadastral format: XXX-XX-XXX-XX-XXX or XXX-XX-XXXX-XX-XXX
   const pinPattern = /^\d{3}-\d{2}-\d{3,4}-\d{2}-\d{3,4}$/;
   if (!pinPattern.test(raw)) {
     return {
@@ -622,4 +622,3 @@ export function auditPropertyForVerification(property: Partial<Property> | null 
     failures,
   };
 }
-

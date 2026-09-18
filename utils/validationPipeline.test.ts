@@ -485,6 +485,7 @@ describe('validatePin', () => {
     expect(malformedRes.isValid).toBe(false);
     expect(malformedRes.error).toMatch(/024-XX-XXX-XX-XXX/);
   });
+
 });
 
 describe('validateMarketValue & validatePropertyClass', () => {
@@ -547,4 +548,3 @@ describe('auditPropertyForVerification', () => {
     expect(avFailure?.requirement).toContain('positive');
   });
 });
-

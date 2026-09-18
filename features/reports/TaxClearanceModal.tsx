@@ -44,7 +44,7 @@ export const TaxClearanceModal: React.FC<TaxClearanceModalProps> = ({
   const propertyAudit = property ? auditPropertyForVerification(property) : { canVerify: true, failures: [] };
   const fallbackReasons = [
     ...(property.isShellRecord ? ['Property is a shell record and requires Assessor verification.'] : []),
-    ...(!property.pin?.trim() ? ['Property has no verified PIN (format 024-XX-XXX-XX-XXX required).'] : []),
+    ...(!property.pin?.trim() ? ['Property has no verified Cadastral PIN.'] : []),
     ...(property.assessedValue <= 0 ? ['Property has no positive assessed value.'] : []),
   ];
   const eligibilityReasons = eligibility?.ineligibilityReasons || fallbackReasons;
