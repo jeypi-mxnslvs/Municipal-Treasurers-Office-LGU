@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { TaxYearRecord, TaxSummary, Property, User } from '@/types';
-import { AlertCircle, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Tag, Calendar, CheckSquare, Layers, Sparkles, Pencil, Info } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Tag, Calendar, CheckSquare, Layers, Sparkles, Pencil, Info, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -330,6 +330,66 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
     setEditingRecord(null);
   };
 
+  const exportSoaToCsv = () => {
+    if (!property) return;
+    const activeRecords = activeTab === 'COMPLETED' 
+      ? completedRecords 
+      : activeTab === 'OUTSTANDING' 
+        ? records 
+        : [...completedRecords, ...records];
+
+    const headers = [
+      'TD Number',
+      'PIN',
+      'Owner Name',
+      'Barangay',
+      'Class',
+      'Tax Period',
+      'Assessed Value',
+      'Basic Tax (1%)',
+      'SEF Tax (1%)',
+      'Base Tax Total',
+      'Months Delayed',
+      'Penalty Rate %',
+      'Penalty Surcharge',
+      'Discount %',
+      'Discount Amount',
+      'Total Due',
+      'Status',
+      'Reference'
+    ];
+
+    const rows = activeRecords.map(r => [
+      `"${property.tdNumber}"`,
+      `"${property.pin || ''}"`,
+      `"${property.ownerName.replace(/"/g, '""')}"`,
+      `"${property.barangay}"`,
+      `"${property.propertyClass}"`,
+      `"${r.periodLabel || r.year}"`,
+      r.isMissingValuation ? '"Unverified Gap"' : (r.assessedValue || property.assessedValue || 0).toFixed(2),
+      r.isMissingValuation ? '0.00' : (r.basicTax || (r.baseTax ? r.baseTax / 2 : 0)).toFixed(2),
+      r.isMissingValuation ? '0.00' : (r.sefTax || (r.baseTax ? r.baseTax / 2 : 0)).toFixed(2),
+      r.isMissingValuation ? '0.00' : (r.baseTax || 0).toFixed(2),
+      r.monthsDelayed || 0,
+      `${((r.penaltyRate || 0) * 100).toFixed(0)}%`,
+      (r.penaltyAmount || 0).toFixed(2),
+      `${((r.discountRate || 0) * 100).toFixed(0)}%`,
+      (r.discountAmount || 0).toFixed(2),
+      r.isMissingValuation ? '0.00' : (r.totalDue || 0).toFixed(2),
+      `"${r.status || (r.clearedAt ? 'Cleared' : 'Delinquent')}"`,
+      `"${r.clearanceReference || r.sourceReference || (r.isMissingValuation ? 'Needs Archive Valuation' : 'Statutory Assessment')}"`
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `SOA_${property.tdNumber.replace(/[^a-zA-Z0-9_-]/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <Card className="border-slate-200 shadow-sm overflow-hidden flex flex-col h-full animate-fade-in-up">
       {/* Header & Sequential Scope Selector */}
@@ -341,9 +401,22 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
               Sequential Statement of Account (RA 7160 Arrears-First)
             </h3>
           </div>
-          <Badge variant="secondary" className="gap-1 bg-emerald-50 text-emerald-700 border-emerald-200 font-semibold">
-            <Calendar size={12} /> {records.length > 0 ? `${records.length} ${records.length === 1 ? 'Tax Year Owed' : 'Tax Years Owed'}` : `${completedRecords.length} ${completedRecords.length === 1 ? 'Tax Year Settled' : 'Tax Years Settled'}`}
-          </Badge>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge variant="secondary" className="gap-1 bg-emerald-50 text-emerald-700 border-emerald-200 font-semibold">
+              <Calendar size={12} /> {records.length > 0 ? `${records.length} ${records.length === 1 ? 'Tax Year Owed' : 'Tax Years Owed'}` : `${completedRecords.length} ${completedRecords.length === 1 ? 'Tax Year Settled' : 'Tax Years Settled'}`}
+            </Badge>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={exportSoaToCsv}
+              className="h-7 text-xs gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-100 cursor-pointer"
+              title="Export itemized Statement of Account to CSV"
+            >
+              <Download size={13} />
+              Export SOA CSV
+            </Button>
+          </div>
         </div>
 
         {/* Organizer Filter Tabs */}

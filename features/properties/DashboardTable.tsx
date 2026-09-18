@@ -167,7 +167,7 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
 
   const canEdit = currentUser.role === 'Admin' || currentUser.role === 'Assessor';
   const canDelete = currentUser.role === 'Admin';
-  const canClearDues = currentUser.role === 'Cashier' || currentUser.role === 'Admin';
+  const canClearDues = currentUser.role === 'Assessor' || currentUser.role === 'Admin';
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-full animate-fade-in-up">

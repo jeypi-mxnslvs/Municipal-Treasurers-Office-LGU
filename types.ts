@@ -45,10 +45,13 @@ export interface TaxYearRecord {
   isAdvance?: boolean;           // Advance payment period flag
   quarter?: number;
   status: 'Delinquent' | 'Current' | 'Advance' | 'Cleared';
+  periodKey?: string;
+  verificationStatus?: DelinquencyPeriodStatus;
   receiptNo?: string;
   clearedAt?: string;
   clearedBy?: string;
   clearanceReference?: string;
+  sourceReference?: string;
   assessedValue?: number;        // Period-specific assessed valuation (e.g. 10000 for 1987-1991)
   isMissingValuation?: boolean;  // True if AV has not yet been retrieved from physical RPTAR
   isUnverifiedHistorical?: boolean; // True if period lies in pre-import unverified gap (1971+)
@@ -68,6 +71,8 @@ export interface TaxYearRecord {
   discountAmount?: number;
   totalDue: number | null;       // NULL for unverified historical records, never 0
   isPayable?: boolean;
+  isStatementReady?: boolean;
+  isClearanceEligible?: boolean;
 }
 
 export interface TaxSummary {
@@ -89,11 +94,54 @@ export interface CalculationResult {
   grandTotal: number;
 }
 
+export type DelinquencyPeriodStatus =
+  | 'UNVERIFIED'
+  | 'VERIFIED_OUTSTANDING'
+  | 'VERIFIED_SETTLED_EXTERNALLY'
+  | 'DISPUTED'
+  | 'NOT_APPLICABLE'
+  | 'SUPERSEDED';
+
+export type VerificationType =
+  | 'ASSESSMENT'
+  | 'HISTORICAL_VALUATION'
+  | 'DELINQUENCY'
+  | 'EXTERNAL_SETTLEMENT_EVIDENCE';
+
+export interface DelinquencyPeriodVerification {
+  id?: number | string;
+  propertyId: number | string;
+  tdNumberSnapshot: string;
+  periodKey: string;
+  taxYear: number;
+  periodLabel: string;
+  status: DelinquencyPeriodStatus;
+  verificationType: VerificationType;
+  sourceReference?: string;
+  remarks?: string;
+  verifiedBy: number | string;
+  verifierName?: string;
+  verifiedAt: string;
+  stationId?: string;
+  supersedesId?: number | string;
+  reversalReason?: string;
+  createdAt?: string;
+}
+
+export interface ClearanceEligibilityResult {
+  isEligible: boolean;
+  reasonsForIneligibility: string[];
+  verifiedOutstandingTotal: number;
+  unverifiedPeriodsCount: number;
+  disputedPeriodsCount: number;
+  asOfDate: string;
+}
+
 export interface User {
   id: string | number;
   name: string;
   username?: string;
-  role: 'Cashier' | 'Assessor' | 'Admin' | 'Viewer';
+  role: 'Admin' | 'Assessor';
   stationId: string;
 }
 
@@ -114,19 +162,6 @@ export interface PropertyAssessmentPeriod {
   updatedBy?: string;
   createdAt?: string;
   updatedAt?: string;
-}
-
-export interface AccountableFormBooklet {
-  id: number;
-  bookletId: string;
-  formType: 'AF-51';
-  seriesStart: number;
-  seriesEnd: number;
-  currentSerial: number;
-  assignedToUserId?: number;
-  assignedToUsername?: string;
-  status: 'ACTIVE' | 'EXHAUSTED' | 'REVOKED';
-  createdAt?: string;
 }
 
 export interface OfficialReceipt {
@@ -261,44 +296,4 @@ export interface ParsedPenaltySchedule {
   scheduleLabel: string;
   rates: Record<string, number>;
   sourceMode: 'EVALUATED_NUMBERS' | 'STATUTORY_CALCULATED';
-}
-
-export type OfflineSyncStatus = 'PENDING' | 'SYNCING' | 'SYNCED' | 'CONFLICT' | 'FAILED';
-
-export interface OfflineBookletSeries {
-  bookletId: string;
-  stationId: string;
-  seriesStart: number;
-  seriesEnd: number;
-  currentSerial: number;
-  assignedCashier: string;
-  isActive: boolean;
-}
-
-export interface OfflinePaymentItem {
-  id: string;
-  propertyId: string | number;
-  receiptNo: string;
-  bookletId: string;
-  paidRecords: TaxYearRecord[];
-  totalPaid: number;
-  tenderType: string;
-  tenderReference?: string;
-  postedBy: string;
-  stationId: string;
-  userId?: number;
-  createdAt: string;
-  syncStatus: OfflineSyncStatus;
-  syncError?: string;
-  syncedAt?: string;
-  serverReceiptNo?: string;
-  receiptSnapshot: OfficialReceipt;
-}
-
-export interface OfflineSyncResult {
-  total: number;
-  synced: number;
-  conflicts: number;
-  failed: number;
-  errors: Array<{ id: string; error: string; receiptNo: string }>;
 }

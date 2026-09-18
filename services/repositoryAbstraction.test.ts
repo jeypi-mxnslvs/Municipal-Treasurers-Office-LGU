@@ -33,58 +33,71 @@ describe('Phase 4: Deployment Abstraction (ITreasuryRepository & LocalHttpReposi
     expect(result).toEqual(mockProperties);
   });
 
-  it('posts payment atomically via local HTTP endpoint', async () => {
-    const mockReceipt = {
-      receiptNo: 'AF51-4500001',
-      date: '2026-09-15T00:00:00.000Z',
-      status: 'ISSUED',
-      property: { id: '1', tdNumber: 'TD-001', ownerName: 'Juan', assessedValue: 100000, propertyClass: 'Residential', address: 'Main', barangay: 'Poblacion' },
-      itemizedRecords: [],
-      summary: { basicTax: 1000, sefTax: 1000, baseTaxTotal: 2000, penalty: 0, discount: 0, totalPaid: 2000 },
-      tenderType: 'CASH',
-      postedBy: 'Admin'
+  it('dispatches verifyDelinquencyPeriod via local HTTP endpoint', async () => {
+    const mockVerification = {
+      id: 101,
+      propertyId: 1,
+      tdNumberSnapshot: 'TD-001',
+      periodKey: '2024',
+      taxYear: 2024,
+      periodLabel: 'Tax Year 2024',
+      status: 'VERIFIED_SETTLED_EXTERNALLY',
+      verificationType: 'EXTERNAL_SETTLEMENT_EVIDENCE',
+      sourceReference: 'OR-2024-9988',
+      remarks: 'Prior payment settled',
+      verifiedBy: 1,
+      verifiedAt: '2026-09-18T00:00:00.000Z',
+      stationId: 'Desk-1',
+      createdAt: '2026-09-18T00:00:00.000Z'
     };
 
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => mockReceipt,
+      json: async () => mockVerification,
     });
 
-    const result = await repo.postPayment({
+    const result = await repo.verifyDelinquencyPeriod({
       propertyId: 1,
-      paidRecords: [],
-      tenderType: 'CASH',
-      postedBy: 'Admin'
+      tdNumber: 'TD-001',
+      periodKey: '2024',
+      taxYear: 2024,
+      periodLabel: 'Tax Year 2024',
+      status: 'VERIFIED_SETTLED_EXTERNALLY',
+      verificationType: 'EXTERNAL_SETTLEMENT_EVIDENCE',
+      sourceReference: 'OR-2024-9988',
+      verifiedBy: 1,
+      stationId: 'Desk-1'
     });
 
     expect(global.fetch).toHaveBeenCalledWith(
-      'http://192.168.1.100:8000/api/v1/collections/payments',
+      'http://192.168.1.100:8000/api/v1/delinquency/verify',
       expect.objectContaining({
         method: 'POST',
       })
     );
-    expect(result.receiptNo).toBe('AF51-4500001');
+    expect(result.id).toBe(101);
+    expect(result.status).toBe('VERIFIED_SETTLED_EXTERNALLY');
   });
 
-  it('dispatches supervisory void via local HTTP endpoint', async () => {
+  it('dispatches supervisory reversal via local HTTP endpoint', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ message: 'Official Receipt successfully voided', receiptNo: 'AF51-4500001' }),
+      json: async () => ({ message: 'Verification successfully reversed' }),
     });
 
-    const result = await repo.voidReceipt({
-      receiptNo: 'AF51-4500001',
-      reason: 'Wrong taxpayer name encoded',
+    await repo.revertDelinquencyVerification({
+      propertyId: 1,
+      taxYear: 2024,
+      reason: 'Erroneous external receipt encoded',
       authorizedBy: 'Supervisor Admin'
     });
 
     expect(global.fetch).toHaveBeenCalledWith(
-      'http://192.168.1.100:8000/api/v1/collections/void',
+      'http://192.168.1.100:8000/api/v1/delinquency/revert',
       expect.objectContaining({
         method: 'POST',
       })
     );
-    expect(result.receiptNo).toBe('AF51-4500001');
   });
 
   it('throws descriptive error on HTTP non-200 responses', async () => {
@@ -96,8 +109,9 @@ describe('Phase 4: Deployment Abstraction (ITreasuryRepository & LocalHttpReposi
     });
 
     await expect(
-      repo.voidReceipt({
-        receiptNo: 'AF51-4500001',
+      repo.revertDelinquencyVerification({
+        propertyId: 1,
+        taxYear: 2024,
         reason: 'Error',
         authorizedBy: 'Clerk'
       })

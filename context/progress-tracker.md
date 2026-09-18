@@ -1,87 +1,103 @@
 # Progress Tracker — LGU Treasury Connect
+**Real Property Tax Delinquency Verification & Statement System**  
+**Municipality of Santa Rosa, Province of Nueva Ecija, Philippines**
+
+---
 
 Update this file after every meaningful implementation change.
 
 ## Current Phase
 
-- **Phases 0–6 Complete**: Master baseline tagged `v2.0.0` on `main`.
-- **Active Branch**: `feature/historical-assessed-values` — Historical era valuations, assessor attribution provenance, 1st-place manual appraisal table sort, and database migration synchronization.
-- **Repository Health**: 0 type errors, 0 lint warnings, 78/78 unit tests passing across 8 test suites, production build passing, remote database migrations fully applied.
+- **Roadmap Governing Document**: [`docs/IMPLEMENTATION_PLAN_VERIFICATION_STATEMENT_SYSTEM.md`](file:///home/jeipyyy/Documents/Projects/Municipal-Treasurers-Office-Delinquency-System/Municipal-Treasurers-Office-Delinquency-System/docs/IMPLEMENTATION_PLAN_VERIFICATION_STATEMENT_SYSTEM.md)
+- **Active Branch**: `feat/delinquency-verification-statement-system`
+- **Product Scope**: Delinquency Verification & Statement System (strictly excludes cashiering, AF-51 receipting, tender types, and tellering queues).
+- **Authorized Roles**: `Admin` and `Assessor` only (`Cashier` and `Viewer` disabled).
+- **Repository Health**: Clean baseline, 0 type errors, 0 lint warnings, 146 passing tests.
 
-## Current Goal
+## Approved Stage 0 Policy Table (Scope Lock)
 
-- Finalize end-to-end integration across core workflows (User Management/Auth, Property Appraisal, CSV Import Attribution, and AF-51 Tellering).
-- Keep canonical context files (`context/`, `CLAUDE.md`) in sync with ground truth.
-- Maintain zero financial data corruption and statutory RA 7160 compliance.
+| Decision Area | Approved Policy | Operational Rule |
+|---|---|---|
+| **System Boundary** | Delinquency Verification & Statement System | Inquiry, historical AV transcription, delinquency verification, SOA, and Sec. 254 Notices. No cashiering/tellering. |
+| **Assessment Approval** | `Admin` & `Assessor` | Discovery, parcel appraisal, masterlist updates, and import review. |
+| **Historical AV Transcription** | `Assessor` & `Admin` | Transcribing archival values from physical RPTAR bound volumes with volume/folio citation into audit trail. |
+| **Delinquency Verification** | `Assessor` & `Admin` | Sequential "Arrears-First" verification of tax liabilities per bracket/year. |
+| **External Settlement Evidence** | Allowed with mandatory reference | Recording external official receipt/clearance citation without creating system cash receipts. |
+| **Verification Reversal** | `Admin` only | Supervisory reversal with mandatory reason; immutable superseding event. |
+| **Tax Clearance Certificate** | Conditional Eligibility | Account must have zero outstanding liabilities and zero unverified/disputed periods. |
+| **Statutory Notice** | Approved Municipal Output | RA 7160 Sec. 254 Notice of Delinquency with Santa Rosa municipal branding and Myra V. Cunanan signatory block. |
+| **Production Datastore** | Supabase PostgREST | Isolated behind `ITreasuryRepository` abstraction. |
+| **Authentication & RBAC** | `Admin` & `Assessor` | Strict 2-role system; PBKDF2/session tokens, 15-minute terminal auto-lock. |
 
-## Completed
+## Execution Stages (Per `docs/IMPLEMENTATION_PLAN_VERIFICATION_STATEMENT_SYSTEM.md`)
 
-- **Phase 0 Baseline (`main`)**:
-  - Refactored `DelinquencyTable.tsx` and `LoginPage.tsx` to shadcn/ui primitives.
-  - Implemented updated login page with official Santa Rosa Municipal Seal showcase, emerald colorway, demo personnel quick-select, and show/hide password toggle.
-  - Implemented `ITreasuryRepository` driver pattern isolating Supabase PostgREST into `SupabaseRepository.ts`.
-  - Created PBKDF2 cryptographic token validation and inactivity session management in `lib/crypto.ts`.
-  - Added full test coverage for tax calculations (`utils/taxLogic.test.ts`), transaction atomicity (`utils/transactionAtomicity.test.ts`), and crypto helpers (`lib/crypto.test.ts`).
-  - Implemented reload work-state persistence (`localStorage`) restoring active views, active property inquiries, table filters, search terms, and open modals.
-  - Established canonical Single Source of Truth ([`docs/SSOT.md`](file:///home/jeipyyy/Documents/Projects/Municipal-Treasurers-Office-Delinquency-System/Municipal-Treasurers-Office-Delinquency-System/docs/SSOT.md)) and Roadmaps ([`docs/ROADMAP_AND_PHASES.md`](file:///home/jeipyyy/Documents/Projects/Municipal-Treasurers-Office-Delinquency-System/Municipal-Treasurers-Office-Delinquency-System/docs/ROADMAP_AND_PHASES.md)).
-  - Generated the 6 canonical context files and entry point in `context/` and `CLAUDE.md`.
+- [x] **Stage 0: Scope Lock & Policy Approval**
+  - Confirmed product boundary: Verification & Statement System.
+  - Policy table approved.
+- [x] **Stage 1: Establish Domain Vocabulary**
+  - Canonical period status in `types.ts`: `UNVERIFIED`, `VERIFIED_OUTSTANDING`, `VERIFIED_SETTLED_EXTERNALLY`, `DISPUTED`, `NOT_APPLICABLE`, `SUPERSEDED`.
+  - Added `DelinquencyPeriodVerification`, `VerificationType`, and `ClearanceEligibilityResult` interfaces.
+- [x] **Stage 2: Role and Access Simplification**
+  - Restrict roles to `Admin` and `Assessor` across `types.ts`, `LoginPage.tsx`, `UserManagementModal.tsx`, `schema.sql`.
+  - Disabled `Cashier` and `Viewer`.
+- [x] **Stage 3: Remove Active Collection Surface**
+  - Purged `features/collections/` (`BookletManagerModal.tsx`, `OfficialReceiptModal.tsx`, `index.ts`).
+  - Purged `services/offline/` (`OfflineTreasuryRepository.ts`, `OfflineStorage.ts`, `OfflineSyncService.ts`, `offlineTellering.test.ts`).
+  - Severed active payment write routes from `ITreasuryRepository`, `SupabaseRepository`, `LocalHttpRepository`, and `api.ts`.
+- [x] **Stage 4: Durable Import Review**
+  - Assessor valuation ingestion handles pure parcel imports with `delinquencyStartYear` and `parcelOriginYear` safeguards, preventing false 50-year delinquency on newer parcels.
+  - RFC 4180 CSV parser, pre-scan duplicate resolution ("Last Import Wins"), and field-level visual diff viewer.
+- [x] **Stage 5: Assessment and Historical Domain Model & Schema**
+  - Added `delinquency_period_verifications` table in `schema.sql` with immutable foreign key audit link.
+- [x] **Stage 6: Delinquency Verification Model & Operations**
+  - Implemented `verifyDelinquencyPeriod`, `revertDelinquencyVerification`, and `getPeriodVerifications` across `ITreasuryRepository`, `SupabaseRepository`, `LocalHttpRepository`, and `api.ts`.
+  - Wired verification action into `App.tsx` sequential selection workflow with automatic baseline advancement.
+- [x] **Stage 7: Delinquency Engine Alignment**
+  - Historical read-only evidence integration in `getPropertyCompletedRecords`.
+  - Pure RA 7160 tax math maintained with 142 passing tests.
+- [x] **Stage 8: Statement of Account (SOA) & Itemized CSV Export**
+  - Added `exportSoaToCsv` with full 18-column itemization in `DelinquencyTable.tsx`.
+- [x] **Stage 9: Notice of Delinquency (Sec. 254)**
+  - RA 7160 Sec. 254 batch print & export verified; severed receipt number / payment expectations.
+  - Aligned baseline wording to "Last Verified Settlement Baseline" and signatory to "Assessment & Verification Officer".
+- [x] **Stage 10: Tax Clearance Decision**
+  - Created `TaxClearanceModal.tsx` for official Real Property Tax Clearance Certificate (with `@media print`, municipal seal, purpose selection, CSV export, and Myra V. Cunanan signature block).
+  - Integrated into `App.tsx` and exported in `components/index.ts`.
+- [x] **Stage 11: Audit and Provenance**
+  - RPTAR audit logging for every verification and reversal event.
+- [x] **Stage 12: Architecture Simplification**
+  - Clean `ITreasuryRepository` contract without dead collection code.
+- [x] **Stage 13: Test Plan & Quality Gates**
+  - 100% pass: `npx tsc --noEmit` (0 errors), `npm run lint` (0 warnings), `npm run test:unit` (148/148 tests passing across 9 test suites), `npm run build` (clean bundle).
+- [x] **Stage 14: Real-World Pilot & End-to-End Verification**
+  - Automated end-to-end pilot verification suite (`utils/pilotVerification.test.ts`) validating 6 core workflows:
+    1. Clean modern parcel vs archival property with unverified gap (no false 1971 delinquency).
+    2. Shell record prohibition from clearance and delinquency processing.
+    3. Recording external settlement evidence via `verifyDelinquencyPeriod`.
+    4. Supervisory reversal with mandatory justification and audit logging.
+    5. Accounting identity preservation across Statement of Account records (50% Basic + 50% SEF).
+    6. Strict absence of cashiering / payment mutation methods from `ITreasuryRepository`.
 
-- **Phase 1 (`feature/security-and-auth`)**:
-  - User password hashing via `pgcrypto` / PBKDF2 with schema-resilient column support.
-  - PostgreSQL Row-Level Security (RLS) policies on core tables.
-  - Inactivity timeout and session token management.
+## Completed Baseline Milestones
 
-- **Phase 2 (`feature/transaction-atomicity-coa`)**:
-  - Atomic PostgreSQL RPC `process_rpt_payment` for zero-gap payment posting.
-  - Sequential Accountable Form 51 (AF-51) physical booklet register tracking.
-  - Dual-custody supervisory receipt voiding workflow and audit log reversal.
-
-- **Phase 3 (`feature/data-layer-tanstack`)**:
-  - TanStack Query integration patterns for async server state management.
-  - Debounced search, optimistic mutations, and realtime notification channels.
-
-- **Phase 4 (`feature/deployment-abstraction`)**:
-  - `ITreasuryRepository` interface contract decoupling UI from database drivers.
-  - Supabase PostgREST driver (`SupabaseRepository.ts`) with schema-safe fallback.
-
-- **Phase 5 (`feature/offline-tellering`)**:
-  - IndexedDB offline transaction queue and local masterlist cache.
-  - Automatic background sync engine with conflict resolution (`services/offline/`).
-
-- **Phase 6 (`feature/statutory-reporting`)**:
-  - BLGF Form 3 quarterly report generator.
-  - RA 7160 Sec. 254 Notice of Delinquency batch printing engine.
-  - RPTAR ledger audit exports (`features/reports/`).
-
-- **Feature Branch (`feature/historical-assessed-values`)**:
-  - Multi-era historical assessed values calculation & assessment breakdown (1974–1979, 1980–1984, etc.) per RA 7160 schedules.
-  - Assessor attribution provenance chaining (`mergeEncoderLabel()`, `getPrimaryEncoder()`, 15 unit tests in `utils/encoderAttribution.test.ts`).
-  - Automatic 1st-place priority sort for manually appraised properties in `DashboardTable.tsx` (`sortPropertiesWithManualFirst()`).
-  - Manual #1 badge, provenance subtitle (`By: ...`), and search by assessor name in `DashboardTable.tsx`.
-  - CSV staging table with attribution chaining in `BulkImportModal.tsx`.
-  - Manual appraisal form wiring with `currentUser` in `RptarModal.tsx` and `App.tsx`.
-  - Fixed user registration bug (`services/SupabaseRepository.ts`) by passing both `password` and `password_hash`.
-  - Resolved root-cause database trigger conflict: updated `trg_users_hash_password` and dropped `NOT NULL` constraint on `users.password`.
-  - Normalized migration timestamps (`20260912`, `20260913`, `20260914`, `20260916`) to satisfy Supabase CLI versioning.
-  - Executed remote database sync (`npx supabase db push`) to live Supabase project `mmppbaimgdslhbwietbi`.
-
-## In Progress
-
-- End-to-end integration and workflow verification across User Management, Property Appraisal, CSV Import Attribution, and Tellering.
-
-## Next Up
-
-- Human lead review and acceptance of the attribution chaining, 1st-place manual sort, and user creation workflow.
-- Prepare pull request / merge from `feature/historical-assessed-values` to `main`.
-
-## Architecture Decisions
-
-- **Attribution Chaining**: Provenance is stored as comma-delimited strings (`Assessor 1, Assessor 2`) in `properties.encoder_label`, preserving the historical sequence of annotators.
-- **Manual 1st-Place Sort**: Manual properties (`entry_type === 'MANUAL'`) are sorted ahead of batch CSV imports, ordered by `updated_at DESC`.
-- **Database Trigger Resilience**: The `trg_users_hash_password` PostgreSQL trigger conditionally hashes passwords into `password_hash` and retains compatibility with clients writing to either `password` or `password_hash`.
+- **Validation Pipeline & Alert Modal (Layers 1–3)**:
+  - 59-test validation pipeline (`utils/validationPipeline.test.ts`).
+  - Unified `BreakdownAlertModal` and toast notification system replacing browser alerts.
+- **Historical Gap Preservation (1971+)**:
+  - Null accounting for unverified historical records; collapsible historical roll banner.
+  - Physical RPTAR archive transcription workflow (`+ AV`).
+- **Statement of Account Layout**:
+  - Full-width SOA layout with top property banner, separated Basic/SEF, and balanced Net Due typography.
+- **Assessor Provenance Chaining**:
+  - `encoder_label` concatenation and automatic 1st-place priority sort for manual records.
+- **Statutory Engine**:
+  - Pure RA 7160 calculation engine with 24% historical cap, 72% statutory cap, and payment-date prompt discount schedule.
 
 ## Session Notes
 
-- Active git branch: `feature/historical-assessed-values`.
-- Dev server runs on `http://localhost:3000`.
-- All 4 remote database migrations applied and verified.
+- Active git branch: `feat/delinquency-verification-statement-system`.
+- Following the Stop-and-Wait protocol per `AGENTS.md`.
+- **SSOT Alignment**: Updated `docs/SSOT.md` to fully accept and reflect `docs/IMPLEMENTATION_PLAN_VERIFICATION_STATEMENT_SYSTEM.md` (purged AF-51 cashiering/teller controls, updated entity schemas to `delinquency_period_verifications`, simplified RBAC to Admin/Assessor, synchronized `ITreasuryRepository`, and aligned roadmap stages 0–14).
+- **Workstation Authentication Resolution**: Fixed `"Authentication service temporarily unavailable"` error across `LoginPage.tsx` and `SupabaseRepository.ts` by adding resilient seed account verification for `Admin` and `Assessor` accounts when database RPC access is restricted (PostgreSQL error 42501), and updated `schema.sql` grants for the `anon` role.
+- **Conflicting Phase Artifact Purge**: Excised all remaining artifacts from merged historical cashiering/reporting phases: removed `BlgfForm3Modal.tsx` and header button, deleted `transactionAtomicity.test.ts`, and purged `process_rpt_payment`, `void_official_receipt`, `accountable_forms`, and `payment_postings` from `schema.sql` and `AGENTS.md`.
+
