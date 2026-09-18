@@ -266,10 +266,9 @@ export function validatePin(pin: string | undefined): ValidationResult {
  */
 export const VALID_PROPERTY_CLASSES = [
   'Residential',
-  'Commercial',
+  'Dwell House',
   'Industrial',
   'Agricultural',
-  'Special',
   'Machinery',
 ] as const;
 

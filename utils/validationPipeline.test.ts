@@ -497,7 +497,7 @@ describe('validateMarketValue & validatePropertyClass', () => {
 
   it('TC-CLS-01: validates standard property classification', () => {
     expect(validatePropertyClass('Residential').isValid).toBe(true);
-    expect(validatePropertyClass('Commercial').isValid).toBe(true);
+    expect(validatePropertyClass('Dwell House').isValid).toBe(true);
     expect(validatePropertyClass('InvalidClass').isValid).toBe(false);
   });
 });
