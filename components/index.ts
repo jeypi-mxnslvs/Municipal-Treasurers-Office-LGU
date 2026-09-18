@@ -5,6 +5,6 @@ export * from './ui';
 export { LoginPage, UserManagementModal } from '@/features/auth';
 export { DashboardTable, PropertyCard, RptarModal, BulkImportModal } from '@/features/properties';
 export { DelinquencyTable } from '@/features/assessment';
-export { OfficialReceiptModal } from '@/features/collections';
+export { TaxClearanceModal } from '@/features/reports';
 export { DashboardStats } from '@/features/dashboard';
 export { AuditLogModal } from '@/features/audit';

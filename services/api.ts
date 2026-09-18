@@ -1,31 +1,26 @@
 import { ITreasuryRepository } from './ITreasuryRepository';
 import { SupabaseRepository } from './SupabaseRepository';
 import { LocalHttpRepository } from './LocalHttpRepository';
-import { OfflineTreasuryRepository } from './offline/OfflineTreasuryRepository';
-import { offlineStorage } from './offline/OfflineStorage';
-import { offlineSyncService } from './offline/OfflineSyncService';
 import {
   Property,
   CalculationResult,
-  OfficialReceipt,
   DashboardStatsData,
   User,
   RptarAuditLog,
   SyncStatusData,
   SecurityAuditLog,
-  AccountableFormBooklet,
   TaxYearRecord,
   MunicipalTaxSettings,
-  CsvImportBatch
+  CsvImportBatch,
+  DelinquencyPeriodVerification,
+  DelinquencyPeriodStatus,
+  VerificationType
 } from '@/types';
-
-export { offlineStorage, offlineSyncService };
 
 /**
  * Pluggable Repository Driver Factory
  *
- * Supports Cloud (Supabase), Local On-Premise (LocalHttpRepository),
- * and Offline Mobile Tellering Outbox (OfflineTreasuryRepository).
+ * Supports Cloud (Supabase) and Local On-Premise (LocalHttpRepository).
  * Controlled seamlessly via VITE_BACKEND_DRIVER environment variable.
  */
 const backendDriver = import.meta.env.VITE_BACKEND_DRIVER || 'supabase';
@@ -36,15 +31,13 @@ const baseDriver: ITreasuryRepository =
     ? new LocalHttpRepository(localBaseUrl)
     : new SupabaseRepository();
 
-export const treasuryRepository: ITreasuryRepository = new OfflineTreasuryRepository(baseDriver);
+export const treasuryRepository: ITreasuryRepository = baseDriver;
 
 /**
  * Application-facing facade (`api`).
  * 
  * Preserves the existing UI-facing interface while delegating 100% of data access
  * and persistence operations to `ITreasuryRepository`.
- * 
- * Zero direct Supabase dependencies exist in this file.
  */
 export const api = {
   // 1. Properties & Assessment
@@ -83,39 +76,37 @@ export const api = {
     return treasuryRepository.lookupSfmv(barangay, propertyClass);
   },
 
-  // 2. Payments & Receipts (COA AF-51)
-  postPayment(payload: {
+  // 2. Delinquency Period Verification & External Settlement Evidence
+  verifyDelinquencyPeriod(payload: {
     propertyId: string | number;
-    paidRecords: TaxYearRecord[];
-    tenderType: string;
-    tenderReference?: string;
-    postedBy: string;
+    tdNumber: string;
+    periodKey: string;
+    taxYear: number;
+    periodLabel: string;
+    status: DelinquencyPeriodStatus;
+    verificationType: VerificationType;
+    sourceReference?: string;
+    remarks?: string;
+    verifiedBy: number | string;
     stationId?: string;
-    userId?: number;
-  }): Promise<OfficialReceipt> {
-    return treasuryRepository.postPayment(payload);
+  }): Promise<DelinquencyPeriodVerification> {
+    return treasuryRepository.verifyDelinquencyPeriod(payload);
   },
 
-  voidReceipt(payload: {
-    receiptNo: string;
-    reason: string;
+  revertDelinquencyVerification(payload: {
+    verificationId?: number | string;
+    propertyId: string | number;
+    periodKey?: string;
+    taxYear: number;
     authorizedBy: string;
+    reason: string;
     stationId?: string;
-  }): Promise<{ message: string; receiptNo: string }> {
-    return treasuryRepository.voidReceipt(payload);
+  }): Promise<void> {
+    return treasuryRepository.revertDelinquencyVerification(payload);
   },
 
-  // 3. Accountable Forms (AF-51)
-  getActiveBooklet(username?: string): Promise<AccountableFormBooklet | null> {
-    return treasuryRepository.getActiveBooklet(username);
-  },
-
-  getBooklets(): Promise<AccountableFormBooklet[]> {
-    return treasuryRepository.getBooklets();
-  },
-
-  assignBooklet(bookletId: string, username: string, userId?: number): Promise<void> {
-    return treasuryRepository.assignBooklet(bookletId, username, userId);
+  getPeriodVerifications(propertyId: string | number): Promise<DelinquencyPeriodVerification[]> {
+    return treasuryRepository.getPeriodVerifications(propertyId);
   },
 
   // 4. Dashboard Statistics & Live Multi-Assessor Sync

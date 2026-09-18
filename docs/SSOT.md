@@ -1,6 +1,6 @@
-# LGU Treasury Connect — Single Source of Truth (SSOT)
+# Real Property Tax Delinquency Verification & Statement System — Single Source of Truth (SSOT)
 **System Specification & Canonical Architecture Document**  
-**Municipality of Santa Rosa, Nueva Ecija — Real Property Tax Administration System (RPTAS)**
+**Municipality of Santa Rosa, Nueva Ecija**
 
 ---
 
@@ -8,12 +8,12 @@
 
 | Property | Canonical Specification |
 |---|---|
-| **System Name** | LGU Treasury Connect (Santa Rosa RPTAS) |
-| **Document Purpose** | Single Source of Truth (SSOT) governing all data models, statutory tax logic, security policies, accountable forms controls, and feature branch implementations. |
+| **System Name** | Real Property Tax Delinquency Verification & Statement System |
+| **Document Purpose** | Single Source of Truth (SSOT) governing all property assessment rolls, historical valuation provenance, statutory delinquency calculations under RA 7160, delinquency-period verification, external settlement evidence references, Statement of Account (SOA), Notice of Delinquency (Sec. 254), and conditional tax-clearance eligibility for the Municipality of Santa Rosa, Nueva Ecija. |
 | **Jurisdiction** | Municipality of Santa Rosa, Province of Nueva Ecija, Region III, Philippines |
-| **Statutory Framework** | Republic Act No. 7160 (Local Government Code of 1991, Title II), Provincial Tax Ordinance of Nueva Ecija, Municipal Revenue Code of Santa Rosa, Commission on Audit (COA) Circulars 2002-003 & 2012-001 |
+| **Statutory Framework** | Republic Act No. 7160 (Local Government Code of 1991, Title II), Provincial Tax Ordinance of Nueva Ecija, Municipal Revenue Code of Santa Rosa |
 | **Current Baseline** | v1.0.0 (Vite + React 18 + TypeScript + Local Tailwind CSS + shadcn/ui + Vitest) |
-| **Roadmap Companion** | [`ROADMAP_AND_PHASES.md`](file:///home/jeipyyy/Documents/Projects/LGU-Treasury-Connect/lgu-treasury-connect/docs/ROADMAP_AND_PHASES.md) |
+| **Plan Companion** | [`IMPLEMENTATION_PLAN_VERIFICATION_STATEMENT_SYSTEM.md`](file:///home/jeipyyy/Documents/Projects/Municipal-Treasurers-Office-Delinquency-System/Municipal-Treasurers-Office-Delinquency-System/docs/IMPLEMENTATION_PLAN_VERIFICATION_STATEMENT_SYSTEM.md) |
 
 ---
 
@@ -101,14 +101,14 @@ Every manual modification to `Basic Tax`, `SEF Tax`, or `Discount Rate` creates 
   - `reason` (mandatory assessor justification)
   - `created_at` (audit timestamp)
 
-### 2.7 "Arrears First" Sequential Settlement Rule
-- Taxpayers **cannot** pay current year (2026) dues while delinquent prior-year liabilities remain unsettled.
-- Payment scopes must be applied strictly in chronological order starting from the earliest unpaid year ($\text{lastPaidYear} + 1$).
-- Tellers may select 1 Quarter, 1 Year, or Full Payoff, but selection must anchor on the oldest unpaid record.
+### 2.7 "Arrears First" Sequential Verification Rule
+- Taxpayers **cannot** have current year (2026) dues cleared or verified while delinquent prior-year liabilities remain unverified or unsettled.
+- Verification and statement scopes must be applied strictly in chronological order starting from the earliest unpaid year ($\text{lastPaidYear} + 1$).
+- Authorized Assessors may verify 1 Quarter, 1 Year, or Full Payoff, but selection must anchor on the oldest unpaid record.
 
 ### 2.8 Shell Records Rule
 - Properties flagged as `is_shell_record = true` represent historical, unverified, or fragmented legacy parcels lacking a verified Tax Declaration (TD) Number or Property Identification Number (PIN).
-- **Payment Prohibition**: Shell records **cannot** have payments posted until formally verified, updated with SFMV rates, and certified by the Municipal Assessor.
+- **Verification Prohibition**: Shell records **cannot** have delinquency verified or Tax Clearance Certificates issued until formally verified, updated with SFMV rates, and certified by the Municipal Assessor.
 
 ### 2.9 Statutory Notice of Delinquency (RA 7160 Sec. 254 Specification)
 Under **Section 254 of Republic Act No. 7160 (Local Government Code of 1991)**, when real property tax becomes delinquent, the local treasurer must issue a formal Notice of Delinquency. The canonical Santa Rosa Notice of Delinquency document structure, period aggregation brackets, and signatory specifications are codified below:
@@ -125,7 +125,7 @@ Under **Section 254 of Republic Act No. 7160 (Local Government Code of 1991)**, 
 - **Statutory Notice Text**:
   > *"Notice is hereby served pursuant to the provision of Section 254, Republic Act No. 7160 (Local Government Code of 1991) the Real Property Tax for Calendar year 2025 and the previous years, has been delinquent with the respect to the figures."*
 - **Audit References**:
-  - `OR#`: Number of latest issued Official Receipt (Accountable Form 51)
+  - `OR#`: Number of latest external Official Receipt or settlement document
   - `LAST PAYMENT:`: Date and details of last recorded settlement
   - `Notice Serving Period`: Current tax operations window (e.g. `SEPTEMBER 01-31, 2026`)
 
@@ -198,10 +198,10 @@ The database schema must adhere to this unified specification across Supabase Cl
 
 ```mermaid
 erDiagram
-    users ||--o{ payment_postings : "posts"
+    users ||--o{ delinquency_period_verifications : "verifies"
     users ||--o{ rptar_audit_logs : "records"
-    users ||--o{ accountable_forms : "assigned_to"
-    properties ||--o{ payment_postings : "receives"
+    properties ||--o{ delinquency_period_verifications : "has"
+    properties ||--o{ delinquency_year_completions : "completes"
     properties ||--o{ rptar_audit_logs : "audits"
     schedule_of_market_values ||--o{ properties : "values"
 
@@ -228,7 +228,11 @@ erDiagram
         numeric market_value
         numeric assessed_value
         int last_paid_year
+        int last_paid_quarter
         boolean is_shell_record
+        int delinquency_start_year
+        int parcel_origin_year
+        jsonb historical_assessed_values
         timestamptz created_at
         timestamptz updated_at
     }
@@ -241,34 +245,35 @@ erDiagram
         numeric assessment_level
     }
 
-    payment_postings {
+    delinquency_period_verifications {
         int id PK
-        text receipt_no UK
         int property_id FK
-        jsonb paid_records
-        numeric total_paid
-        numeric basic_tax
-        numeric sef_tax
-        numeric penalty_amount
-        numeric discount_amount
-        numeric discount_rate
-        text tender_type
-        text tender_reference
+        text td_number_snapshot
+        text period_key
+        int tax_year
+        text period_label
         text status
-        text posted_by
-        timestamptz posted_at
+        text verification_type
+        text source_reference
+        text remarks
+        text verified_by
+        timestamptz verified_at
+        text station_id
+        int supersedes_id FK
+        text reversal_reason
+        timestamptz created_at
     }
 
-    accountable_forms {
+    delinquency_year_completions {
         int id PK
-        text form_type
-        text booklet_no
-        int series_start
-        int series_end
-        int current_serial
-        int assigned_to_user_id FK
-        text status
-        timestamptz assigned_at
+        int property_id FK
+        int tax_year
+        boolean is_fully_settled
+        text completion_source
+        text verified_by
+        timestamptz verified_at
+        text remarks
+        timestamptz created_at
     }
 
     rptar_audit_logs {
@@ -330,21 +335,23 @@ erDiagram
 | | `market_value` | `marketValue` | `number` | No | Total Market Value (PHP) |
 | | `assessed_value` | `assessedValue` | `number` | No | Total Taxable Assessed Value |
 | | `last_paid_year` | `lastPaidYear` | `number` | No | Default `2025` |
+| | `last_paid_quarter` | `lastPaidQuarter` | `number` | No | Default `4` |
 | | `is_shell_record` | `isShellRecord` | `boolean` | No | Default `false` |
-| **Receipt Snapshot** | `receipt_no` | `receiptNo` | `string` | No | AF-51 Sequential No. |
+| | `historical_assessed_values` | `historicalAssessedValues` | `Record<string, HistoricalAssessedValueItem>` | Yes | Era valuation overrides |
+| **Delinquency Verification** | `id` | `id` | `number` | No | Primary Key |
 | | `property_id` | `propertyId` | `number` | No | Foreign Key $\rightarrow$ `properties.id` |
-| | `paid_records` | `itemizedRecords` | `TaxYearRecord[]` | No | JSONB snapshot of settled dues |
-| | `basic_tax` | `basicTax` | `number` | No | Applied Basic Tax snapshot |
-| | `sef_tax` | `sefTax` | `number` | No | Applied SEF Tax snapshot |
-| | `discount_rate` | `discountRate` | `number` | No | Applied Discount % snapshot |
-| | `discount_amount` | `discountAmount` | `number` | No | Applied Discount PHP snapshot |
-| | `penalty_amount` | `penaltyAmount` | `number` | No | Applied Penalty PHP snapshot |
-| | `total_paid` | `totalPaid` | `number` | No | Net Amount Due snapshot |
-| | `tender_type` | `tenderType` | `'CASH' \| 'CHECK' \| 'ONLINE'` | No | Tender classification |
-| | `tender_reference`| `tenderReference` | `string` | Yes | Check No. / Transaction ID |
-| | `status` | `status` | `'ISSUED' \| 'VOIDED'` | No | Default `'ISSUED'` |
-| | `posted_by` | `postedBy` | `string` | No | Teller name / username |
-| | `posted_at` | `date` | `string` (ISO 8601) | No | Timestamp of issuance |
+| | `td_number_snapshot` | `tdNumberSnapshot` | `string` | No | Snapshot of TD Number at verification |
+| | `period_key` | `periodKey` | `string` | No | Period bracket identifier (e.g. `2024`, `1994-2005`) |
+| | `tax_year` | `taxYear` | `number` | No | Assessment calendar year |
+| | `period_label` | `periodLabel` | `string` | No | Human-readable period label |
+| | `status` | `status` | `DelinquencyPeriodStatus` | No | Verification lifecycle state |
+| | `verification_type` | `verificationType` | `VerificationType` | No | Evidence type (OFFICIAL_RECEIPT, CERTIFICATE, etc.) |
+| | `source_reference` | `sourceReference` | `string` | Yes | External receipt #, check #, certificate # |
+| | `remarks` | `remarks` | `string` | Yes | Assessor remarks and audit notes |
+| | `verified_by` | `verifiedBy` | `string` | No | Assessor name/identifier |
+| | `verified_at` | `verifiedAt` | `string` (ISO 8601) | No | Timestamp of verification |
+| | `supersedes_id` | `supersedesId` | `number` | Yes | Pointer to superseded prior verification |
+| | `reversal_reason` | `reversalReason` | `string` | Yes | Reason for supervisory reversal |
 
 ### 3.2 Assessor Import Center & Smart Barangay Upsert Specification
 The system supports continuous ingestion of property rolls categorized across Santa Rosa's 33 barangays:
@@ -353,8 +360,8 @@ The system supports continuous ingestion of property rolls categorized across Sa
    - If incoming row matches an existing `td_number` in the database, update property details (owner, address, classification, valuations) with newer data.
    - If incoming row does not exist, insert it as a new property.
    - Preserves unmentioned properties in that barangay.
-3. **Financial History Protection (INVARIANT)**:
-   - Bulk CSV imports must **never** overwrite or reset financial transaction records or payment milestones (`last_paid_year`, `payment_postings`). Tax liability and settlement status remain strictly under treasury cashier jurisdiction.
+3. **Assessment History Protection (INVARIANT)**:
+   - Bulk CSV imports must **never** silently reset independently verified delinquency statuses or settlement audit trails (`delinquency_period_verifications`, `rptar_audit_logs`).
 4. **Staging Workflow**:
    $$\text{Upload} \longrightarrow \text{Validate} \longrightarrow \text{Stage} \longrightarrow \text{Review/Diff} \longrightarrow \text{Authorize} \longrightarrow \text{Atomic Upsert} \longrightarrow \text{Audit Log} \longrightarrow \text{Batch History}$$
 5. **Row Validation States**:
@@ -368,82 +375,70 @@ The system supports continuous ingestion of property rolls categorized across Sa
    - `INVALID_NUMERIC_VALUE`: Negative, NaN, or corrupted market/assessed value.
    - `CONFLICTING_RECORD`: Parcel exhibits conflicting ownership or boundary constraints.
 6. **Idempotency**: Re-uploading an identical CSV produces zero spurious updates or duplicate audit noise.
-| | `previous_td_number` | `previousTdNumber` | `string` | Yes | Prior cancelled TD |
-| | `pin` | `pin` | `string` | Yes | Property Identification No. |
-| | `owner_name` | `ownerName` | `string` | No | Declared Owner |
-| | `address` | `address` | `string` | No | Property location |
-| | `barangay` | `barangay` | `string` | No | One of 33 Santa Rosa barangays |
-| | `property_class` | `propertyClass` | `string` | No | Residential, Agricultural, etc. |
-| | `lot_area_sqm` | `lotAreaSqm` | `number` | Yes | Area in square meters |
-| | `market_value` | `marketValue` | `number` | No | Total Market Value (PHP) |
-| | `assessed_value` | `assessedValue` | `number` | No | Total Taxable Assessed Value |
-| | `last_paid_year` | `lastPaidYear` | `number` | No | Default `2025` |
-| | `is_shell_record` | `isShellRecord` | `boolean` | No | Default `false` |
-| **Receipt** | `receipt_no` | `receiptNo` | `string` | No | AF-51 Sequential No. |
-| | `property_id` | `propertyId` | `number` | No | Foreign Key $\rightarrow$ `properties.id` |
-| | `paid_records` | `itemizedRecords` | `TaxYearRecord[]` | No | JSONB array of settled years |
-| | `total_paid` | `totalPaid` | `number` | No | Grand total in PHP |
-| | `tender_type` | `tenderType` | `'CASH' \| 'CHECK' \| 'ONLINE'` | No | Tender classification |
-| | `tender_reference`| `tenderReference` | `string` | Yes | Check No. / Transaction ID |
-| | `status` | `status` | `'ISSUED' \| 'VOIDED'` | No | Default `'ISSUED'` |
-| | `posted_by` | `postedBy` | `string` | No | Teller name / username |
-| | `posted_at` | `date` | `string` (ISO 8601) | No | Timestamp of issuance |
 
 ---
 
-## 4. Financial Controls & Accountable Forms (AF-51)
+## 4. Delinquency Verification, External Settlement Evidence, and Tax Clearance Protocols
 
-Philippine Local Government Code and Commission on Audit (COA) Circulars mandate strict inventory controls over accountable forms.
+The system functions strictly as an assessment verification, delinquency auditing, and statement generation engine. Direct cash collection, physical receipt issuance, and cashiering have been decoupled from this system boundary.
 
-### 4.1 Accountable Form 51 (AF-51) Official Receipt Rules
-1. **Serial Continuity**: Receipt numbers **must** follow an unbroken sequential series. Random number generation (`Math.random()`) is strictly prohibited in production.
-2. **Booklet Stub Custody**:
-   - Each physical booklet contains 50 triplicate receipts (Original: Taxpayer, Duplicate: Accounting, Triplicate: Treasury stub).
-   - Booklets are assigned to bonded tellers by Booklet Number and Serial Range (e.g. `Series: 4500001 - 4500050`).
-3. **Atomic Serial Increment**:
-   - The system locks the current booklet record (`SELECT ... FOR UPDATE`) to increment the serial counter during payment generation, preventing race conditions across parallel counters.
+### 4.1 Delinquency-Period Verification Lifecycle
+Each historical and modern tax period is governed by a formal lifecycle state:
+- `UNVERIFIED`: Insufficient evidence; default unconfirmed assessment state.
+- `VERIFIED_OUTSTANDING`: Statutory liability determined; confirmed delinquent and outstanding.
+- `VERIFIED_SETTLED_EXTERNALLY`: Confirmed settled outside this system via authenticated Treasury evidence.
+- `DISPUTED`: Conflicting documentary evidence or taxpayer boundary/assessment dispute under review.
+- `NOT_APPLICABLE`: No tax liability exists for this parcel in the designated period.
+- `SUPERSEDED`: Prior verification decision replaced by a newer authorized administrative correction.
 
-### 4.2 Official Receipt Cancellation & Voiding Protocol
-1. **Zero Deletion Rule**: Issued receipts are **never** deleted from the database.
-2. **Supervisory Dual-Custody**:
-   - A teller cannot void their own receipt unilaterally. Voiding requires an `Admin` or `Treasury Supervisor` counter-authorization.
-3. **Ledger Rollback**:
-   - Voiding an OR resets the associated property's `last_paid_year` to its pre-payment state.
-   - The receipt record status changes to `'VOIDED'` with timestamp, cancellation reason code, and authorizing officer username.
+### 4.2 External Settlement Evidence Standards
+When recording settlement for a tax period, authorized assessors must record reference evidence:
+1. **Source Reference**: External Official Receipt (AF-51) number, Certificate of Settlement reference, Land Bank check/deposit serial, or physical RPTAR ledger page.
+2. **Evidence Classification** (`verification_type`):
+   - `OFFICIAL_RECEIPT`: Settled via physical treasury cashier stub.
+   - `PRIOR_RECORD_LEDGER`: Historical RPTAR book notation.
+   - `CERTIFICATE_OF_CLEARANCE`: Valid prior municipal tax clearance presented.
+   - `BANK_DEPOSIT_CHECK`: Certified manager's check or Land Bank deposit slip.
+   - `MANUAL_ASSESSOR_ADJUSTMENT`: Administrative court order or assessor council resolution.
+3. **No Financial POS Functions**: The system does not accept monetary tenders (cash/check/online POS) or increment physical receipt booklets.
 
-### 4.3 Payment Snapshot & Financial Immutability
-When an Official Receipt (AF-51) is posted:
-1. **Permanent Snapshot**: The transaction locks in the final applied `basic_tax`, `sef_tax`, `discount_rate`, `discount_amount`, `penalty_amount`, and `total_paid` (`netAmountDue`).
-2. **Strict Immutability**: Later modifications to municipal tax settings, Schedule of Market Values, or individual property assessments must **never** retroactively recalculate or modify already-posted payment records. Historical receipts reflect the exact statutory and authorized financial values at the moment of issuance.
+### 4.3 Supervisory Reversal & Superseding Protocol
+1. **Administrative Authority**: Only users with the `Admin` role may reverse or supersede an existing delinquency verification.
+2. **Mandatory Audit Justification**: Reversals require an explicit justification note recorded in `rptar_audit_logs`.
+3. **Zero Physical Deletion**: Verification records are marked `SUPERSEDED` with `reversal_reason` and `supersedes_id` preserved for auditability.
+
+### 4.4 Statements & Statutory Reports
+1. **Statement of Account (SOA)**: Official itemized calculation statement reflecting Santa Rosa municipal roll brackets, statutory penalties, prompt discounts, and grand totals.
+2. **SOA CSV Export**: Standard comma-separated export formatted for taxpayer review and external financial reconciliation.
+3. **Notice of Delinquency**: Formal statutory notice issued under RA 7160 Sec. 254.
+4. **Conditional Tax Clearance Certificate**: Issued exclusively when a property has 0 outstanding liabilities and all tax periods through the current year are fully verified and settled.
 
 ---
 
 ## 5. Security Architecture & Role-Based Access Control (RBAC)
 
 ### 5.1 Role Hierarchy & Permissions Matrix
+The system strictly authorizes two workstation roles: **Admin** and **Assessor**.
 
-> [!WARNING]
-> **RBAC Conflict Notice Requiring Municipal Confirmation**:
-> The matrix below designates **Bulk Import Assessment Data (CSV)** as strictly `Admin` only. However, existing operational documentation (e.g. `README.md`) permits `Assessor` desks to ingest barangay rolls. 
-> **Action Required**: This conflict must be formally resolved and confirmed with the Municipal Treasurer / Assessor before production locking.
-
-| Capability / Resource | Admin | Assessor | Cashier (Teller) | Viewer (Mayor / Exec) |
-|---|:---:|:---:|:---:|:---:|
-| **View Dashboard & Collection KPIs** | ✅ | ✅ | ✅ | ✅ (Read-Only) |
-| **Search & View Property Records** | ✅ | ✅ | ✅ | ✅ |
-| **Calculate Dues & Tax Assessment** | ✅ | ✅ | ✅ | ✅ |
-| **Create / Update Property Masterlist** | ✅ | ✅ | ❌ | ❌ |
-| **Verify / Promote Shell Records** | ✅ | ✅ | ❌ | ❌ |
-| **Bulk Import Assessment Data (CSV)** | ✅ | ⚠️ *Conflict* | ❌ | ❌ |
-| **Issue AF-51 Official Receipts** | ✅ | ✅ | ✅ | ❌ |
-| **Void / Cancel Official Receipts** | ✅ (Authorized) | ❌ | ❌ | ❌ |
-| **Manage Users & Stations** | ✅ | ❌ | ❌ | ❌ |
-| **Assign Accountable Form Booklets** | ✅ | ❌ | ❌ | ❌ |
-| **Configure Municipal Tax Settings** | ✅ | ❌ | ❌ | ❌ |
-| **View Audit Logs** | ✅ | ✅ (Read) | ❌ | ❌ |
+| Capability / Resource | Admin | Assessor |
+|---|:---:|:---:|
+| **View Dashboard & Verification KPIs** | ✅ | ✅ |
+| **Search & View Property Records** | ✅ | ✅ |
+| **Calculate Dues & Tax Assessment** | ✅ | ✅ |
+| **Create / Update Property Masterlist** | ✅ | ✅ |
+| **Verify / Promote Shell Records** | ✅ | ✅ |
+| **Bulk Import Assessment Data (CSV)** | ✅ | ✅ |
+| **Verify Delinquency Periods & Record External Evidence** | ✅ | ✅ |
+| **Reverse / Supersede Delinquency Verification** | ✅ | ❌ |
+| **Generate Statement of Account (SOA & SOA CSV)** | ✅ | ✅ |
+| **Generate Notice of Delinquency (RA 7160 Sec. 254)** | ✅ | ✅ |
+| **Issue Tax Clearance Certificate (when eligible)** | ✅ | ✅ |
+| **Manage Users & Workstations** | ✅ | ❌ |
+| **Configure Municipal Tax Settings** | ✅ | ❌ |
+| **View Audit Logs** | ✅ | ✅ (Read-Only) |
 
 ### 5.2 Password & Authentication Policy
-- **Storage**: Passwords must be hashed using `Bcrypt` (minimum work factor 12) or `Argon2id`. No plaintext passwords may exist in database columns or REST payloads.
+- **Storage**: Passwords must be hashed using `Bcrypt` (minimum work factor 10). No plaintext passwords may exist in database columns or REST payloads.
 - **Sessions**: JWT tokens with 8-hour maximum lifetime; automatic UI inactivity lock after 15 minutes of idle time.
 - **Database Enforcement**: Row-Level Security (RLS) enabled on all PostgreSQL tables using verified JWT claims (`auth.uid()` and `auth.jwt() ->> 'role'`).
 
@@ -467,34 +462,98 @@ All UI components interact exclusively with the repository contract, decoupling 
 
 ```typescript
 export interface ITreasuryRepository {
-  // Properties & Assessment
-  getProperties(params: { search?: string; barangay?: string; page?: number; limit?: number }): Promise<Property[]>;
-  getPropertyAssessment(propertyId: string | number): Promise<CalculationResult>;
-  saveProperty(data: Partial<Property>): Promise<Property>;
-  
-  // Collections & Receipts
-  processPayment(payload: ProcessPaymentPayload): Promise<OfficialReceipt>;
-  voidReceipt(receiptNo: string, reason: string, authorizedBy: string): Promise<void>;
-  
-  // Accountable Forms
-  getActiveBooklet(userId: string | number): Promise<AccountableFormBooklet | null>;
-  
-  // Reporting & Audit
+  // 1. Properties & Assessment
+  getProperties(search?: string, barangay?: string): Promise<Property[]>;
+  getPropertyAssessment(propertyId: string, fallbackProp?: Property, customSettings?: MunicipalTaxSettings): Promise<CalculationResult>;
+  getPropertyCompletedRecords(propertyId: string | number, property?: Property): Promise<TaxYearRecord[]>;
+  saveProperty(propertyData: Partial<Property>): Promise<Property>;
+  saveHistoricalAssessedValue(payload: {
+    propertyId: string | number;
+    periodLabel: string;
+    value: number;
+    rptarPageReference?: string;
+    assessorName: string;
+    reason?: string;
+  }): Promise<Property>;
+  deleteProperty(propertyId: string): Promise<void>;
+  lookupSfmv(barangay: string, propertyClass: string): Promise<{ base_rate_sqm: number; assessment_level: number }>;
+
+  // 2. Delinquency Period Verification & External Settlement Evidence
+  verifyDelinquencyPeriod(payload: {
+    propertyId: string | number;
+    tdNumber: string;
+    periodKey: string;
+    taxYear: number;
+    periodLabel: string;
+    status: DelinquencyPeriodStatus;
+    verificationType: VerificationType;
+    sourceReference?: string;
+    remarks?: string;
+    verifiedBy: number | string;
+    stationId?: string;
+  }): Promise<DelinquencyPeriodVerification>;
+
+  revertDelinquencyVerification(payload: {
+    verificationId?: number | string;
+    propertyId: string | number;
+    periodKey?: string;
+    taxYear: number;
+    authorizedBy: string;
+    reason: string;
+    stationId?: string;
+  }): Promise<void>;
+
+  getPeriodVerifications(propertyId: string | number): Promise<DelinquencyPeriodVerification[]>;
+
+  // 3. Reporting, Analytics & Multi-Assessor Sync
   getDashboardStats(): Promise<DashboardStatsData>;
-  getAuditLogs(filters?: AuditLogFilters): Promise<RptarAuditLog[]>;
-  
-  // Auth
-  login(credentials: LoginCredentials): Promise<AuthSession>;
+  getSyncStatus(): Promise<SyncStatusData>;
+  subscribeToMutations(onMutation: (mutation: { timestamp: string; author: string; action: string; tdNumber?: string }) => void): () => void;
+
+  // 4. User Management & Authentication
+  getUsers(): Promise<User[]>;
   lookupUser(username: string): Promise<User | null>;
+  login(username: string, password: string, stationId?: string): Promise<{ token: string; user: User }>;
+  verifyPassword(username: string, password: string): Promise<boolean>;
+  registerUser(userData: {
+    username: string;
+    password: string;
+    fullName: string;
+    role: string;
+    stationId: string;
+  }): Promise<{ message: string; user: User }>;
+  deleteUser(id: string | number, adminUsername?: string): Promise<{ message: string }>;
+  resetUserPassword(id: string | number, newPassword: string, adminUsername?: string): Promise<{ message: string }>;
+
+  // 5. Audit Logs & Forensic History
+  getPropertyAudit(propertyId: string | number): Promise<RptarAuditLog[]>;
+  getAllAuditLogs(): Promise<RptarAuditLog[]>;
+  logSecurityEvent(event: {
+    eventType: SecurityAuditLog['event_type'];
+    username: string;
+    userId?: number;
+    stationId?: string;
+    details?: string;
+  }): Promise<void>;
+  logAudit(entry: Omit<RptarAuditLog, 'id' | 'timestamp'>): Promise<void>;
+
+  // 6. Tax Policy & Settings
+  getTaxSettings(): Promise<MunicipalTaxSettings>;
+  updateTaxSettings(settings: Partial<MunicipalTaxSettings>, updatedBy?: string): Promise<MunicipalTaxSettings>;
+
+  // 7. Bulk CSV Ingestion History
+  getImportBatches(): Promise<CsvImportBatch[]>;
+  saveImportBatch(batch: Omit<CsvImportBatch, 'id' | 'createdAt'>): Promise<CsvImportBatch>;
+  batchUpsertProperties(properties: Partial<Property>[]): Promise<{ inserted: number; updated: number; unchanged: number }>;
 }
 ```
 
-### 6.3 Tax Assessment UI & Authorized Override Layout Specification
-The Tax Assessment modal and teller interface must distinctly display system-calculated defaults alongside authorized editable inputs:
+### 6.3 Tax Assessment UI & Delinquency Verification Layout Specification
+The Tax Assessment modal distinctly displays system-calculated defaults alongside authorized editable inputs:
 
 ```text
 +--------------------------------------------------------------+
-| Tax Assessment & Settlement (Tax Year: 2026)                 |
+| Tax Assessment & Delinquency Verification (Tax Year: 2026)   |
 +--------------------------------------------------------------+
 | Basic Tax (1%)                                               |
 | [ ₱1,000.00                                            ✎ ]  |
@@ -515,15 +574,15 @@ The Tax Assessment modal and teller interface must distinctly display system-cal
 | NET AMOUNT DUE:                                  ₱1,600.00   |
 +--------------------------------------------------------------+
 ```
-- Visual indicators (e.g. amber tag or icon) appear whenever a field differs from its system default.
-- Any manual override requires an accompanying reason before payment posting or clearance slip generation.
+- Visual indicators appear whenever an assessor edit differs from the system default.
+- Any manual override requires an accompanying reason recorded in `rptar_audit_logs`.
 
 ---
 
 ## 7. Santa Rosa Geographical & Administrative Constants
 
 ### 7.1 Santa Rosa Barangays (33 Canonical Barangays)
-The 33 official barangays of Santa Rosa, Nueva Ecija defined in [`constants.ts`](file:///home/jeipyyy/Documents/Projects/LGU-Treasury-Connect/lgu-treasury-connect/constants.ts):
+The 33 official barangays of Santa Rosa, Nueva Ecija defined in [`constants.ts`](file:///home/jeipyyy/Documents/Projects/Municipal-Treasurers-Office-Delinquency-System/Municipal-Treasurers-Office-Delinquency-System/constants.ts):
 1. `Aguinaldo`
 2. `Berang`
 3. `Burgos`
@@ -558,27 +617,34 @@ The 33 official barangays of Santa Rosa, Nueva Ecija defined in [`constants.ts`]
 32. `Valenzuela (Poblacion)`
 33. `Zamora (Poblacion)`
 
-### 7.2 Municipal Treasury Administration & Canonical Signatories
-The canonical administrative officers and signatories for the Municipality of Santa Rosa, Nueva Ecija Treasury:
+### 7.2 Municipal Administration & Canonical Signatories
+The canonical administrative officers and signatories for the Municipality of Santa Rosa, Nueva Ecija:
 - **Municipal Treasurer**: `Myra V. Cunanan`
-- **Collecting Officers**: `Revenue Collection Clerk` (authorized tellers and collection officers)
 - **Official Designation**: `Office of the Treasurer, Municipality of Santa Rosa, Province of Nueva Ecija`
 
 ---
 
-## 8. Alignment with Roadmap Phases
+## 8. Alignment with Verification & Statement System Implementation Plan
 
-Every feature branch defined in [`ROADMAP_AND_PHASES.md`](file:///home/jeipyyy/Documents/Projects/LGU-Treasury-Connect/lgu-treasury-connect/docs/ROADMAP_AND_PHASES.md) implements a specific section of this SSOT:
+Every system component aligns with the implementation plan defined in [`IMPLEMENTATION_PLAN_VERIFICATION_STATEMENT_SYSTEM.md`](file:///home/jeipyyy/Documents/Projects/Municipal-Treasurers-Office-Delinquency-System/Municipal-Treasurers-Office-Delinquency-System/docs/IMPLEMENTATION_PLAN_VERIFICATION_STATEMENT_SYSTEM.md):
 
-| Roadmap Phase | SSOT Governing Section |
-|---|---|
-| **Phase 0: Baseline Finalization** | Section 6 (UI Primitives, Standards, Zero Debt) |
-| **Phase 1: Security & Auth Hardening** | Section 5 (RBAC Matrix, Password Hashing, RLS Policies) |
-| **Phase 2: Transaction Atomicity & COA** | Section 4 (Atomic RPC, AF-51 Booklet Register, Void Protocol) |
-| **Phase 3: Data Layer Optimization** | Section 6.2 (TanStack Query, Realtime WebSockets) |
-| **Phase 4: Deployment Abstraction** | Section 6.2 (`ITreasuryRepository`, Cloud vs On-Premise) |
-| **Phase 5: Offline Tellering** | Section 4.1 & 6.2 (Offline booklet allocation, Dexie queue) |
-| **Phase 6: Statutory Reporting** | Section 2 & 4 (BLGF Form 3, Delinquency Notices, RPTAR Ledgers) |
+| Implementation Stage | SSOT Governing Section | Key Deliverable |
+|---|---|---|
+| **Stage 0: Scope Lock** | Section 1 & 4 | Verification & Statement System boundary, purge cashiering |
+| **Stage 1: Domain Vocabulary** | Section 1 & 4.1 | Explicit verification statuses (`UNVERIFIED`, `VERIFIED_SETTLED_EXTERNALLY`) |
+| **Stage 2: Role & Access Simplification** | Section 5.1 | Admin and Assessor RBAC, purge cashier/teller roles |
+| **Stage 3: Purge Payment Workflows** | Section 4 & 6.2 | Remove cash collection, AF-51 stubs, and voiding |
+| **Stage 4: Purge Offline Tellering** | Section 6 | Remove IndexedDB payment queue and offline sync |
+| **Stage 5: Verification & Evidence Storage** | Section 3 & 4.2 | `delinquency_period_verifications` and settlement citations |
+| **Stage 6: Assessment & Historical Provenance** | Section 2.2 & 3.1 | Historical AV provenance with RPTAR page references |
+| **Stage 7: Delinquency Calculation Hardening** | Section 2.3 & 2.4 | Santa Rosa statutory roll brackets and penalty formulas |
+| **Stage 8: Statement of Account UI & CSV** | Section 4.4 | Itemized SOA presentation and CSV statement export |
+| **Stage 9: Notice of Delinquency** | Section 2.9 & 4.4 | RA 7160 Sec. 254 statutory notice generation |
+| **Stage 10: Import Review Pipeline** | Section 3.2 | Smart barangay upsert and durable staging review |
+| **Stage 11: Conditional Tax Clearance** | Section 4.5 | Certified clearance issuance for 0-delinquency parcels |
+| **Stage 12: Audit & Provenance Integrity** | Section 2.6 & 4.3 | Field-level RPTAR logs and supervisor reversal audit |
+| **Stage 13: UI Simplification** | Section 6.1 | Clean Santa Rosa Treasury tokens, tabs, and modals |
+| **Stage 14: Pilot Roll Verification** | Section 2 & 9 | Automated pilot verification test suites and quality gates |
 
 ---
 
@@ -586,3 +652,4 @@ Every feature branch defined in [`ROADMAP_AND_PHASES.md`](file:///home/jeipyyy/D
 1. **Rule of Immutability**: No tax calculation formula in `utils/taxLogic.ts` may be modified without updating statutory tests in `utils/taxLogic.test.ts` and documenting legal justification under RA 7160.
 2. **Schema Migration Pre-requisite**: All schema modifications require versioned SQL migration scripts in `supabase/migrations/` and explicit change budgets per `.agents/rules/task_standards.md`.
 3. **No Self-Certification**: Final architectural and security approvals belong strictly to the human reviewer and municipal lead.
+

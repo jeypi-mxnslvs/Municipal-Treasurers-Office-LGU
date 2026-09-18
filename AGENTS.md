@@ -67,17 +67,17 @@ The following statutory rules are non-negotiable and legally binding under Phili
   - Discounts apply **only** to the current/advance year, never to delinquent years.
 - **Unit Test Protection**: All changes to `utils/taxLogic.ts` must pass [`utils/taxLogic.test.ts`](file:///home/jeipyyy/Documents/Projects/LGU-Treasury-Connect/lgu-treasury-connect/utils/taxLogic.test.ts).
 
-### 4.2 "Arrears-First" Sequential Payment Rule
-- Taxpayers **cannot** pay current year (2026) dues while prior-year delinquent liabilities exist.
-- Dues must be settled strictly in chronological order starting from the oldest unpaid year ($\text{lastPaidYear} + 1$).
+### 4.2 "Arrears-First" Sequential Verification Rule
+- Taxpayers **cannot** have current year (2026) dues cleared or verified while prior-year delinquent liabilities exist.
+- Dues must be reviewed and verified strictly in chronological order starting from the oldest unpaid year ($\text{lastPaidYear} + 1$).
 
-### 4.3 Shell Record Payment Prohibition
-- Properties with `is_shell_record = true` (legacy/unverified parcels lacking PIN or complete valuation) **cannot** have payments posted or official receipts issued until verified by the Municipal Assessor.
+### 4.3 Shell Record Verification Prohibition
+- Properties with `is_shell_record = true` (legacy/unverified parcels lacking PIN or complete valuation) **cannot** have delinquency verified or Tax Clearance Certificates issued until verified by the Municipal Assessor.
 
-### 4.4 Financial Integrity & Accountable Form 51 (AF-51)
-- **No Random Numbers**: Official Receipt (OR) numbers must never be generated using `Math.random()`. Receipts must follow an unbroken, sequential series assigned from physical booklet stubs.
-- **Zero Deletion Rule**: Payment records and official receipts are **never** deleted from the database.
-- **Void Protocol**: Canceling an OR requires supervisory authorization, records a void status with audit reasons, and reverses the property's `last_paid_year`.
+### 4.4 Delinquency Verification & External Settlement Evidence Protocol
+- **Canonical Lifecycle**: Verification uses explicit states (`UNVERIFIED`, `VERIFIED_OUTSTANDING`, `VERIFIED_SETTLED_EXTERNALLY`, `DISPUTED`, `NOT_APPLICABLE`, `SUPERSEDED`).
+- **External Evidence Standards**: Store external official receipt (AF-51) number, check reference, or registry folio citation without performing system cash collection.
+- **Supervisory Reversal**: Reversing or superseding a verified record requires `Admin` authorization and logs a mandatory justification to `rptar_audit_logs`.
 
 ---
 
@@ -100,7 +100,7 @@ lgu-treasury-connect/
 ├── components/          # UI Components & Modals (using components/ui/ primitives)
 │   ├── ui/              # shadcn/ui headless accessible primitives
 │   └── common/          # Reusable shared domain presentation components
-├── features/            # Feature-sliced domain modules (auth, assessment, collections)
+├── features/            # Feature-sliced domain modules (auth, assessment, properties, reports)
 ├── services/            # API abstraction and transport drivers
 │   ├── api.ts           # Unified API interface
 │   └── supabase.ts      # Supabase PostgREST client
@@ -109,7 +109,7 @@ lgu-treasury-connect/
 │   └── taxLogic.test.ts # Vitest unit test suite
 ├── docs/                # Project Documentation & Single Source of Truth
 │   ├── SSOT.md          # Canonical Single Source of Truth
-│   ├── ROADMAP_AND_PHASES.md# Phased Delivery Plan & Branching Model
+│   ├── IMPLEMENTATION_PLAN_VERIFICATION_STATEMENT_SYSTEM.md # Authoritative Scope & Execution Plan
 │   └── Claude Architectures/# Historical deep-dive documentation (REFERENCE ONLY)
 ├── server/              # DEAD CODE: Legacy Express/SQLite server (DO NOT USE)
 └── AGENTS.md            # This agent operating guideline
@@ -118,34 +118,19 @@ lgu-treasury-connect/
 > [!WARNING]
 > **Dead Code Warning**:
 > 1. `server/` directory contains an inactive Express + SQLite server. Do not touch or import from it.
-> 2. `components/AuthModal.tsx`, `components/DebtChart.tsx`, and `components/SearchBar.tsx` are orphaned legacy files scheduled for deletion in Phase 0.
+> 2. `features/collections/` and `services/offline/` have been permanently purged per the Delinquency Verification & Statement System scope lock.
 
 ---
 
-## 6. Development Phases & Branching Protocol
+## 6. Implementation Plan & Branching Protocol
 
-```mermaid
-gitGraph
-    commit id: "baseline" tag: "v1.0.0-baseline"
-    branch feature/security-and-auth
-    branch feature/transaction-atomicity-coa
-    branch feature/data-layer-tanstack
-    branch feature/deployment-abstraction
-    checkout feature/security-and-auth
-    commit id: "auth-hardening"
-    checkout feature/transaction-atomicity-coa
-    commit id: "atomic-rpc-af51"
-```
+Agents must work within the boundaries defined in [`docs/IMPLEMENTATION_PLAN_VERIFICATION_STATEMENT_SYSTEM.md`](file:///home/jeipyyy/Documents/Projects/Municipal-Treasurers-Office-Delinquency-System/Municipal-Treasurers-Office-Delinquency-System/docs/IMPLEMENTATION_PLAN_VERIFICATION_STATEMENT_SYSTEM.md) on branch `feat/delinquency-verification-statement-system`:
 
-Agents must work within the phase boundaries defined in [`docs/ROADMAP_AND_PHASES.md`](file:///home/jeipyyy/Documents/Projects/LGU-Treasury-Connect/lgu-treasury-connect/docs/ROADMAP_AND_PHASES.md):
-
-1. **Phase 0 (`main`)**: Finalize baseline by refactoring `DelinquencyTable.tsx` and `LoginPage.tsx` to shadcn primitives, purge legacy files, verify 0 lint errors, and tag `v1.0.0-baseline`. Lock `main`.
-2. **Phase 1 (`feature/security-and-auth`)**: Replace plaintext passwords with Bcrypt/Supabase Auth, implement real JWT sessions, and enforce database RLS policies.
-3. **Phase 2 (`feature/transaction-atomicity-coa`)**: PostgreSQL atomic RPC `process_rpt_payment`, AF-51 sequential booklet register, and supervisor void workflow.
-4. **Phase 3 (`feature/data-layer-tanstack`)**: TanStack Query integration, Realtime WebSockets, server-side pagination, debounced search.
-5. **Phase 4 (`feature/deployment-abstraction`)**: `ITreasuryRepository` driver pattern supporting both Supabase Cloud and On-Premise Local PostgreSQL servers.
-6. **Phase 5 (`feature/offline-tellering`)**: IndexedDB caching, offline payment queue, background sync engine.
-7. **Phase 6 (`feature/statutory-reporting`)**: BLGF Form 3 generation, RA 7160 Sec. 254 Notice of Delinquency batch printing, RPTAR Ledger exports.
+1. **Stage 0–2**: Scope lock, domain vocabulary (`UNVERIFIED`, `VERIFIED_SETTLED_EXTERNALLY`), and 2-role RBAC (`Admin`, `Assessor`).
+2. **Stage 3–4**: Decouple and purge active cashiering/tellering surfaces and maintain durable import review.
+3. **Stage 5–7**: Delinquency verification and completion models (`delinquency_period_verifications`), historical AV provenance, and RA 7160 statutory engine.
+4. **Stage 8–10**: Statement of Account (SOA & CSV export), RA 7160 Sec. 254 Notice of Delinquency, and conditional Tax Clearance Certificate.
+5. **Stage 11–14**: Audit trail integrity, UI simplification, and real-world pilot roll verification.
 
 ---
 

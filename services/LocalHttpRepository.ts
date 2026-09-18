@@ -2,16 +2,17 @@ import { ITreasuryRepository } from './ITreasuryRepository';
 import {
   Property,
   CalculationResult,
-  OfficialReceipt,
   DashboardStatsData,
   User,
   RptarAuditLog,
   SyncStatusData,
   SecurityAuditLog,
-  AccountableFormBooklet,
   TaxYearRecord,
   MunicipalTaxSettings,
-  CsvImportBatch
+  CsvImportBatch,
+  DelinquencyPeriodVerification,
+  DelinquencyPeriodStatus,
+  VerificationType
 } from '@/types';
 import { calculateTaxLiability } from '@/utils/taxLogic';
 
@@ -122,50 +123,43 @@ export class LocalHttpRepository implements ITreasuryRepository {
     return this.request<{ base_rate_sqm: number; assessment_level: number }>(`/sfmv?${params.toString()}`);
   }
 
-  // 2. Collections & Receipts (COA AF-51)
-  async postPayment(payload: {
+  // 2. Delinquency Period Verification & External Settlement Evidence
+  async verifyDelinquencyPeriod(payload: {
     propertyId: string | number;
-    paidRecords: TaxYearRecord[];
-    tenderType: string;
-    tenderReference?: string;
-    postedBy: string;
+    tdNumber: string;
+    periodKey: string;
+    taxYear: number;
+    periodLabel: string;
+    status: DelinquencyPeriodStatus;
+    verificationType: VerificationType;
+    sourceReference?: string;
+    remarks?: string;
+    verifiedBy: number | string;
     stationId?: string;
-    userId?: number;
-  }): Promise<OfficialReceipt> {
-    return this.request<OfficialReceipt>('/collections/payments', {
+  }): Promise<DelinquencyPeriodVerification> {
+    return this.request<DelinquencyPeriodVerification>('/delinquency/verify', {
       method: 'POST',
       body: JSON.stringify(payload)
     });
   }
 
-  async voidReceipt(payload: {
-    receiptNo: string;
-    reason: string;
+  async revertDelinquencyVerification(payload: {
+    verificationId?: number | string;
+    propertyId: string | number;
+    periodKey?: string;
+    taxYear: number;
     authorizedBy: string;
+    reason: string;
     stationId?: string;
-  }): Promise<{ message: string; receiptNo: string }> {
-    return this.request<{ message: string; receiptNo: string }>(`/collections/void`, {
+  }): Promise<void> {
+    await this.request('/delinquency/revert', {
       method: 'POST',
       body: JSON.stringify(payload)
     });
   }
 
-  // 3. Accountable Forms (AF-51 Sequential Stubs)
-  async getActiveBooklet(username?: string): Promise<AccountableFormBooklet | null> {
-    const params = new URLSearchParams();
-    if (username) params.append('username', username);
-    return this.request<AccountableFormBooklet | null>(`/accountable-forms/active?${params.toString()}`);
-  }
-
-  async getBooklets(): Promise<AccountableFormBooklet[]> {
-    return this.request<AccountableFormBooklet[]>('/accountable-forms');
-  }
-
-  async assignBooklet(bookletId: string, username: string, userId?: number): Promise<void> {
-    await this.request(`/accountable-forms/${bookletId}/assign`, {
-      method: 'POST',
-      body: JSON.stringify({ username, userId })
-    });
+  async getPeriodVerifications(propertyId: string | number): Promise<DelinquencyPeriodVerification[]> {
+    return this.request<DelinquencyPeriodVerification[]>(`/properties/${propertyId}/verifications`);
   }
 
   // 4. Reporting, Analytics & Live Multi-Assessor Sync

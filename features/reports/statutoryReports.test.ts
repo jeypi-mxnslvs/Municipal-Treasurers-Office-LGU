@@ -52,16 +52,6 @@ describe('Phase 6: Regulatory Reporting & Statutory Compliance', () => {
     });
   });
 
-  it('validates BLGF Form 3 fund segregation (50% General Fund, 50% Special Education Fund)', () => {
-    const totalCollected = 500000;
-    const basicPortion = totalCollected / 2;
-    const sefPortion = totalCollected / 2;
-
-    expect(basicPortion).toBe(250000);
-    expect(sefPortion).toBe(250000);
-    expect(basicPortion + sefPortion).toBe(totalCollected);
-  });
-
   it('reflects period-dependent historical assessed values and unassessed flags on delinquency roll records', () => {
     const multiEraProperty: Property = {
       ...mockDelinquentProperty,

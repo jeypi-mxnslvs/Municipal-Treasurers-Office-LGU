@@ -1,16 +1,17 @@
 import {
   Property,
   CalculationResult,
-  OfficialReceipt,
   DashboardStatsData,
   User,
   RptarAuditLog,
   SyncStatusData,
   SecurityAuditLog,
-  AccountableFormBooklet,
   TaxYearRecord,
   MunicipalTaxSettings,
-  CsvImportBatch
+  CsvImportBatch,
+  DelinquencyPeriodVerification,
+  DelinquencyPeriodStatus,
+  VerificationType
 } from '@/types';
 
 /**
@@ -40,29 +41,34 @@ export interface ITreasuryRepository {
   deleteProperty(propertyId: string): Promise<void>;
   lookupSfmv(barangay: string, propertyClass: string): Promise<{ base_rate_sqm: number; assessment_level: number }>;
 
-  // 2. Collections & Receipts (COA AF-51)
-  postPayment(payload: {
+  // 2. Delinquency Period Verification & External Settlement Evidence
+  verifyDelinquencyPeriod(payload: {
     propertyId: string | number;
-    paidRecords: TaxYearRecord[];
-    tenderType: string;
-    tenderReference?: string;
-    postedBy: string;
+    tdNumber: string;
+    periodKey: string;
+    taxYear: number;
+    periodLabel: string;
+    status: DelinquencyPeriodStatus;
+    verificationType: VerificationType;
+    sourceReference?: string;
+    remarks?: string;
+    verifiedBy: number | string;
     stationId?: string;
-    userId?: number;
-  }): Promise<OfficialReceipt>;
-  voidReceipt(payload: {
-    receiptNo: string;
-    reason: string;
+  }): Promise<DelinquencyPeriodVerification>;
+
+  revertDelinquencyVerification(payload: {
+    verificationId?: number | string;
+    propertyId: string | number;
+    periodKey?: string;
+    taxYear: number;
     authorizedBy: string;
+    reason: string;
     stationId?: string;
-  }): Promise<{ message: string; receiptNo: string }>;
+  }): Promise<void>;
 
-  // 3. Accountable Forms (AF-51 Sequential Stubs)
-  getActiveBooklet(username?: string): Promise<AccountableFormBooklet | null>;
-  getBooklets(): Promise<AccountableFormBooklet[]>;
-  assignBooklet(bookletId: string, username: string, userId?: number): Promise<void>;
+  getPeriodVerifications(propertyId: string | number): Promise<DelinquencyPeriodVerification[]>;
 
-  // 4. Reporting, Analytics & Live Multi-Assessor Sync
+  // 3. Reporting, Analytics & Live Multi-Assessor Sync
   getDashboardStats(): Promise<DashboardStatsData>;
   getSyncStatus(): Promise<SyncStatusData>;
   subscribeToMutations(onMutation: (mutation: { timestamp: string; author: string; action: string; tdNumber?: string }) => void): () => void;

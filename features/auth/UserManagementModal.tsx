@@ -46,7 +46,7 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'Assessor' | 'Admin' | 'Viewer'>('Assessor');
+  const [role, setRole] = useState<'Assessor' | 'Admin'>('Assessor');
   const [stationId, setStationId] = useState('Assessor-Desk-03');
   const [statusMessage, setStatusMessage] = useState<{
     type: 'success' | 'error';
@@ -319,13 +319,12 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
                 <select
                   value={role}
                   onChange={(e) =>
-                    setRole(e.target.value as 'Assessor' | 'Admin' | 'Viewer')
+                    setRole(e.target.value as 'Assessor' | 'Admin')
                   }
                   className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-1 text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring font-semibold text-slate-800"
                 >
-                  <option value="Assessor">Assessor (RPTAR & Dues Clearance)</option>
+                  <option value="Assessor">Assessor (RPTAR & Dues Verification)</option>
                   <option value="Admin">Admin (Full System Administration)</option>
-                  <option value="Viewer">Viewer (Read-Only Analytics)</option>
                 </select>
               </div>
 

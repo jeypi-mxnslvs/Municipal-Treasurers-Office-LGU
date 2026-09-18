@@ -88,10 +88,9 @@ export const NoticeOfDelinquencyModal: React.FC<NoticeOfDelinquencyModalProps> =
     lines.push('Office of the Treasurer - Municipality of Santa Rosa,,,,,,,,,,,,,,,,,');
     lines.push(',,,,,,,,,,,,,,,,,');
     lines.push('NOTICE OF DELINQUENCY IN THE PAYMENT OF REAL PROPERTY TAX (RA 7160 SEC. 254),,,,,,,,,,,,,,,,,');
+    lines.push(`,,,,,,,Notice Ref:,"NOD-${activeProperty.tdNumber}-${new Date().getFullYear()}",,Date:,"${new Date().toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}",,,`);
     lines.push(',,,,,,,,,,,,,,,,,');
-    lines.push(`,,,,,,,OR#,,,,,,Date:,"${new Date().toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}",,,`);
-    lines.push(',,,,,,,,,,,,,,,,,');
-    lines.push(`,,,,,,LAST PAYMENT:,${activeProperty.lastPaidYear} (Q${activeProperty.lastPaidQuarter || 4}),,,,,,,,,,`);
+    lines.push(`,,,,,,LAST VERIFIED SETTLEMENT:,${activeProperty.lastPaidYear} (Q${activeProperty.lastPaidQuarter || 4}),,,,,,,,,,`);
     lines.push(',"Notice is hereby served pursuant to the provision of Section 254, Republic Act No. 7160 (Local Government Code of 1991) the Real Property Tax for Calendar",,,,,,,,,,,,,,,,');
     lines.push(`"year ${activeProperty.lastPaidYear + 1} and the previous years, has been delinquent with respect to the figures below.",,,,,,,,,,,,,,,,,`);
     lines.push(',,,,,,,,,,,,,,,,,');
@@ -233,7 +232,7 @@ export const NoticeOfDelinquencyModal: React.FC<NoticeOfDelinquencyModalProps> =
               {new Date().toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
             </div>
             <div>
-              <span className="font-bold text-slate-900">Last Recorded Payment: </span>
+              <span className="font-bold text-slate-900">Last Verified Settlement Baseline: </span>
               <span className="font-mono font-semibold text-emerald-900">
                 {activeProperty.lastPaidYear} (Quarter {activeProperty.lastPaidQuarter || 4})
               </span>
@@ -398,8 +397,8 @@ export const NoticeOfDelinquencyModal: React.FC<NoticeOfDelinquencyModalProps> =
             <div>
               <p className="text-slate-500 text-[10px] uppercase font-bold mb-8">Prepared by:</p>
               <div className="border-t border-slate-700 pt-1">
-                <p className="font-bold text-slate-900 uppercase">Revenue Collection Clerk</p>
-                <p className="text-[10px] text-slate-500">Municipal Treasurer's Office</p>
+                <p className="font-bold text-slate-900 uppercase">Assessment & Verification Officer</p>
+                <p className="text-[10px] text-slate-500">Municipal Assessor / Treasurer's Office</p>
               </div>
             </div>
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Property, TaxYearRecord, User, OfficialReceipt, DashboardStatsData, TaxSummary } from './types';
+import { Property, TaxYearRecord, User, DashboardStatsData, TaxSummary } from './types';
 import { api } from './services/api';
 import Header from './components/Header';
 import { BreakdownAlertModal } from '@/components/common/BreakdownAlertModal';
@@ -9,9 +9,8 @@ import { LoginPage, UserManagementModal, PasswordConfirmationModal } from '@/fea
 import { DashboardStats } from '@/features/dashboard';
 import { DashboardTable, PropertyCard, RptarModal, BulkImportModal } from '@/features/properties';
 import { DelinquencyTable } from '@/features/assessment';
-import { OfficialReceiptModal, BookletManagerModal } from '@/features/collections';
 import { AuditLogModal } from '@/features/audit';
-import { NoticeOfDelinquencyModal, BlgfForm3Modal } from '@/features/reports';
+import { NoticeOfDelinquencyModal, TaxClearanceModal } from '@/features/reports';
 import { Printer, ArrowLeft, CheckCircle2, ShieldCheck, CheckCircle, RefreshCw, FileText } from 'lucide-react';
 import { verifySessionToken, DEFAULT_SESSION_TIMEOUT_MS } from './lib/crypto';
 import { mergeEncoderLabel } from './utils/encoderAttribution';
@@ -33,13 +32,12 @@ const App: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalInitialData, setModalInitialData] = useState<Property | null>(null);
   const [isUserManagementModalOpen, setIsUserManagementModalOpen] = useState(false);
-  const [isBookletModalOpen, setIsBookletModalOpen] = useState(false);
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [auditTargetProperty, setAuditTargetProperty] = useState<Property | null>(null);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [propertyPendingDeletion, setPropertyPendingDeletion] = useState<string | null>(null);
   const [isNoticeModalOpen, setIsNoticeModalOpen] = useState(false);
-  const [isBlgfModalOpen, setIsBlgfModalOpen] = useState(false);
+  const [isTaxClearanceModalOpen, setIsTaxClearanceModalOpen] = useState(false);
   const [noticeProperties, setNoticeProperties] = useState<Property[]>([]);
 
   // Unified Toast hook (replaces the old inline syncToast state)
@@ -75,10 +73,6 @@ const App: React.FC = () => {
   const [selectedRecords, setSelectedRecords] = useState<TaxYearRecord[]>([]);
   const [selectedScopeSubtotal, setSelectedScopeSubtotal] = useState<number>(0);
   const [isProcessingClearance, setIsProcessingClearance] = useState(false);
-
-  // Clearance Slip Modal State
-  const [issuedReceipt, setIssuedReceipt] = useState<OfficialReceipt | null>(null);
-  const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
 
   // Load properties and dashboard stats from API
   const loadData = useCallback(async (silent = false) => {
@@ -268,22 +262,32 @@ const App: React.FC = () => {
     setSelectedScopeSubtotal(subtotal);
   };
 
-  const handleMarkDuesCleared = async () => {
+  const handleVerifySelectedDues = async () => {
     if (!selectedProperty || selectedRecords.length === 0 || !currentUser) return;
 
     setIsProcessingClearance(true);
     try {
-      const clearanceSlip = await api.postPayment({
-        propertyId: selectedProperty.id,
-        paidRecords: selectedRecords,
-        tenderType: 'CASH',
-        postedBy: `${currentUser.name} (${currentUser.role} • ${currentUser.stationId})`,
-        stationId: currentUser.stationId,
-        userId: typeof currentUser.id === 'number' ? currentUser.id : parseInt(String(currentUser.id || 0), 10)
-      });
+      for (const record of selectedRecords) {
+        await api.verifyDelinquencyPeriod({
+          propertyId: selectedProperty.id,
+          tdNumber: selectedProperty.tdNumber,
+          periodKey: record.periodKey || record.periodLabel || String(record.year),
+          taxYear: record.year,
+          periodLabel: record.periodLabel || `Tax Year ${record.year}`,
+          status: 'VERIFIED_SETTLED_EXTERNALLY',
+          verificationType: 'EXTERNAL_SETTLEMENT_EVIDENCE',
+          sourceReference: 'Assessor Delinquency Verification',
+          remarks: 'Sequential delinquency clearance verified',
+          verifiedBy: typeof currentUser.id === 'number' ? currentUser.id : parseInt(String(currentUser.id || 0), 10),
+          stationId: currentUser.stationId
+        });
+      }
 
-      setIssuedReceipt(clearanceSlip);
-      setIsReceiptModalOpen(true);
+      showToast({
+        type: 'success',
+        title: 'Delinquency Verified',
+        message: `${selectedRecords.length} delinquency ${selectedRecords.length === 1 ? 'period' : 'periods'} verified and recorded successfully.`
+      });
 
       const [updatedResult, updatedCompleted] = await Promise.all([
         api.getPropertyAssessment(selectedProperty.id, selectedProperty),
@@ -307,14 +311,18 @@ const App: React.FC = () => {
       }
 
       await loadData(true);
+
+      if (updatedResult.records.length === 0) {
+        setIsTaxClearanceModalOpen(true);
+      }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : 'Unknown error';
       setBreakdownAlert({
         isOpen: true,
         severity: 'error',
-        title: 'Clearance Transaction Failed',
-        summary: 'The payment clearance could not be posted. No receipt was issued and no charges were recorded.',
-        guidance: 'Common causes: AF-51 booklet exhausted (assign a new booklet), network timeout, or database RPC rejection. The transaction was rolled back — data integrity is preserved.',
+        title: 'Verification Failed',
+        summary: 'The sequential period verification could not be recorded.',
+        guidance: 'Verify database connectivity and permissions. All changes were rolled back.',
         technicalDetail: errMsg,
       });
     } finally {
@@ -385,7 +393,7 @@ const App: React.FC = () => {
     );
   }
 
-  const canClearDues = currentUser.role === 'Assessor' || currentUser.role === 'Admin' || currentUser.role === 'Cashier';
+  const canClearDues = currentUser.role === 'Assessor' || currentUser.role === 'Admin';
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50/80 text-slate-800 font-sans">
@@ -393,8 +401,6 @@ const App: React.FC = () => {
         user={currentUser} 
         onLogout={() => handleLogout()}
         onOpenUserManagement={() => setIsUserManagementModalOpen(true)}
-        onOpenBooklets={() => setIsBookletModalOpen(true)}
-        onOpenBlgfForm3={() => setIsBlgfModalOpen(true)}
         onOpenBatchNotices={() => {
           const delinquents = properties.filter(p => p.lastPaidYear < 2026 && !p.isShellRecord);
           setNoticeProperties(delinquents);
@@ -507,9 +513,18 @@ const App: React.FC = () => {
                           </div>
                         </div>
                       ) : (
-                        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-center text-xs font-bold flex items-center justify-center gap-2 mt-4">
-                          <CheckCircle size={18} className="text-emerald-600" />
-                          Account is fully cleared. Zero liabilities.
+                        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-center text-xs font-bold flex flex-col items-center justify-center gap-2 mt-4">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle size={18} className="text-emerald-600" />
+                            Account is fully cleared. Zero liabilities.
+                          </div>
+                          <button
+                            onClick={() => setIsTaxClearanceModalOpen(true)}
+                            className="mt-1 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <ShieldCheck size={14} />
+                            Generate Tax Clearance Certificate
+                          </button>
                         </div>
                       )}
                     </div>
@@ -518,7 +533,7 @@ const App: React.FC = () => {
                       <div className="pt-2">
                         {canClearDues ? (
                           <button 
-                            onClick={handleMarkDuesCleared}
+                            onClick={handleVerifySelectedDues}
                             disabled={isProcessingClearance || selectedRecords.length === 0}
                             className={`w-full transition-all duration-200 rounded-xl shadow-md active:scale-98 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2 bg-[#064e3b] hover:bg-[#085a44] text-white ${
                               selectedScopeSubtotal >= 100000 
@@ -531,7 +546,7 @@ const App: React.FC = () => {
                               selectedScopeSubtotal >= 100000 ? 'flex-col sm:flex-row' : 'flex-wrap'
                             }`}>
                               <span className="font-bold text-xs sm:text-sm">
-                                {isProcessingClearance ? 'Processing Clearance...' : 'Mark Selected Dues as Cleared'}
+                                {isProcessingClearance ? 'Recording Verifications...' : 'Verify Selected Delinquency Periods'}
                               </span>
                               {!isProcessingClearance && (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-950/60 border border-emerald-500/30 text-emerald-200 font-extrabold text-xs sm:text-sm tracking-tight tabular-nums whitespace-nowrap">
@@ -542,7 +557,7 @@ const App: React.FC = () => {
                           </button>
                         ) : (
                           <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-center text-xs">
-                            Log in as <strong>Assessor</strong> or <strong>Admin</strong> to mark dues as cleared.
+                            Log in as <strong>Assessor</strong> or <strong>Admin</strong> to verify delinquency periods.
                           </div>
                         )}
                       </div>
@@ -578,33 +593,11 @@ const App: React.FC = () => {
         currentUser={currentUser || undefined}
       />
 
-      {/* Clearance Certificate Modal (Official receipt format) */}
-      <OfficialReceiptModal 
-        isOpen={isReceiptModalOpen}
-        receipt={issuedReceipt}
-        currentUser={currentUser}
-        onReceiptVoided={async () => {
-          await loadData(true);
-        }}
-        onStayOnProperty={() => {
-          setIsReceiptModalOpen(false);
-          setIssuedReceipt(null);
-        }}
-        onReturnToDashboard={() => {
-          setIsReceiptModalOpen(false);
-          setIssuedReceipt(null);
-          handleBackToDashboard();
-        }}
-        onClose={() => {
-          setIsReceiptModalOpen(false);
-          setIssuedReceipt(null);
-        }}
-      />
-
-      {/* AF-51 Booklet Register Modal */}
-      <BookletManagerModal
-        isOpen={isBookletModalOpen}
-        onClose={() => setIsBookletModalOpen(false)}
+      {/* Official Tax Clearance Certificate Modal */}
+      <TaxClearanceModal
+        isOpen={isTaxClearanceModalOpen}
+        onClose={() => setIsTaxClearanceModalOpen(false)}
+        property={selectedProperty}
         currentUser={currentUser}
       />
 
@@ -650,14 +643,6 @@ const App: React.FC = () => {
           setNoticeProperties([]);
         }}
         properties={noticeProperties.length > 0 ? noticeProperties : (selectedProperty ? [selectedProperty] : [])}
-      />
-
-      {/* BLGF Form 3 Consolidated Monthly Report Modal */}
-      <BlgfForm3Modal
-        isOpen={isBlgfModalOpen}
-        onClose={() => setIsBlgfModalOpen(false)}
-        properties={properties}
-        stats={stats}
       />
     </div>
   );
