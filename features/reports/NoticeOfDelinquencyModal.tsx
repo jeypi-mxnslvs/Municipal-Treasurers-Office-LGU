@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Property, TaxYearRecord } from '@/types';
 import { calculateTaxLiability } from '@/utils/taxLogic';
+import type { PropertyPeriodProjection } from '@/utils/periodProjection';
 import {
   Dialog,
   DialogContent,
@@ -21,6 +22,7 @@ interface NoticeOfDelinquencyModalProps {
   onClose: () => void;
   properties: Property[];
   initialIndex?: number;
+  periodProjection?: PropertyPeriodProjection;
 }
 
 const formatCurrency = (val: number | undefined): string => {
@@ -33,6 +35,7 @@ export const NoticeOfDelinquencyModal: React.FC<NoticeOfDelinquencyModalProps> =
   onClose,
   properties,
   initialIndex = 0,
+  periodProjection,
 }) => {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
 
@@ -49,11 +52,20 @@ export const NoticeOfDelinquencyModal: React.FC<NoticeOfDelinquencyModalProps> =
     return calculateTaxLiability(activeProperty);
   }, [activeProperty]);
 
+  const projectedByKey = useMemo(
+    () => new Map((periodProjection?.periods || []).map(period => [period.periodKey, period])),
+    [periodProjection]
+  );
+
   // Aggregate itemized table records (Single Fund 1% base per SSOT Section 2.9)
   const itemizedRows = useMemo(() => {
     if (!assessmentResult) return [];
-    return assessmentResult.records;
-  }, [assessmentResult]);
+    return assessmentResult.records.filter((record) => {
+      const periodKey = record.periodKey || record.periodLabel || String(record.year);
+      const projected = projectedByKey.get(periodKey.toLowerCase().replace(/\s+/g, '-'));
+      return projected?.status !== 'VERIFIED_SETTLED_EXTERNALLY' && projected?.status !== 'NOT_APPLICABLE';
+    });
+  }, [assessmentResult, projectedByKey]);
 
   // Accountable totals (SSOT Section 2.9.4):
   // BASIC: sum of table column (1% base + penalty/discount)
@@ -65,7 +77,11 @@ export const NoticeOfDelinquencyModal: React.FC<NoticeOfDelinquencyModalProps> =
     }
     const basicTotal = itemizedRows
       .filter((r) => !r.isUnverifiedHistorical && r.totalDue !== null)
-      .reduce((sum, r) => sum + ((r.totalDue ?? 0) / 2), 0);
+      .reduce((sum, r) => {
+        const periodKey = (r.periodKey || r.periodLabel || String(r.year)).toLowerCase().replace(/\s+/g, '-');
+        const projected = projectedByKey.get(periodKey);
+        return sum + ((projected?.totalDue ?? r.totalDue ?? 0) / 2);
+      }, 0);
     const sefTotal = basicTotal;
     const grandTotal = basicTotal + sefTotal;
     return {
@@ -73,7 +89,7 @@ export const NoticeOfDelinquencyModal: React.FC<NoticeOfDelinquencyModalProps> =
       sef: Math.round(sefTotal * 100) / 100,
       grandTotal: Math.round(grandTotal * 100) / 100
     };
-  }, [itemizedRows]);
+  }, [itemizedRows, projectedByKey]);
 
   const handlePrint = () => {
     window.print();

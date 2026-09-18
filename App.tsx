@@ -9,11 +9,15 @@ import { LoginPage, UserManagementModal, PasswordConfirmationModal } from '@/fea
 import { DashboardStats } from '@/features/dashboard';
 import { DashboardTable, PropertyCard, RptarModal, BulkImportModal } from '@/features/properties';
 import { DelinquencyTable } from '@/features/assessment';
+import VerifyPeriodModal from '@/features/assessment/VerifyPeriodModal';
+import type { VerificationModalValue } from '@/features/assessment/VerifyPeriodModal';
 import { AuditLogModal } from '@/features/audit';
 import { NoticeOfDelinquencyModal, TaxClearanceModal } from '@/features/reports';
 import { Printer, ArrowLeft, CheckCircle2, ShieldCheck, CheckCircle, RefreshCw, FileText } from 'lucide-react';
 import { verifySessionToken, DEFAULT_SESSION_TIMEOUT_MS } from './lib/crypto';
 import { mergeEncoderLabel } from './utils/encoderAttribution';
+import { projectPropertyPeriods } from './utils/periodProjection';
+import type { PropertyPeriodProjection } from './utils/periodProjection';
 
 const App: React.FC = () => {
   // Authentication State
@@ -38,6 +42,16 @@ const App: React.FC = () => {
   const [propertyPendingDeletion, setPropertyPendingDeletion] = useState<string | null>(null);
   const [isNoticeModalOpen, setIsNoticeModalOpen] = useState(false);
   const [isTaxClearanceModalOpen, setIsTaxClearanceModalOpen] = useState(false);
+  const [clearanceEligibility, setClearanceEligibility] = useState<{
+    isEligible: boolean;
+    ineligibilityReasons: string[];
+    outstandingTotal: number;
+    hasUnverifiedPeriods: boolean;
+    hasDisputedPeriods: boolean;
+    hasHistoricalGaps: boolean;
+  } | undefined>();
+  const [periodProjection, setPeriodProjection] = useState<PropertyPeriodProjection>();
+  const [isVerifyPeriodModalOpen, setIsVerifyPeriodModalOpen] = useState(false);
   const [noticeProperties, setNoticeProperties] = useState<Property[]>([]);
 
   // Unified Toast hook (replaces the old inline syncToast state)
@@ -137,16 +151,36 @@ const App: React.FC = () => {
     }
 
     try {
-      const [result, completed] = await Promise.all([
+      const [result, completed, verifications] = await Promise.all([
         api.getPropertyAssessment(property.id, property),
-        api.getPropertyCompletedRecords(property.id, property)
+        api.getPropertyCompletedRecords(property.id, property),
+        api.getPeriodVerifications(property.id),
       ]);
-      setTaxRecords(result.records);
-      setCompletedTaxRecords(completed);
-      setSelectedRecords(result.records);
       setTaxSummary(result.summary);
       setGrandTotal(result.grandTotal);
       setSelectedScopeSubtotal(result.grandTotal);
+      const projection = projectPropertyPeriods(property, verifications, {
+        splitCurrentYearQuarters: true,
+        completedPeriodLabels: completed.map(record => record.periodLabel).filter(Boolean) as string[],
+      });
+      const projectedByKey = new Map(projection.periods.map(period => [period.periodKey, period]));
+      const projectedRecords = result.records.map(record => {
+        const key = (record.periodKey || record.periodLabel || String(record.year)).toLowerCase().replace(/\s+/g, '-');
+        const projected = projectedByKey.get(key);
+        return projected ? { ...record, verificationStatus: projected.status, sourceReference: projected.sourceReference, clearanceReference: projected.sourceReference, totalDue: projected.totalDue, isPayable: projected.isPayable } : record;
+      });
+      setTaxRecords(projectedRecords);
+      setCompletedTaxRecords(completed);
+      setSelectedRecords([]);
+      setPeriodProjection(projection);
+      setClearanceEligibility({
+        isEligible: projection.isClearanceEligible,
+        ineligibilityReasons: projection.ineligibilityReasons,
+        outstandingTotal: projection.outstandingTotal,
+        hasUnverifiedPeriods: projection.hasUnverifiedPeriods,
+        hasDisputedPeriods: projection.hasDisputedPeriods,
+        hasHistoricalGaps: projection.hasHistoricalGaps,
+      });
     } catch (err) {
       console.error('Assessment load failed:', err);
     } finally {
@@ -262,26 +296,35 @@ const App: React.FC = () => {
     setSelectedScopeSubtotal(subtotal);
   };
 
-  const handleVerifySelectedDues = async () => {
+  const handleVerifySelectedDues = () => {
+    if (!selectedProperty || selectedRecords.length === 0 || !currentUser) return;
+    setIsVerifyPeriodModalOpen(true);
+  };
+
+  const handleSubmitVerification = async (verification: VerificationModalValue) => {
     if (!selectedProperty || selectedRecords.length === 0 || !currentUser) return;
 
     setIsProcessingClearance(true);
     try {
-      for (const record of selectedRecords) {
-        await api.verifyDelinquencyPeriod({
-          propertyId: selectedProperty.id,
-          tdNumber: selectedProperty.tdNumber,
+      await api.verifyDelinquencyPeriodBatch({
+        propertyId: selectedProperty.id,
+        tdNumber: selectedProperty.tdNumber,
+        periods: selectedRecords.map((record) => ({
           periodKey: record.periodKey || record.periodLabel || String(record.year),
           taxYear: record.year,
           periodLabel: record.periodLabel || `Tax Year ${record.year}`,
-          status: 'VERIFIED_SETTLED_EXTERNALLY',
-          verificationType: 'EXTERNAL_SETTLEMENT_EVIDENCE',
-          sourceReference: 'Assessor Delinquency Verification',
-          remarks: 'Sequential delinquency clearance verified',
-          verifiedBy: typeof currentUser.id === 'number' ? currentUser.id : parseInt(String(currentUser.id || 0), 10),
-          stationId: currentUser.stationId
-        });
-      }
+          status: verification.status,
+          verificationType: verification.status === 'VERIFIED_SETTLED_EXTERNALLY'
+            ? 'EXTERNAL_SETTLEMENT_EVIDENCE'
+            : 'DELINQUENCY',
+          evidenceType: verification.evidenceType,
+          sourceReference: verification.sourceReference || undefined,
+          remarks: verification.remarks || undefined,
+        })),
+        verifiedBy: currentUser.id,
+        stationId: currentUser.stationId,
+      });
+      setIsVerifyPeriodModalOpen(false);
 
       showToast({
         type: 'success',
@@ -289,15 +332,35 @@ const App: React.FC = () => {
         message: `${selectedRecords.length} delinquency ${selectedRecords.length === 1 ? 'period' : 'periods'} verified and recorded successfully.`
       });
 
-      const [updatedResult, updatedCompleted] = await Promise.all([
+      const [updatedResult, updatedCompleted, updatedVerifications] = await Promise.all([
         api.getPropertyAssessment(selectedProperty.id, selectedProperty),
-        api.getPropertyCompletedRecords(selectedProperty.id, selectedProperty)
+        api.getPropertyCompletedRecords(selectedProperty.id, selectedProperty),
+        api.getPeriodVerifications(selectedProperty.id),
       ]);
-      setTaxRecords(updatedResult.records);
-      setCompletedTaxRecords(updatedCompleted);
-      setSelectedRecords(updatedResult.records);
       setGrandTotal(updatedResult.grandTotal);
       setSelectedScopeSubtotal(updatedResult.grandTotal);
+      const updatedProjection = projectPropertyPeriods(selectedProperty, updatedVerifications, {
+        splitCurrentYearQuarters: true,
+        completedPeriodLabels: updatedCompleted.map(record => record.periodLabel).filter(Boolean) as string[],
+      });
+      const updatedProjectedByKey = new Map(updatedProjection.periods.map(period => [period.periodKey, period]));
+      const updatedProjectedRecords = updatedResult.records.map(record => {
+        const key = (record.periodKey || record.periodLabel || String(record.year)).toLowerCase().replace(/\s+/g, '-');
+        const projected = updatedProjectedByKey.get(key);
+        return projected ? { ...record, verificationStatus: projected.status, sourceReference: projected.sourceReference, clearanceReference: projected.sourceReference, totalDue: projected.totalDue, isPayable: projected.isPayable } : record;
+      });
+      setTaxRecords(updatedProjectedRecords);
+      setCompletedTaxRecords(updatedCompleted);
+      setSelectedRecords([]);
+      setPeriodProjection(updatedProjection);
+      setClearanceEligibility({
+        isEligible: updatedProjection.isClearanceEligible,
+        ineligibilityReasons: updatedProjection.ineligibilityReasons,
+        outstandingTotal: updatedProjection.outstandingTotal,
+        hasUnverifiedPeriods: updatedProjection.hasUnverifiedPeriods,
+        hasDisputedPeriods: updatedProjection.hasDisputedPeriods,
+        hasHistoricalGaps: updatedProjection.hasHistoricalGaps,
+      });
 
       // Keep selectedProperty updated with newest clearance
       if (selectedRecords.length > 0) {
@@ -322,7 +385,7 @@ const App: React.FC = () => {
         severity: 'error',
         title: 'Verification Failed',
         summary: 'The sequential period verification could not be recorded.',
-        guidance: 'Verify database connectivity and permissions. All changes were rolled back.',
+        guidance: 'Verify database connectivity and permissions. Batch transaction was rejected; refresh before retrying.',
         technicalDetail: errMsg,
       });
     } finally {
@@ -599,6 +662,15 @@ const App: React.FC = () => {
         onClose={() => setIsTaxClearanceModalOpen(false)}
         property={selectedProperty}
         currentUser={currentUser}
+        eligibility={clearanceEligibility}
+      />
+
+      <VerifyPeriodModal
+        isOpen={isVerifyPeriodModalOpen}
+        records={selectedRecords}
+        onClose={() => setIsVerifyPeriodModalOpen(false)}
+        onSubmit={handleSubmitVerification}
+        isSubmitting={isProcessingClearance}
       />
 
       {/* Admin User Management Modal */}
@@ -643,6 +715,7 @@ const App: React.FC = () => {
           setNoticeProperties([]);
         }}
         properties={noticeProperties.length > 0 ? noticeProperties : (selectedProperty ? [selectedProperty] : [])}
+        periodProjection={noticeProperties.length === 0 ? periodProjection : undefined}
       />
     </div>
   );

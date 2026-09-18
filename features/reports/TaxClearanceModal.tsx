@@ -17,6 +17,14 @@ interface TaxClearanceModalProps {
   onClose: () => void;
   property: Property | null;
   currentUser: User | null;
+  eligibility?: {
+    isEligible: boolean;
+    ineligibilityReasons: string[];
+    outstandingTotal?: number;
+    hasUnverifiedPeriods?: boolean;
+    hasDisputedPeriods?: boolean;
+    hasHistoricalGaps?: boolean;
+  };
 }
 
 export const TaxClearanceModal: React.FC<TaxClearanceModalProps> = ({
@@ -24,12 +32,21 @@ export const TaxClearanceModal: React.FC<TaxClearanceModalProps> = ({
   onClose,
   property,
   currentUser,
+  eligibility,
 }) => {
   const [purpose, setPurpose] = useState('Transfer of Ownership / BIR CAR');
   const [customPurpose, setCustomPurpose] = useState('');
   const [isExporting, setIsExporting] = useState(false);
 
   if (!property) return null;
+
+  const fallbackReasons = [
+    ...(property.isShellRecord ? ['Property is a shell record and requires Assessor verification.'] : []),
+    ...(!property.pin?.trim() ? ['Property has no verified PIN.'] : []),
+    ...(property.assessedValue <= 0 ? ['Property has no positive assessed value.'] : []),
+  ];
+  const eligibilityReasons = eligibility?.ineligibilityReasons || fallbackReasons;
+  const isEligible = Boolean(eligibility?.isEligible) && eligibilityReasons.length === 0;
 
   const effectivePurpose = purpose === 'Other' ? customPurpose || 'General Reference' : purpose;
   const certificateDate = new Date().toLocaleDateString('en-US', {
@@ -40,10 +57,12 @@ export const TaxClearanceModal: React.FC<TaxClearanceModalProps> = ({
   const certificateId = `TC-${new Date().getFullYear()}-${String(property.id || 1000).padStart(5, '0')}`;
 
   const handlePrint = () => {
+    if (!isEligible) return;
     window.print();
   };
 
   const handleExportCsv = () => {
+    if (!isEligible) return;
     setIsExporting(true);
     try {
       const csvContent = [
@@ -111,6 +130,7 @@ export const TaxClearanceModal: React.FC<TaxClearanceModalProps> = ({
               type="button"
               size="sm"
               onClick={handlePrint}
+              disabled={!isEligible}
               className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold gap-1.5 shadow-sm cursor-pointer"
             >
               <Printer size={14} />
@@ -119,8 +139,18 @@ export const TaxClearanceModal: React.FC<TaxClearanceModalProps> = ({
           </div>
         </DialogHeader>
 
+        {!isEligible && (
+          <div className="mx-5 mt-5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+            <p className="font-bold">Ineligible for Tax Clearance</p>
+            <p className="mt-1 text-xs">Certification remains blocked until all statutory and archival conditions are satisfied.</p>
+            <ul className="mt-3 list-disc space-y-1 pl-5 text-xs">
+              {eligibilityReasons.length > 0 ? eligibilityReasons.map((reason) => <li key={reason}>{reason}</li>) : <li>Authoritative eligibility result is required before issuance.</li>}
+            </ul>
+          </div>
+        )}
+
         {/* Configuration Controls (Hidden on Print) */}
-        <div className="p-5 bg-white border-b border-slate-200 text-xs space-y-3 no-print">
+         <div className="p-5 bg-white border-b border-slate-200 text-xs space-y-3 no-print">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block font-bold text-slate-700 uppercase tracking-wider text-[10px] mb-1">

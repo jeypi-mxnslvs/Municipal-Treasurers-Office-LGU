@@ -20,7 +20,7 @@ When making architectural, mathematical, or implementation decisions, agents mus
 graph TD
     SSOT["1. SSOT.md (Highest Authority)<br/>Canonical schemas, statutory formulas, AF-51 rules, RBAC"] --> Roadmap["2. ROADMAP_AND_PHASES.md<br/>Phases 0-6 boundaries, branching model, acceptance criteria"]
     Roadmap --> ClaudeArch["3. Claude Architectures/ & .agents/rules/<br/>Detailed forensic analysis, threat model, task standards"]
-    ClaudeArch --> ExistingCode["4. Active Source Code<br/>services/api.ts, types.ts, utils/taxLogic.ts, schema.sql"]
+    ClaudeArch --> ExistingCode["4. Active Source Code<br/>services/api.ts, types.ts, utils/taxLogic.ts, supabase/migrations/*.sql"]
 ```
 
 1. **[`docs/SSOT.md`](file:///home/jeipyyy/Documents/Projects/LGU-Treasury-Connect/lgu-treasury-connect/docs/SSOT.md)** *(Highest Authority)*: The definitive Single Source of Truth for database schemas, statutory tax math, COA financial controls, role permissions, and interface contracts.
@@ -111,9 +111,19 @@ lgu-treasury-connect/
 │   ├── SSOT.md          # Canonical Single Source of Truth
 │   ├── IMPLEMENTATION_PLAN_VERIFICATION_STATEMENT_SYSTEM.md # Authoritative Scope & Execution Plan
 │   └── Claude Architectures/# Historical deep-dive documentation (REFERENCE ONLY)
+├── supabase/migrations/ # Canonical, ordered database migration history
 ├── server/              # DEAD CODE: Legacy Express/SQLite server (DO NOT USE)
 └── AGENTS.md            # This agent operating guideline
 ```
+
+### Migration History Rules
+- `supabase/migrations/*.sql` is canonical database history. Standalone `schema.sql` is retired and must not be recreated.
+- Never delete, rename, reorder, or rewrite a migration already applied to linked Supabase.
+- Fix deployed schema defects only with forward migrations; never edit applied SQL to repair remote state.
+- Keep `20260916_encoder_attribution.sql` and `20260917_historical_gap_preservation.sql` under their current versions. Never restore historical-gap SQL as `20260916`.
+- `20260920_batch_verification_rpc.sql` provides atomic verification; `20260921_canonicalize_verification_schema.sql` repairs legacy verification rows and constraints.
+- Before push, run `npx supabase migration list`, then `npx supabase db push --include-all --dry-run`.
+- Never run `npx supabase db reset` against remote municipal data.
 
 > [!WARNING]
 > **Dead Code Warning**:

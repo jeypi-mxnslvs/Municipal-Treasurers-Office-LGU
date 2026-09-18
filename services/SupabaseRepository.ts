@@ -540,6 +540,58 @@ export class SupabaseRepository implements ITreasuryRepository {
     };
   }
 
+  async verifyDelinquencyPeriodBatch(payload: {
+    propertyId: string | number;
+    tdNumber: string;
+    periods: Array<{
+      periodKey: string;
+      taxYear: number;
+      periodLabel: string;
+      status: Extract<DelinquencyPeriodStatus, 'VERIFIED_SETTLED_EXTERNALLY' | 'VERIFIED_OUTSTANDING' | 'DISPUTED' | 'NOT_APPLICABLE'>;
+      verificationType: VerificationType;
+      evidenceType?: 'OFFICIAL_RECEIPT' | 'ASSESSMENT_ROLL_AUDIT' | 'COURT_ORDER_AMNESTY' | 'PRIOR_REGISTRY_FOLIO';
+      sourceReference?: string;
+      remarks?: string;
+    }>;
+    verifiedBy: number | string;
+    stationId?: string;
+  }): Promise<{
+    verifications: DelinquencyPeriodVerification[];
+    propertyBaseline: { lastPaidYear: number; lastPaidQuarter: number };
+  }> {
+    const { data, error } = await supabase.rpc('verify_delinquency_period_batch', {
+      p_property_id: Number(payload.propertyId),
+      p_td_number: payload.tdNumber,
+      p_periods: payload.periods,
+      p_verified_by: String(payload.verifiedBy),
+      p_station_id: payload.stationId || 'Verification-Desk',
+    });
+
+    if (error) throw error;
+    if (!data || typeof data !== 'object') {
+      throw new Error('Verification batch returned no authoritative result.');
+    }
+
+    const result = data as Record<string, unknown>;
+    const rows = result.verifications;
+    const baseline = result.propertyBaseline;
+    if (!Array.isArray(rows) || !baseline || typeof baseline !== 'object') {
+      throw new Error('Verification batch returned an invalid authoritative result.');
+    }
+
+    const baselineRecord = baseline as Record<string, unknown>;
+    const lastPaidYear = Number(baselineRecord.lastPaidYear);
+    const lastPaidQuarter = Number(baselineRecord.lastPaidQuarter);
+    if (!Number.isInteger(lastPaidYear) || !Number.isInteger(lastPaidQuarter)) {
+      throw new Error('Verification batch returned an invalid property baseline.');
+    }
+
+    return {
+      verifications: rows as DelinquencyPeriodVerification[],
+      propertyBaseline: { lastPaidYear, lastPaidQuarter },
+    };
+  }
+
   async revertDelinquencyVerification(payload: {
     verificationId?: number | string;
     propertyId: string | number;

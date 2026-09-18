@@ -52,27 +52,7 @@ CREATE TABLE IF NOT EXISTS properties (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
 
--- 4. DELINQUENCY PERIOD VERIFICATIONS (Assessment & Settlement Provenance)
-CREATE TABLE IF NOT EXISTS delinquency_period_verifications (
-    id SERIAL PRIMARY KEY,
-    property_id INT NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
-    td_number_snapshot VARCHAR(64) NOT NULL,
-    period_key VARCHAR(32) NOT NULL,
-    tax_year INT NOT NULL,
-    period_label VARCHAR(64) NOT NULL,
-    status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
-    verification_type VARCHAR(32) NOT NULL DEFAULT 'OFFICIAL_RECEIPT',
-    source_reference VARCHAR(128),
-    remarks TEXT,
-    verified_by VARCHAR(128) NOT NULL,
-    verified_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
-    station_id VARCHAR(64) NOT NULL DEFAULT 'Assessor-Desk',
-    supersedes_id INT REFERENCES delinquency_period_verifications(id) ON DELETE SET NULL,
-    reversal_reason TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
-);
-
--- 5. DELINQUENCY YEAR COMPLETIONS (Year-Level Verification Status)
+-- 4. DELINQUENCY YEAR COMPLETIONS (Year-Level Verification Status)
 CREATE TABLE IF NOT EXISTS delinquency_year_completions (
     id SERIAL PRIMARY KEY,
     property_id INT NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
@@ -86,7 +66,7 @@ CREATE TABLE IF NOT EXISTS delinquency_year_completions (
     CONSTRAINT uq_property_tax_year UNIQUE (property_id, tax_year)
 );
 
--- 6. RPTAR AUDIT LOGS (Attribution & Traceability)
+-- 5. RPTAR AUDIT LOGS (Attribution & Traceability)
 CREATE TABLE IF NOT EXISTS rptar_audit_logs (
     id SERIAL PRIMARY KEY,
     property_id INT,
@@ -106,7 +86,7 @@ CREATE TABLE IF NOT EXISTS rptar_audit_logs (
     timestamp TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
 
--- 7. SECURITY AUDIT LOGS (Immutable Authentication & Security Events)
+-- 6. SECURITY AUDIT LOGS (Immutable Authentication & Security Events)
 CREATE TABLE IF NOT EXISTS security_audit_logs (
     id SERIAL PRIMARY KEY,
     event_type TEXT NOT NULL, -- 'LOGIN_SUCCESS', 'LOGIN_FAILURE', 'USER_CREATED', 'ROLE_CHANGED', 'PASSWORD_RESET', 'USER_DELETED', 'ACCESS_DENIED'
@@ -118,7 +98,7 @@ CREATE TABLE IF NOT EXISTS security_audit_logs (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
 
--- 8. MUNICIPAL TAX POLICY SETTINGS TABLE (Configurable Discount Schedule)
+-- 7. MUNICIPAL TAX POLICY SETTINGS TABLE (Configurable Discount Schedule)
 CREATE TABLE IF NOT EXISTS municipal_tax_settings (
     id SERIAL PRIMARY KEY,
     early_payment_discount_rate NUMERIC NOT NULL DEFAULT 0.20,
@@ -131,7 +111,7 @@ CREATE TABLE IF NOT EXISTS municipal_tax_settings (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
 
--- 9. CSV IMPORT BATCHES TABLE (Assessor Staging & Ingestion Tracking)
+-- 8. CSV IMPORT BATCHES TABLE (Assessor Staging & Ingestion Tracking)
 CREATE TABLE IF NOT EXISTS csv_import_batches (
     id SERIAL PRIMARY KEY,
     batch_name TEXT NOT NULL,
@@ -145,7 +125,7 @@ CREATE TABLE IF NOT EXISTS csv_import_batches (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
 
--- 10. DELINQUENCY PERIOD VERIFICATIONS TABLE (Settlement Evidence & Decision Registry)
+-- 9. DELINQUENCY PERIOD VERIFICATIONS TABLE (Settlement Evidence & Decision Registry)
 CREATE TABLE IF NOT EXISTS delinquency_period_verifications (
     id SERIAL PRIMARY KEY,
     property_id INT NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
@@ -191,7 +171,7 @@ CREATE OR REPLACE FUNCTION trg_hash_user_password()
 RETURNS TRIGGER AS $$
 BEGIN
     IF NEW.password_hash IS NOT NULL AND NEW.password_hash NOT LIKE '$2%' THEN
-        NEW.password_hash := crypt(NEW.password_hash, gen_salt('bf', 10));
+        NEW.password_hash := extensions.crypt(NEW.password_hash, extensions.gen_salt('bf', 10));
     END IF;
     RETURN NEW;
 END;
@@ -230,7 +210,7 @@ BEGIN
     FROM users
     WHERE lower(users.username) = lower(trim(p_username));
 
-    IF v_user.id IS NOT NULL AND v_user.password_hash = crypt(p_password, v_user.password_hash) THEN
+    IF v_user.id IS NOT NULL AND v_user.password_hash = extensions.crypt(p_password, v_user.password_hash) THEN
         -- Audit successful authentication
         INSERT INTO security_audit_logs (event_type, username, user_id, station_id, details)
         VALUES ('LOGIN_SUCCESS', v_user.username, v_user.id, COALESCE(p_station_id, v_user.station_id), 'Successful authentication');
@@ -325,11 +305,11 @@ $$;
 -- Seed Default Staff Accounts (Bcrypt hashed default 'admin123')
 INSERT INTO users (username, password_hash, full_name, role, station_id)
 VALUES 
-    ('admin@example.com', crypt('admin123', gen_salt('bf', 10)), 'System Administrator', 'Admin', 'Main-HQ'),
-    ('assessor@example.com', crypt('admin123', gen_salt('bf', 10)), 'Municipal Assessor', 'Assessor', 'Assessor-Desk'),
+    ('admin@example.com', extensions.crypt('admin123', extensions.gen_salt('bf', 10)), 'System Administrator', 'Admin', 'Main-HQ'),
+    ('assessor@example.com', extensions.crypt('admin123', extensions.gen_salt('bf', 10)), 'Municipal Assessor', 'Assessor', 'Assessor-Desk'),
     -- Legacy Aliases & Compatibility
-    ('admin', crypt('admin123', gen_salt('bf', 10)), 'System Administrator', 'Admin', 'Main-HQ'),
-    ('juan.assessor', crypt('admin123', gen_salt('bf', 10)), 'Juan Reyes', 'Assessor', 'Assessor-Desk-02')
+    ('admin', extensions.crypt('admin123', extensions.gen_salt('bf', 10)), 'System Administrator', 'Admin', 'Main-HQ'),
+    ('juan.assessor', extensions.crypt('admin123', extensions.gen_salt('bf', 10)), 'Juan Reyes', 'Assessor', 'Assessor-Desk-02')
 ON CONFLICT (username) DO UPDATE
 SET password_hash = EXCLUDED.password_hash;
 
@@ -390,6 +370,20 @@ ALTER TABLE public.municipal_tax_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.csv_import_batches ENABLE ROW LEVEL SECURITY;
 
 -- Restrictive policies
+DROP POLICY IF EXISTS "Allow authenticated read users" ON public.users;
+DROP POLICY IF EXISTS "Allow public select properties" ON public.properties;
+DROP POLICY IF EXISTS "Allow authenticated modify properties" ON public.properties;
+DROP POLICY IF EXISTS "Allow public select sfmv" ON public.schedule_of_market_values;
+DROP POLICY IF EXISTS "Allow authenticated all sfmv" ON public.schedule_of_market_values;
+DROP POLICY IF EXISTS "Allow public select delinquency_verifications" ON public.delinquency_period_verifications;
+DROP POLICY IF EXISTS "Allow authenticated all delinquency_verifications" ON public.delinquency_period_verifications;
+DROP POLICY IF EXISTS "Allow public select delinquency_completions" ON public.delinquency_year_completions;
+DROP POLICY IF EXISTS "Allow authenticated all delinquency_completions" ON public.delinquency_year_completions;
+DROP POLICY IF EXISTS "Allow authenticated all audit_logs" ON public.rptar_audit_logs;
+DROP POLICY IF EXISTS "Allow anon and auth insert security logs" ON public.security_audit_logs;
+DROP POLICY IF EXISTS "Allow authenticated read security logs" ON public.security_audit_logs;
+DROP POLICY IF EXISTS "Allow all on municipal_tax_settings" ON public.municipal_tax_settings;
+DROP POLICY IF EXISTS "Allow all on csv_import_batches" ON public.csv_import_batches;
 CREATE POLICY "Allow authenticated read users" ON public.users FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Allow public select properties" ON public.properties FOR SELECT TO anon, authenticated USING (true);
 CREATE POLICY "Allow authenticated modify properties" ON public.properties FOR ALL TO authenticated USING (true);

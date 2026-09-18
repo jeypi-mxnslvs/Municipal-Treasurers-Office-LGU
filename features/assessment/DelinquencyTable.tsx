@@ -66,12 +66,12 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
     }
   }, [records.length, completedRecords.length, activeTab]);
 
-  // Store selected index range (from index 0 up to selectedMaxIndex inclusive) for outstanding records
-  const [selectedMaxIndex, setSelectedMaxIndex] = useState<number>(records.length - 1);
+  // Store selected index range. Empty by default; verification starts at oldest period.
+  const [selectedMaxIndex, setSelectedMaxIndex] = useState<number>(-1);
 
-  // Default to selecting all records whenever new records load
+  // Reset selection when authoritative records change.
   useEffect(() => {
-    setSelectedMaxIndex(records.length - 1);
+    setSelectedMaxIndex(-1);
   }, [records.length]);
 
   // Identify unverified historical records
@@ -178,15 +178,21 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
 
   // Quick Scope Helpers
   const handleSelectOldestYear = () => {
-    setSelectedMaxIndex(0);
+    setSelectedMaxIndex(records[0]?.isUnverifiedHistorical ? -1 : 0);
   };
 
   const handleSelectAll = () => {
-    setSelectedMaxIndex(records.length - 1);
+    const firstBlockedIndex = records.findIndex(r => r.isUnverifiedHistorical || r.isPayable === false || r.totalDue === null);
+    setSelectedMaxIndex(firstBlockedIndex === -1 ? records.length - 1 : firstBlockedIndex - 1);
   };
 
   const handleCheckboxClick = (index: number) => {
-    setSelectedMaxIndex(index);
+    if (index < 0 || records[index]?.isUnverifiedHistorical || records[index]?.isPayable === false || records[index]?.totalDue === null) return;
+    const hasEarlierBlocker = records.slice(0, index).some(record =>
+      record.isUnverifiedHistorical || record.isPayable === false || record.totalDue === null
+    );
+    if (hasEarlierBlocker) return;
+    setSelectedMaxIndex((current) => index === current ? index - 1 : index);
   };
 
   // Open the override modal for a specific record and field
@@ -668,13 +674,33 @@ const DelinquencyTable: React.FC<DelinquencyTableProps> = ({
                         <span className={`text-xs sm:text-sm font-extrabold tracking-tight tabular-nums ${isCleared ? 'text-slate-700' : 'text-slate-900'}`}>
                           {record.periodLabel || record.year}
                         </span>
-                        {isCleared ? (
-                          <Badge variant="secondary" className="text-[10px] font-bold px-1.5 py-0 bg-emerald-100 text-emerald-800 border-emerald-300">
-                            ✓ Cleared
+                        {record.verificationStatus === 'VERIFIED_SETTLED_EXTERNALLY' ? (
+                          <Badge variant="secondary" className="text-[10px] font-bold px-1.5 py-0 bg-emerald-100 text-emerald-800 border-emerald-300" title={record.sourceReference || 'External settlement evidence recorded'}>
+                            ✓ Settled Externally
+                          </Badge>
+                        ) : record.verificationStatus === 'VERIFIED_OUTSTANDING' ? (
+                          <Badge variant="outline" className="text-[10px] font-bold px-1.5 py-0 bg-orange-100 text-orange-900 border-orange-300">
+                            Outstanding Verified
+                          </Badge>
+                        ) : record.verificationStatus === 'DISPUTED' ? (
+                          <Badge variant="outline" className="text-[10px] font-bold px-1.5 py-0 bg-purple-100 text-purple-900 border-purple-300">
+                            Disputed
+                          </Badge>
+                        ) : record.verificationStatus === 'NOT_APPLICABLE' ? (
+                          <Badge variant="outline" className="text-[10px] font-bold px-1.5 py-0 bg-slate-100 text-slate-700 border-slate-300">
+                            Not Applicable
+                          </Badge>
+                        ) : record.verificationStatus === 'SUPERSEDED' ? (
+                          <Badge variant="outline" className="text-[10px] font-bold px-1.5 py-0 bg-slate-100 text-slate-600 border-slate-300">
+                            Superseded
                           </Badge>
                         ) : record.isUnverifiedHistorical ? (
                           <Badge variant="outline" className="text-[10px] font-bold px-1.5 py-0 bg-amber-100 text-amber-900 border-amber-400">
-                            ⚠️ Unverified
+                            ⚠️ Unverified Archive Gap
+                          </Badge>
+                        ) : isCleared ? (
+                          <Badge variant="secondary" className="text-[10px] font-bold px-1.5 py-0 bg-emerald-100 text-emerald-800 border-emerald-300">
+                            ✓ Cleared
                           </Badge>
                         ) : isDelinquent ? (
                           <Badge variant="destructive" className="text-[10px] font-bold px-1.5 py-0 bg-rose-100 text-rose-800 border-rose-300">

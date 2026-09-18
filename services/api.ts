@@ -93,6 +93,28 @@ export const api = {
     return treasuryRepository.verifyDelinquencyPeriod(payload);
   },
 
+  verifyDelinquencyPeriodBatch(payload: {
+    propertyId: string | number;
+    tdNumber: string;
+    periods: Array<{
+      periodKey: string;
+      taxYear: number;
+      periodLabel: string;
+      status: Extract<DelinquencyPeriodStatus, 'VERIFIED_SETTLED_EXTERNALLY' | 'VERIFIED_OUTSTANDING' | 'DISPUTED' | 'NOT_APPLICABLE'>;
+      verificationType: VerificationType;
+      evidenceType?: 'OFFICIAL_RECEIPT' | 'ASSESSMENT_ROLL_AUDIT' | 'COURT_ORDER_AMNESTY' | 'PRIOR_REGISTRY_FOLIO';
+      sourceReference?: string;
+      remarks?: string;
+    }>;
+    verifiedBy: number | string;
+    stationId?: string;
+  }): Promise<{
+    verifications: DelinquencyPeriodVerification[];
+    propertyBaseline: { lastPaidYear: number; lastPaidQuarter: number };
+  }> {
+    return treasuryRepository.verifyDelinquencyPeriodBatch(payload);
+  },
+
   revertDelinquencyVerification(payload: {
     verificationId?: number | string;
     propertyId: string | number;

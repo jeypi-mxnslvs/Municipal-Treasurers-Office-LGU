@@ -77,32 +77,61 @@ interface ParsedRow {
   entryType: 'MANUAL' | 'CSV_IMPORT';
 }
 
-/**
- * RFC 4180 compliant CSV line parser.
- * Handles commas inside double quotes, escaped quotes (""), and preserves empty fields (,,).
- */
-const parseCsvLine = (line: string): string[] => {
-  const result: string[] = [];
-  let cur = '';
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const c = line[i];
-    if (c === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        cur += '"';
-        i++; // skip escaped quote
+/** RFC 4180 parser. Keeps quoted CR/LF inside fields and rejects bad quotes. */
+const parseCsv = (text: string): Array<{ line: number; fields: string[] }> => {
+  const rows: Array<{ line: number; fields: string[] }> = [];
+  let fields: string[] = [];
+  let field = '';
+  let quoted = false;
+  let rowStart = 1;
+  let line = 1;
+
+  const finishField = () => {
+    fields.push(field.trim());
+    field = '';
+  };
+  const finishRow = () => {
+    finishField();
+    if (fields.some(value => value !== '')) rows.push({ line: rowStart, fields });
+    fields = [];
+    rowStart = line;
+  };
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (char === '"') {
+      if (quoted && text[i + 1] === '"') {
+        field += '"';
+        i++;
+      } else if (quoted) {
+        quoted = false;
+      } else if (field.trim() === '') {
+        quoted = true;
       } else {
-        inQuotes = !inQuotes;
+        throw new Error(`Malformed CSV quote near line ${line}.`);
       }
-    } else if (c === ',' && !inQuotes) {
-      result.push(cur.trim());
-      cur = '';
+    } else if (char === ',' && !quoted) {
+      finishField();
+    } else if ((char === '\n' || char === '\r') && !quoted) {
+      if (char === '\r' && text[i + 1] === '\n') i++;
+      line++;
+      finishRow();
     } else {
-      cur += c;
+      field += char;
+      if (char === '\n') line++;
     }
   }
-  result.push(cur.trim());
-  return result;
+
+  if (quoted) throw new Error(`Malformed CSV: unclosed quote near line ${line}.`);
+  if (field || fields.length > 0) finishRow();
+  return rows;
+};
+
+const parseImportNumber = (raw: string | undefined, fallback: number): number => {
+  const value = (raw || '').trim();
+  if (!value) return fallback;
+  if (!/^[-+]?\d+(?:\.\d+)?$/.test(value.replace(/,/g, ''))) return Number.NaN;
+  return Number(value.replace(/,/g, ''));
 };
 
 /**
@@ -190,8 +219,15 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
     setImportResult(null);
     setUploadedFileName(fileName);
 
-    const lines = rawText.split(/\r?\n/).filter((line) => line.trim() !== '');
-    if (lines.length <= 1) {
+    let csvRows: Array<{ line: number; fields: string[] }>;
+    try {
+      csvRows = parseCsv(rawText.replace(/^\uFEFF/, ''));
+    } catch (error) {
+      setParsedRows([]);
+      setImportError(error instanceof Error ? error.message : 'Malformed CSV file.');
+      return;
+    }
+    if (csvRows.length <= 1) {
       setParsedRows([]);
       return;
     }
@@ -217,7 +253,7 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
     const lastSeenIndexByTd = new Map<string, number>();
 
     // Parse header to map column names dynamically if present
-    const headerCols = parseCsvLine(lines[0]).map((h) =>
+    const headerCols = csvRows[0].fields.map((h) =>
       h.toLowerCase().replace(/[\s_-]+/g, '')
     );
 
@@ -253,9 +289,9 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
       -1
     );
 
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i];
-      const cleanCols = parseCsvLine(line);
+    for (let i = 1; i < csvRows.length; i++) {
+      const csvRow = csvRows[i];
+      const cleanCols = csvRow.fields;
 
       const tdNumber = cleanCols[colTd] || '';
       const previousTdNumber = cleanCols[colPrevTd] || '';
@@ -264,15 +300,15 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
       const address = cleanCols[colAddress] || 'Santa Rosa, Nueva Ecija';
       const rawBarangay = cleanCols[colBarangay] || '';
       const rawPropertyClass = cleanCols[colClass] || '';
-      const lotAreaSqm = parseFloat(cleanCols[colLotArea]) || 100;
-      const marketValue = parseFloat(cleanCols[colMv]) || 0;
-      const assessedValue = parseFloat(cleanCols[colAv]) || 0;
+      const lotAreaSqm = parseImportNumber(cleanCols[colLotArea], 100);
+      const marketValue = parseImportNumber(cleanCols[colMv], 0);
+      const assessedValue = parseImportNumber(cleanCols[colAv], 0);
       const rawLastPaid = colLastPaid !== -1 ? cleanCols[colLastPaid]?.trim() || '' : '';
       const rawStartYear = colStartYear !== -1 ? cleanCols[colStartYear]?.trim() || '' : '';
       const rawOriginYear = colOriginYear !== -1 ? cleanCols[colOriginYear]?.trim() || '' : '';
 
       const record = {
-        line: i + 1,
+        line: csvRow.line,
         tdNumber,
         previousTdNumber,
         pin,
@@ -330,9 +366,9 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
       }
 
       // Numeric validation
-      if (isNaN(r.assessedValue) || r.assessedValue < 0) {
+      if (![r.lotAreaSqm, r.marketValue, r.assessedValue].every(Number.isFinite) || r.assessedValue < 0 || r.marketValue < 0 || r.lotAreaSqm < 0) {
         state = 'INVALID_NUMERIC_VALUE';
-        error = 'Assessed Value must be a valid non-negative number';
+        error = 'Lot Area, Market Value, and Assessed Value must be valid non-negative numbers';
       }
 
       // "Last Import Wins" duplicate resolution within same CSV file
