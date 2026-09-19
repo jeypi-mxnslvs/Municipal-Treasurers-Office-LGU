@@ -12,7 +12,10 @@ import {
   ComputationScheduleVersion,
   DelinquencyPeriodVerification,
   DelinquencyPeriodStatus,
-  VerificationType
+  VerificationType,
+  TestMasterlistPurgePreview,
+  TestBatchClassificationResult
+  ,MaintenancePropertyCandidate
 } from '@/types';
 
 /**
@@ -40,6 +43,7 @@ export interface ITreasuryRepository {
     reason?: string;
   }): Promise<Property>;
   deleteProperty(propertyId: string): Promise<void>;
+  archiveProperty(propertyId: string, reason: string, authorizedBy: string, authorizedRole: string): Promise<Property>;
   lookupSfmv(barangay: string, propertyClass: string): Promise<{ base_rate_sqm: number; assessment_level: number }>;
 
   // 2. Delinquency Period Verification & External Settlement Evidence
@@ -130,6 +134,10 @@ export interface ITreasuryRepository {
     details?: string;
   }): Promise<void>;
   getSecurityAuditLogs(): Promise<SecurityAuditLog[]>;
+  getMaintenancePropertyCandidates(): Promise<MaintenancePropertyCandidate[]>;
+  previewTestMasterlistPurge(propertyIds: number[]): Promise<TestMasterlistPurgePreview>;
+  classifyTestImportBatches(payload: { propertyIds: number[]; reason: string; authorizedBy: string; authorizedRole: string; approvalReference: string }): Promise<TestBatchClassificationResult>;
+  purgeTestMasterlist(payload: { propertyIds: number[]; confirmation: string; reason: string; authorizedBy: string; authorizedRole: string; approvalReference: string }): Promise<TestMasterlistPurgePreview>;
   logFieldOverrideAudit(entry: {
     propertyId?: number | string;
     tdNumber: string;

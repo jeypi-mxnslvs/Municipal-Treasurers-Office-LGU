@@ -31,7 +31,7 @@ import {
   Search,
   MoreVertical,
   Plus,
-  Trash2,
+  Archive,
   CreditCard,
   Edit3,
   Filter,
@@ -90,6 +90,7 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedBarangay, setSelectedBarangay] = useState<string>('All');
   const [selectedStatus, setSelectedStatus] = useState<string>('All');
+  const [showArchived, setShowArchived] = useState(false);
   const [sortField, setSortField] = useState<PropertySortField>('ownerName');
   const [sortDirection, setSortDirection] = useState<PropertySortDirection>('asc');
   const [currentPage, setCurrentPage] = useState(1);
@@ -130,6 +131,8 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
   const filteredProperties = useMemo(() => {
     const term = debouncedSearch.trim().toLowerCase();
     const matched = properties.filter((p) => {
+      const isArchived = p.disposition === 'ARCHIVED' || p.disposition === 'CANCELLED' || p.disposition === 'VOIDED' || p.disposition === 'SUPERSEDED';
+      if (isArchived !== showArchived) return false;
       const matchesSearch =
         !term ||
         p.ownerName.toLowerCase().includes(term) ||
@@ -155,7 +158,7 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
       field: sortField,
       direction: sortDirection,
     });
-  }, [properties, debouncedSearch, selectedBarangay, selectedStatus, sortField, sortDirection]);
+  }, [properties, debouncedSearch, selectedBarangay, selectedStatus, sortField, sortDirection, showArchived]);
 
   // Pagination Math
   const totalPages = Math.ceil(filteredProperties.length / pageSize) || 1;
@@ -174,9 +177,9 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
     }
   };
 
-  const canEdit = currentUser.role === 'Admin' || currentUser.role === 'Assessor';
-  const canDelete = currentUser.role === 'Admin';
-  const canClearDues = currentUser.role === 'Assessor' || currentUser.role === 'Admin';
+  const canEdit = (currentUser.role === 'Admin' || currentUser.role === 'Assessor') && !showArchived;
+  const canDelete = currentUser.role === 'Admin' && !showArchived;
+  const canClearDues = (currentUser.role === 'Assessor' || currentUser.role === 'Admin') && !showArchived;
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-full animate-fade-in-up">
@@ -188,6 +191,9 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
             <Badge variant="secondary" className="font-semibold text-xs text-emerald-800 bg-emerald-100/90 border border-emerald-200/70">
               {filteredProperties.length} of {properties.length} Accounts
             </Badge>
+            <button type="button" onClick={() => { setShowArchived((value) => !value); setCurrentPage(1); }} className={`text-[11px] rounded-md border px-2 py-1 font-semibold ${showArchived ? 'bg-slate-700 text-white border-slate-700' : 'bg-white text-slate-600 border-slate-300'}`}>
+              {showArchived ? 'Showing Archived' : 'Show Archived'}
+            </button>
             <Badge
               variant="outline"
               className="text-xs font-normal text-slate-600 border-slate-300 hidden sm:inline-flex items-center gap-1 bg-white/70"
@@ -398,8 +404,8 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
                                 onClick={() => onDeleteProperty(property.id)}
                                 className="text-rose-600 hover:text-rose-700 focus:text-rose-700 focus:bg-rose-50"
                               >
-                                <Trash2 size={14} className="text-rose-600 mr-2" />
-                                Delete Record
+                                 <Archive size={14} className="text-rose-600 mr-2" />
+                                 Archive Record
                               </DropdownMenuItem>
                             </>
                           )}

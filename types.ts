@@ -32,6 +32,10 @@ export interface Property {
   entryType?: 'MANUAL' | 'CSV_IMPORT'; // 'MANUAL' entries prioritized in #1 position
   createdAt?: string;
   updatedAt?: string;
+  disposition?: 'ACTIVE' | 'SAMPLE_RECORD' | 'VOIDED' | 'CANCELLED' | 'SUPERSEDED' | 'ARCHIVED';
+  dispositionReason?: string;
+  dispositionAuthorizedBy?: string;
+  dispositionAt?: string;
 }
 
 export interface TaxYearRecord {
@@ -164,7 +168,7 @@ export interface User {
   id: string | number;
   name: string;
   username?: string;
-  role: 'Admin' | 'Assessor';
+  role: 'Admin' | 'Assessor' | 'SystemMaintenance';
   stationId: string;
 }
 
@@ -233,6 +237,31 @@ export interface DashboardStatsData {
   collectionEfficiency: number;
   monthlyTrend: Array<{ month: string; collections: number; target: number }>;
   barangayBreakdown: Array<{ barangay: string; properties: number; outstandingDebt: number }>;
+}
+
+export interface TestMasterlistPurgePreview {
+  propertyIds: number[];
+  batchIds: number[];
+  unlinkedPropertyCount: number;
+  propertyCount: number;
+  verificationCount: number;
+  rowOutcomeCount: number;
+  protectedTables: string[];
+}
+
+export interface MaintenancePropertyCandidate {
+  id: number;
+  tdNumber: string;
+  ownerName: string;
+  barangay: string;
+  assessedValue: number;
+  disposition?: Property['disposition'];
+  importBatchId?: number;
+}
+
+export interface TestBatchClassificationResult {
+  propertyIds: number[];
+  classifiedCount: number;
 }
 
 export interface RptarAuditLog {
@@ -306,6 +335,7 @@ export interface CsvImportBatch {
   errorCount?: number;
   completedAt?: string;
   createdAt?: string;
+  isTestData?: boolean;
 }
 
 export type ComputationScheduleStatus =

@@ -119,6 +119,30 @@ export class LocalHttpRepository implements ITreasuryRepository {
     await this.request(`/properties/${propertyId}`, { method: 'DELETE' });
   }
 
+  async archiveProperty(propertyId: string, reason: string, authorizedBy: string, authorizedRole: string): Promise<Property> {
+    if (authorizedRole !== 'Admin') throw new Error('Only System Admin may archive property records.');
+    return this.request<Property>(`/properties/${propertyId}/archive`, {
+      method: 'POST',
+      body: JSON.stringify({ reason, authorizedBy, authorizedRole }),
+    });
+  }
+
+  async previewTestMasterlistPurge(propertyIds: number[]): Promise<import('@/types').TestMasterlistPurgePreview> {
+    return this.request('/maintenance/purge-preview', { method: 'POST', body: JSON.stringify({ propertyIds }) });
+  }
+
+  async getMaintenancePropertyCandidates(): Promise<import('@/types').MaintenancePropertyCandidate[]> {
+    return this.request('/maintenance/property-candidates');
+  }
+
+  async classifyTestImportBatches(payload: { propertyIds: number[]; reason: string; authorizedBy: string; authorizedRole: string; approvalReference: string }): Promise<import('@/types').TestBatchClassificationResult> {
+    return this.request('/maintenance/classify-test-batches', { method: 'POST', body: JSON.stringify(payload) });
+  }
+
+  async purgeTestMasterlist(payload: { propertyIds: number[]; confirmation: string; reason: string; authorizedBy: string; authorizedRole: string; approvalReference: string }): Promise<import('@/types').TestMasterlistPurgePreview> {
+    return this.request('/maintenance/purge-sample-masterlist', { method: 'POST', body: JSON.stringify(payload) });
+  }
+
   async lookupSfmv(barangay: string, propertyClass: string): Promise<{ base_rate_sqm: number; assessment_level: number }> {
     const params = new URLSearchParams({ barangay, property_class: propertyClass });
     return this.request<{ base_rate_sqm: number; assessment_level: number }>(`/sfmv?${params.toString()}`);

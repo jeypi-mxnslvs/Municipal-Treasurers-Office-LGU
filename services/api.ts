@@ -15,7 +15,10 @@ import {
   CsvImportBatch,
   DelinquencyPeriodVerification,
   DelinquencyPeriodStatus,
-  VerificationType
+  VerificationType,
+  TestMasterlistPurgePreview,
+  TestBatchClassificationResult
+  ,MaintenancePropertyCandidate
 } from '@/types';
 
 /**
@@ -71,6 +74,10 @@ export const api = {
 
   deleteProperty(propertyId: string): Promise<void> {
     return treasuryRepository.deleteProperty(propertyId);
+  },
+
+  archiveProperty(propertyId: string, reason: string, authorizedBy: string, authorizedRole: string): Promise<Property> {
+    return treasuryRepository.archiveProperty(propertyId, reason, authorizedBy, authorizedRole);
   },
 
   lookupSfmv(barangay: string, propertyClass: string): Promise<{ base_rate_sqm: number; assessment_level: number }> {
@@ -211,6 +218,18 @@ export const api = {
 
   getSecurityAuditLogs(): Promise<SecurityAuditLog[]> {
     return treasuryRepository.getSecurityAuditLogs();
+  },
+  getMaintenancePropertyCandidates(): Promise<MaintenancePropertyCandidate[]> {
+    return treasuryRepository.getMaintenancePropertyCandidates();
+  },
+  previewTestMasterlistPurge(propertyIds: number[]): Promise<TestMasterlistPurgePreview> {
+    return treasuryRepository.previewTestMasterlistPurge(propertyIds);
+  },
+  classifyTestImportBatches(payload: { propertyIds: number[]; reason: string; authorizedBy: string; authorizedRole: string; approvalReference: string }): Promise<TestBatchClassificationResult> {
+    return treasuryRepository.classifyTestImportBatches(payload);
+  },
+  purgeTestMasterlist(payload: { propertyIds: number[]; confirmation: string; reason: string; authorizedBy: string; authorizedRole: string; approvalReference: string }): Promise<TestMasterlistPurgePreview> {
+    return treasuryRepository.purgeTestMasterlist(payload);
   },
 
   logFieldOverrideAudit(entry: {

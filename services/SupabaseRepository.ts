@@ -45,6 +45,10 @@ const mapPropertyRow = (row: Record<string, unknown>): Property => ({
   entryType: (row.entry_type as 'MANUAL' | 'CSV_IMPORT') || (String(row.encoder_label || '').includes('(Manual)') ? 'MANUAL' : 'CSV_IMPORT'),
   createdAt: row.created_at as string | undefined,
   updatedAt: row.updated_at as string | undefined,
+  disposition: (row.disposition as Property['disposition']) || 'ACTIVE',
+  dispositionReason: row.disposition_reason as string | undefined,
+  dispositionAuthorizedBy: row.disposition_authorized_by as string | undefined,
+  dispositionAt: row.disposition_at as string | undefined,
 });
 
 /**
@@ -75,6 +79,9 @@ export class SupabaseRepository implements ITreasuryRepository {
   }
 
   async getPropertyAssessment(propertyId: string, fallbackProp?: Property, customSettings?: MunicipalTaxSettings): Promise<CalculationResult> {
+    if (fallbackProp?.disposition && fallbackProp.disposition !== 'ACTIVE') {
+      throw new Error('Archived or retired property records are excluded from tax computation.');
+    }
     const settings = customSettings || await this.getMunicipalTaxSettings();
     const computationSchedule = await this.getActiveComputationSchedule();
     const scheduleApplication: import('@/types').ComputationScheduleApplication = computationSchedule ? {
@@ -119,6 +126,9 @@ export class SupabaseRepository implements ITreasuryRepository {
     const { data } = await supabase.from('properties').select('*').eq('id', propertyId).single();
     if (data) {
       const prop = mapPropertyRow(data);
+      if (prop.disposition && prop.disposition !== 'ACTIVE') {
+        throw new Error('Archived or retired property records are excluded from tax computation.');
+      }
       return localCalculateTaxLiability(prop, calcOptions);
     }
     return { records: [], grandTotal: 0 };
@@ -417,6 +427,21 @@ export class SupabaseRepository implements ITreasuryRepository {
         details: `Deleted property record ${target.td_number}`
       });
     }
+  }
+
+  async archiveProperty(propertyId: string, reason: string, authorizedBy: string, authorizedRole: string): Promise<Property> {
+    if (authorizedRole !== 'Admin') throw new Error('Only System Admin may archive property records.');
+    const { data, error } = await supabase.rpc('archive_property', {
+      p_property_id: Number(propertyId),
+      p_reason: reason,
+      p_authorized_by: authorizedBy,
+      p_authorized_role: authorizedRole,
+    });
+    if (error) throw new Error(`Failed to archive property: ${error.message}`);
+    const { data: archived, error: readError } = await supabase.from('properties').select('*').eq('id', Number(propertyId)).single();
+    if (readError || !archived) throw new Error(`Archived record could not be reloaded: ${readError?.message || 'not found'}`);
+    void data;
+    return mapPropertyRow(archived);
   }
 
   async lookupSfmv(barangay: string, propertyClass: string): Promise<{ base_rate_sqm: number; assessment_level: number }> {
@@ -735,7 +760,7 @@ export class SupabaseRepository implements ITreasuryRepository {
 
   // 4. Reporting, Analytics & Live Multi-Assessor Sync
   async getDashboardStats(): Promise<DashboardStatsData> {
-    const { data: props } = await supabase.from('properties').select('*');
+    const { data: props } = await supabase.from('properties').select('*').eq('disposition', 'ACTIVE');
     const list = props || [];
     const { data: verificationRows } = await supabase
       .from('delinquency_period_verifications')
@@ -1023,13 +1048,14 @@ export class SupabaseRepository implements ITreasuryRepository {
     }
 
     // 2. Workstation seed fallback (for unmigrated environments or database permission restrictions)
-    const workstationUsers: Record<string, { role: 'Admin' | 'Assessor'; name: string; stationId: string; expectedPass: string }> = {
+    const workstationUsers: Record<string, { role: 'Admin' | 'Assessor' | 'SystemMaintenance'; name: string; stationId: string; expectedPass: string }> = {
       'admin': { role: 'Admin', name: 'System Administrator', stationId: 'Main-HQ', expectedPass: (import.meta.env.VITE_ADMIN_PASSWORD as string) || 'admin123' },
       'admin@example.com': { role: 'Admin', name: 'System Administrator', stationId: 'Main-HQ', expectedPass: (import.meta.env.VITE_ADMIN_PASSWORD as string) || 'admin123' },
       'test-admin@example.com': { role: 'Admin', name: 'System Administrator', stationId: 'Main-HQ', expectedPass: (import.meta.env.VITE_ADMIN_PASSWORD as string) || 'admin123' },
       'assessor': { role: 'Assessor', name: 'Municipal Assessor', stationId: 'Assessor-Desk', expectedPass: (import.meta.env.VITE_ASSESSOR_PASSWORD as string) || 'assessor123' },
       'assessor@example.com': { role: 'Assessor', name: 'Municipal Assessor', stationId: 'Assessor-Desk', expectedPass: (import.meta.env.VITE_ASSESSOR_PASSWORD as string) || 'assessor123' },
       'test-assessor@example.com': { role: 'Assessor', name: 'Municipal Assessor', stationId: 'Assessor-Desk', expectedPass: (import.meta.env.VITE_ASSESSOR_PASSWORD as string) || 'assessor123' },
+      'maintenance@example.com': { role: 'SystemMaintenance', name: 'IT / System Maintenance', stationId: 'MIS-Desk', expectedPass: (import.meta.env.VITE_MAINTENANCE_PASSWORD as string) || 'maintenance123' },
     };
 
     const seedAccount = workstationUsers[cleanUsername];
@@ -1037,7 +1063,8 @@ export class SupabaseRepository implements ITreasuryRepository {
       const isPassValid =
         password === seedAccount.expectedPass ||
         password === 'admin123' ||
-        (seedAccount.role === 'Assessor' && (password === 'assessor123' || password === 'admin123'));
+        ((seedAccount.role === 'Assessor' && (password === 'assessor123' || password === 'admin123')) ||
+          (seedAccount.role === 'SystemMaintenance' && (password === 'maintenance123' || password === 'admin123')));
 
       if (isPassValid) {
         const authenticatedUser: User = {
@@ -1325,6 +1352,51 @@ export class SupabaseRepository implements ITreasuryRepository {
     return data || [];
   }
 
+  async previewTestMasterlistPurge(propertyIds: number[]): Promise<import('@/types').TestMasterlistPurgePreview> {
+    if (!propertyIds.length || propertyIds.some((id) => !Number.isInteger(id) || id <= 0)) throw new Error('At least one valid property is required.');
+    const { data: properties, error: propertyError } = await supabase.from('properties').select('id, import_batch_id').in('id', propertyIds);
+    if (propertyError) throw propertyError;
+    if ((properties || []).length !== propertyIds.length) throw new Error('One or more selected properties no longer exist.');
+    const batchIds = [...new Set((properties || []).map((row) => row.import_batch_id).filter(Boolean))] as number[];
+    const unlinkedPropertyCount = (properties || []).filter((row) => !row.import_batch_id).length;
+    let verificationCount = 0;
+    if (propertyIds.length) {
+      const { count, error: verificationError } = await supabase.from('delinquency_period_verifications').select('id', { count: 'exact', head: true }).in('property_id', propertyIds);
+      if (verificationError) throw verificationError;
+      verificationCount = count || 0;
+    }
+    const { count: rowOutcomeCount, error: outcomeError } = batchIds.length
+      ? await supabase.from('csv_import_row_outcomes').select('id', { count: 'exact', head: true }).in('batch_id', batchIds)
+      : { count: 0, error: null };
+    if (outcomeError) throw outcomeError;
+    return { propertyIds, batchIds, unlinkedPropertyCount, propertyCount: propertyIds.length, verificationCount, rowOutcomeCount: rowOutcomeCount || 0, protectedTables: ['users', 'schedule_of_market_values', 'computation_schedule_versions', 'security_audit_logs', 'rptar_audit_logs'] };
+  }
+
+  async getMaintenancePropertyCandidates(): Promise<import('@/types').MaintenancePropertyCandidate[]> {
+    const { data, error } = await supabase.from('properties').select('id, td_number, owner_name, barangay, assessed_value, disposition, import_batch_id').eq('disposition', 'ACTIVE').order('id', { ascending: true });
+    if (error) throw error;
+    return (data || []).map((row) => ({ id: Number(row.id), tdNumber: String(row.td_number), ownerName: String(row.owner_name), barangay: String(row.barangay), assessedValue: Number(row.assessed_value) || 0, disposition: row.disposition, importBatchId: row.import_batch_id || undefined }));
+  }
+
+  async classifyTestImportBatches(payload: { propertyIds: number[]; reason: string; authorizedBy: string; authorizedRole: string; approvalReference: string }): Promise<import('@/types').TestBatchClassificationResult> {
+    if (payload.authorizedRole !== 'SystemMaintenance') throw new Error('Only System Maintenance may classify test batches.');
+    const { data, error } = await supabase.rpc('classify_test_properties', {
+      p_property_ids: payload.propertyIds, p_reason: payload.reason, p_authorized_by: payload.authorizedBy,
+      p_authorized_role: payload.authorizedRole, p_approval_reference: payload.approvalReference,
+    });
+    if (error) throw new Error(`Test-batch classification failed: ${error.message}`);
+    return data as import('@/types').TestBatchClassificationResult;
+  }
+
+  async purgeTestMasterlist(payload: { propertyIds: number[]; confirmation: string; reason: string; authorizedBy: string; authorizedRole: string; approvalReference: string }): Promise<import('@/types').TestMasterlistPurgePreview> {
+    if (payload.authorizedRole !== 'SystemMaintenance') throw new Error('Only System Maintenance may purge test data.');
+    if (payload.confirmation !== 'CONFIRM-PURGE-MASTERLIST') throw new Error('Exact purge confirmation phrase is required.');
+    if (!payload.reason.trim() || !payload.approvalReference.trim()) throw new Error('Reason and Treasurer approval reference are required.');
+    const { data, error } = await supabase.rpc('purge_sample_masterlist', { p_property_ids: payload.propertyIds, p_confirmation: payload.confirmation, p_reason: payload.reason, p_authorized_by: payload.authorizedBy, p_authorized_role: payload.authorizedRole, p_approval_reference: payload.approvalReference });
+    if (error) throw new Error(`Purge failed: ${error.message}`);
+    return data as import('@/types').TestMasterlistPurgePreview;
+  }
+
   async logFieldOverrideAudit(entry: {
     propertyId?: number | string;
     tdNumber: string;
@@ -1594,7 +1666,8 @@ export class SupabaseRepository implements ITreasuryRepository {
         rejectedRows: b.rejected_rows,
         errorCount: b.error_count,
         completedAt: b.completed_at,
-        createdAt: b.created_at
+         createdAt: b.created_at,
+         isTestData: Boolean(b.is_test_data)
       }));
     } catch {
       return [];
