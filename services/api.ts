@@ -18,6 +18,7 @@ import {
   VerificationType,
   TestMasterlistPurgePreview,
   TestBatchClassificationResult
+  ,MaintenancePropertyCandidate
 } from '@/types';
 
 /**
@@ -218,13 +219,16 @@ export const api = {
   getSecurityAuditLogs(): Promise<SecurityAuditLog[]> {
     return treasuryRepository.getSecurityAuditLogs();
   },
-  previewTestMasterlistPurge(batchIds: number[]): Promise<TestMasterlistPurgePreview> {
-    return treasuryRepository.previewTestMasterlistPurge(batchIds);
+  getMaintenancePropertyCandidates(): Promise<MaintenancePropertyCandidate[]> {
+    return treasuryRepository.getMaintenancePropertyCandidates();
   },
-  classifyTestImportBatches(payload: { batchIds: number[]; reason: string; authorizedBy: string; authorizedRole: string; approvalReference: string }): Promise<TestBatchClassificationResult> {
+  previewTestMasterlistPurge(propertyIds: number[]): Promise<TestMasterlistPurgePreview> {
+    return treasuryRepository.previewTestMasterlistPurge(propertyIds);
+  },
+  classifyTestImportBatches(payload: { propertyIds: number[]; reason: string; authorizedBy: string; authorizedRole: string; approvalReference: string }): Promise<TestBatchClassificationResult> {
     return treasuryRepository.classifyTestImportBatches(payload);
   },
-  purgeTestMasterlist(payload: { batchIds: number[]; confirmation: string; reason: string; authorizedBy: string; authorizedRole: string; approvalReference: string }): Promise<TestMasterlistPurgePreview> {
+  purgeTestMasterlist(payload: { propertyIds: number[]; confirmation: string; reason: string; authorizedBy: string; authorizedRole: string; approvalReference: string }): Promise<TestMasterlistPurgePreview> {
     return treasuryRepository.purgeTestMasterlist(payload);
   },
 

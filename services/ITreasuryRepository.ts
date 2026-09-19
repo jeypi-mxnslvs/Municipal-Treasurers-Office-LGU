@@ -15,6 +15,7 @@ import {
   VerificationType,
   TestMasterlistPurgePreview,
   TestBatchClassificationResult
+  ,MaintenancePropertyCandidate
 } from '@/types';
 
 /**
@@ -133,9 +134,10 @@ export interface ITreasuryRepository {
     details?: string;
   }): Promise<void>;
   getSecurityAuditLogs(): Promise<SecurityAuditLog[]>;
-  previewTestMasterlistPurge(batchIds: number[]): Promise<TestMasterlistPurgePreview>;
-  classifyTestImportBatches(payload: { batchIds: number[]; reason: string; authorizedBy: string; authorizedRole: string; approvalReference: string }): Promise<TestBatchClassificationResult>;
-  purgeTestMasterlist(payload: { batchIds: number[]; confirmation: string; reason: string; authorizedBy: string; authorizedRole: string; approvalReference: string }): Promise<TestMasterlistPurgePreview>;
+  getMaintenancePropertyCandidates(): Promise<MaintenancePropertyCandidate[]>;
+  previewTestMasterlistPurge(propertyIds: number[]): Promise<TestMasterlistPurgePreview>;
+  classifyTestImportBatches(payload: { propertyIds: number[]; reason: string; authorizedBy: string; authorizedRole: string; approvalReference: string }): Promise<TestBatchClassificationResult>;
+  purgeTestMasterlist(payload: { propertyIds: number[]; confirmation: string; reason: string; authorizedBy: string; authorizedRole: string; approvalReference: string }): Promise<TestMasterlistPurgePreview>;
   logFieldOverrideAudit(entry: {
     propertyId?: number | string;
     tdNumber: string;

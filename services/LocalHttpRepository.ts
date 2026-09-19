@@ -127,15 +127,19 @@ export class LocalHttpRepository implements ITreasuryRepository {
     });
   }
 
-  async previewTestMasterlistPurge(batchIds: number[]): Promise<import('@/types').TestMasterlistPurgePreview> {
-    return this.request('/maintenance/purge-preview', { method: 'POST', body: JSON.stringify({ batchIds }) });
+  async previewTestMasterlistPurge(propertyIds: number[]): Promise<import('@/types').TestMasterlistPurgePreview> {
+    return this.request('/maintenance/purge-preview', { method: 'POST', body: JSON.stringify({ propertyIds }) });
   }
 
-  async classifyTestImportBatches(payload: { batchIds: number[]; reason: string; authorizedBy: string; authorizedRole: string; approvalReference: string }): Promise<import('@/types').TestBatchClassificationResult> {
+  async getMaintenancePropertyCandidates(): Promise<import('@/types').MaintenancePropertyCandidate[]> {
+    return this.request('/maintenance/property-candidates');
+  }
+
+  async classifyTestImportBatches(payload: { propertyIds: number[]; reason: string; authorizedBy: string; authorizedRole: string; approvalReference: string }): Promise<import('@/types').TestBatchClassificationResult> {
     return this.request('/maintenance/classify-test-batches', { method: 'POST', body: JSON.stringify(payload) });
   }
 
-  async purgeTestMasterlist(payload: { batchIds: number[]; confirmation: string; reason: string; authorizedBy: string; authorizedRole: string; approvalReference: string }): Promise<import('@/types').TestMasterlistPurgePreview> {
+  async purgeTestMasterlist(payload: { propertyIds: number[]; confirmation: string; reason: string; authorizedBy: string; authorizedRole: string; approvalReference: string }): Promise<import('@/types').TestMasterlistPurgePreview> {
     return this.request('/maintenance/purge-sample-masterlist', { method: 'POST', body: JSON.stringify(payload) });
   }
 

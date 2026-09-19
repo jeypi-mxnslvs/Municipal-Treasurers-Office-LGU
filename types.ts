@@ -240,15 +240,27 @@ export interface DashboardStatsData {
 }
 
 export interface TestMasterlistPurgePreview {
+  propertyIds: number[];
   batchIds: number[];
+  unlinkedPropertyCount: number;
   propertyCount: number;
   verificationCount: number;
   rowOutcomeCount: number;
   protectedTables: string[];
 }
 
+export interface MaintenancePropertyCandidate {
+  id: number;
+  tdNumber: string;
+  ownerName: string;
+  barangay: string;
+  assessedValue: number;
+  disposition?: Property['disposition'];
+  importBatchId?: number;
+}
+
 export interface TestBatchClassificationResult {
-  batchIds: number[];
+  propertyIds: number[];
   classifiedCount: number;
 }
 
