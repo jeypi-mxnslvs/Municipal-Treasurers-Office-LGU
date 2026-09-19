@@ -56,6 +56,9 @@ BEGIN
     RAISE EXCEPTION 'Purge reason, operator, and Treasurer approval reference are required';
   END IF;
 
+  -- Shell/incomplete records are eligible here: maintenance purge is for
+  -- explicitly classified disposable test data, not tax verification.
+  -- Shell restrictions remain enforced by verification and clearance flows.
   SELECT count(*) INTO v_property_count
   FROM properties
   WHERE id = ANY(p_property_ids) AND disposition = 'ACTIVE' AND test_data_classified = TRUE;

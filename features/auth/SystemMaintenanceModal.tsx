@@ -56,9 +56,13 @@ const SystemMaintenanceModal: React.FC<Props> = ({ isOpen, onClose, currentUser 
     try {
       const valid = await api.verifyPassword(currentUser.username, password);
       if (!valid) throw new Error('Password authorization failed.');
-      const result = await api.classifyTestImportBatches({ propertyIds: candidateIds, reason, authorizedBy: currentUser.name, authorizedRole: currentUser.role, approvalReference });
+      const scope = [...new Set(candidateIds)];
+      const result = await api.classifyTestImportBatches({ propertyIds: scope, reason, authorizedBy: currentUser.name, authorizedRole: currentUser.role, approvalReference });
       setMessage(`${result.classifiedCount} property record(s) classified as test data. Run validation again before purge.`);
-      setCandidates(await api.getMaintenancePropertyCandidates());
+      const refreshed = await api.getMaintenancePropertyCandidates();
+      setCandidates(refreshed);
+      setCandidateIds(scope.filter((id) => refreshed.some((candidate) => candidate.id === id)));
+      setPreview(null);
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Classification failed.'); } finally { setBusy(false); }
   };
   const purge = async () => {
@@ -69,9 +73,10 @@ const SystemMaintenanceModal: React.FC<Props> = ({ isOpen, onClose, currentUser 
     try {
       const valid = await api.verifyPassword(currentUser.username, password);
       if (!valid) throw new Error('Password authorization failed.');
-      const result = await api.purgeTestMasterlist({ propertyIds: candidateIds, confirmation, reason, authorizedBy: currentUser.name, authorizedRole: currentUser.role, approvalReference });
+      const scope = [...new Set(candidateIds)];
+      const result = await api.purgeTestMasterlist({ propertyIds: scope, confirmation, reason, authorizedBy: currentUser.name, authorizedRole: currentUser.role, approvalReference });
       setMessage(`Purge completed. Properties: ${result.propertyCount}; verifications: ${result.verificationCount}; row outcomes: ${result.rowOutcomeCount}.`);
-      setPreview(null); setSelected([]);
+       setPreview(null); setSelected([]); setCandidateIds([]);
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Purge failed.'); } finally { setBusy(false); }
   };
 
