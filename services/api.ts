@@ -276,8 +276,10 @@ export const api = {
       barangay?: string;
       fileHash?: string;
       fileSizeBytes?: number;
-      rejectedRows?: number;
-      errorCount?: number;
+       rejectedRows?: number;
+       errorCount?: number;
+       sourceFormat?: 'CSV' | 'XLS' | 'XLSX';
+       sourceSheets?: Array<{ name: string; index: number; kind: string; rowCount: number }>;
     }
   ): Promise<{
     message: string;

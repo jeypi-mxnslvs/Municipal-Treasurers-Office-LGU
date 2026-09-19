@@ -1610,8 +1610,10 @@ export class SupabaseRepository implements ITreasuryRepository {
       barangay?: string;
       fileHash?: string;
       fileSizeBytes?: number;
-      rejectedRows?: number;
-      errorCount?: number;
+       rejectedRows?: number;
+       errorCount?: number;
+       sourceFormat?: 'CSV' | 'XLS' | 'XLSX';
+       sourceSheets?: Array<{ name: string; index: number; kind: string; rowCount: number }>;
     }
   ): Promise<{
     message: string;
@@ -1624,6 +1626,20 @@ export class SupabaseRepository implements ITreasuryRepository {
     const validRows = properties.filter(p => p.tdNumber);
     if (validRows.length === 0) {
       return { message: 'No valid rows to import', insertedCount: 0, updatedCount: 0, unchangedCount: 0, errors: [] };
+    }
+
+    const invalidRow = validRows.find((row) =>
+      !String(row.ownerName || '').trim() ||
+      !String(row.address || '').trim() ||
+      !String(row.barangay || '').trim() ||
+      !String(row.propertyClass || '').trim() ||
+      !Number.isFinite(Number(row.assessedValue)) || Number(row.assessedValue) < 0 ||
+      !Number.isFinite(Number(row.marketValue)) || Number(row.marketValue) < 0 ||
+      !Number.isFinite(Number(row.lotAreaSqm)) || Number(row.lotAreaSqm) < 0 ||
+      row.lastPaidYear === undefined || !Number.isInteger(Number(row.lastPaidYear))
+    );
+    if (invalidRow) {
+      throw new Error(`Import preflight rejected TD ${String(invalidRow.tdNumber)}: required identity, Barangay, property class, numeric valuation, and last-paid fields must be explicit.`);
     }
 
     if (batchMetadata?.fileHash) {
@@ -1680,12 +1696,12 @@ export class SupabaseRepository implements ITreasuryRepository {
       pin: p.pin || '',
       owner_name: p.ownerName || 'Unnamed Taxpayer',
       address: p.address || 'Santa Rosa, Nueva Ecija',
-      barangay: p.barangay || 'Poblacion',
-      property_class: p.propertyClass || 'Residential',
-      lot_area_sqm: Number(p.lotAreaSqm) || 100,
+       barangay: p.barangay,
+       property_class: p.propertyClass,
+       lot_area_sqm: Number(p.lotAreaSqm),
       market_value: Number(p.marketValue) || 0,
       assessed_value: Number(p.assessedValue) || 0,
-      last_paid_year: p.lastPaidYear !== undefined && !isNaN(Number(p.lastPaidYear)) ? Number(p.lastPaidYear) : 1973,
+       last_paid_year: p.lastPaidYear !== undefined && !isNaN(Number(p.lastPaidYear)) ? Number(p.lastPaidYear) : null,
       last_paid_quarter: p.lastPaidQuarter !== undefined && p.lastPaidQuarter !== null ? Number(p.lastPaidQuarter) : 4,
       is_shell_record: Boolean(p.isShellRecord),
       delinquency_start_year: p.delinquencyStartYear !== undefined && p.delinquencyStartYear !== null && !isNaN(Number(p.delinquencyStartYear)) ? Number(p.delinquencyStartYear) : null,
@@ -1731,12 +1747,12 @@ export class SupabaseRepository implements ITreasuryRepository {
             pin: p.pin || '',
             owner_name: p.ownerName || 'Unnamed Taxpayer',
             address: p.address || 'Santa Rosa, Nueva Ecija',
-            barangay: p.barangay || 'Poblacion',
-            property_class: p.propertyClass || 'Residential',
-            lot_area_sqm: Number(p.lotAreaSqm) || 100,
+             barangay: p.barangay,
+             property_class: p.propertyClass,
+             lot_area_sqm: Number(p.lotAreaSqm),
             market_value: Number(p.marketValue) || 0,
             assessed_value: Number(p.assessedValue) || 0,
-            last_paid_year: p.lastPaidYear !== undefined && !isNaN(Number(p.lastPaidYear)) ? Number(p.lastPaidYear) : 1973,
+             last_paid_year: p.lastPaidYear !== undefined && !isNaN(Number(p.lastPaidYear)) ? Number(p.lastPaidYear) : null,
             last_paid_quarter: p.lastPaidQuarter !== undefined && p.lastPaidQuarter !== null ? Number(p.lastPaidQuarter) : 4,
             is_shell_record: Boolean(p.isShellRecord),
             delinquency_start_year: p.delinquencyStartYear !== undefined && p.delinquencyStartYear !== null && !isNaN(Number(p.delinquencyStartYear)) ? Number(p.delinquencyStartYear) : null,
@@ -1841,6 +1857,8 @@ export class SupabaseRepository implements ITreasuryRepository {
         file_hash: batchMetadata?.fileHash || null,
         file_size_bytes: batchMetadata?.fileSizeBytes || null,
         station_id: stationId,
+        source_format: batchMetadata?.sourceFormat || 'CSV',
+        source_sheets: batchMetadata?.sourceSheets || [],
         status: errors.length > 0 ? 'COMMITTED_WITH_ERRORS' : 'COMMITTED',
         rejected_rows: batchMetadata?.rejectedRows || 0,
         error_count: batchMetadata?.errorCount || errors.length,
@@ -1880,6 +1898,9 @@ export class SupabaseRepository implements ITreasuryRepository {
           batch_id: batchId,
           td_number: String(row.tdNumber).trim(),
           outcome,
+          source_sheet: row.sourceSheet || null,
+          source_sheet_index: row.sourceSheetIndex ?? null,
+          source_cell: row.sourceCell || null,
         };
       });
       const { error: outcomeError } = await supabase.from('csv_import_row_outcomes').insert(outcomes);

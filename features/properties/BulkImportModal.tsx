@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Property, User, CsvImportRowState, CsvImportBatch } from '@/types';
+import { parsePropertyWorkbook } from '@/utils/propertyWorkbookParser';
 import { BARANGAYS, PROPERTY_CLASSES, HISTORICAL_BASELINE_YEAR } from '@/constants';
 import { api } from '@/services/api';
 import { mergeEncoderLabel } from '@/utils/encoderAttribution';
@@ -77,6 +78,9 @@ interface ParsedRow {
   error?: string;
   encoderLabel: string;
   entryType: 'MANUAL' | 'CSV_IMPORT';
+  sourceSheet?: string;
+  sourceSheetIndex?: number;
+  sourceCell?: string;
 }
 
 /** RFC 4180 parser. Keeps quoted CR/LF inside fields and rejects bad quotes. */
@@ -196,6 +200,7 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
   const [importBatches, setImportBatches] = useState<CsvImportBatch[]>([]);
   const [isLoadingBatches, setIsLoadingBatches] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const [workbookSheets, setWorkbookSheets] = useState<Array<{ name: string; index: number; kind: string; rowCount: number }>>([]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -228,12 +233,14 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
   const handleParseCsv = (rawText: string, fileName = 'Import.csv') => {
     setImportResult(null);
     setUploadedFileName(fileName);
+    setWorkbookSheets([]);
 
     let csvRows: Array<{ line: number; fields: string[] }>;
     try {
       csvRows = parseCsv(rawText.replace(/^\uFEFF/, ''));
     } catch (error) {
-      setParsedRows([]);
+        setParsedRows([]);
+        setWorkbookSheets([]);
       setImportError(error instanceof Error ? error.message : 'Malformed CSV file.');
       return;
     }
@@ -307,7 +314,7 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
       const previousTdNumber = cleanCols[colPrevTd] || '';
       const pin = cleanCols[colPin] || '';
       const ownerName = cleanCols[colOwner] || '';
-      const address = cleanCols[colAddress] || 'Santa Rosa, Nueva Ecija';
+       const address = cleanCols[colAddress] || '';
       const rawBarangay = cleanCols[colBarangay] || '';
       const rawPropertyClass = cleanCols[colClass] || '';
        const lotAreaSqm = parseImportNumber(cleanCols[colLotArea]);
@@ -357,23 +364,29 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
 
       // Barangay validation against Santa Rosa 33 Barangays
       const matchedBrgy = matchSantaRosaBarangay(r.rawBarangay);
-      const barangay = matchedBrgy || r.rawBarangay || BARANGAYS[0];
-      if (!matchedBrgy && r.rawBarangay) {
-        state = 'INVALID_BARANGAY';
-        error = `Unrecognized Barangay: "${r.rawBarangay}" (Must be one of Santa Rosa's 33)`;
+       const barangay = matchedBrgy || r.rawBarangay;
+       if (!matchedBrgy) {
+         state = 'INVALID_BARANGAY';
+         error = r.rawBarangay
+           ? `Unrecognized Barangay: "${r.rawBarangay}" (Must be one of Santa Rosa's 33)`
+           : 'Missing Barangay; import cannot infer a default location';
       }
 
       // Property Class validation
-      let propertyClass = r.rawPropertyClass || 'Residential';
+       let propertyClass = r.rawPropertyClass;
       const matchedClass = PROPERTY_CLASSES.find(
         (c) => c.toLowerCase() === r.rawPropertyClass.toLowerCase()
       );
       if (matchedClass) {
         propertyClass = matchedClass;
-      } else if (r.rawPropertyClass && !matchedClass) {
-        state = 'INVALID_PROPERTY_CLASS';
-        error = `Unrecognized Property Class: "${r.rawPropertyClass}"`;
-      }
+       } else if (r.rawPropertyClass && !matchedClass) {
+         state = 'INVALID_PROPERTY_CLASS';
+         error = `Unrecognized Property Class: "${r.rawPropertyClass}"`;
+       }
+       if (!error && (!r.ownerName.trim() || !r.address.trim() || !r.rawPropertyClass.trim())) {
+         state = 'CONFLICTING_RECORD';
+         error = 'Missing required owner, address, or property class; import cannot invent identity fields.';
+       }
 
       // Numeric validation
       if (![r.lotAreaSqm, r.marketValue, r.assessedValue].every(Number.isFinite) || r.assessedValue < 0 || r.marketValue < 0 || r.lotAreaSqm < 0) {
@@ -593,6 +606,47 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const extension = file.name.toLowerCase().split('.').pop();
+    if (extension === 'xlsx' || extension === 'xls') {
+      setImportResult(null);
+      setUploadedFileName(file.name);
+      setUploadedFileSize(file.size);
+      setParsedRows([]);
+      setImportError(null);
+      const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+      setUploadedFileHash(Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join(''));
+      try {
+        const parsedWorkbook = parsePropertyWorkbook(await file.arrayBuffer(), file.name, selectedBarangayFilter);
+        const blockingIssues = parsedWorkbook.issues.filter((issue) => issue.severity === 'ERROR');
+        if (blockingIssues.length > 0) {
+          setImportError(`${blockingIssues.length} workbook issue(s) block import. Review source Barangay, headers, and duplicate TD rows.`);
+          return;
+        }
+        const rows = parsedWorkbook.candidates.map((candidate) => {
+          const missingRequiredField = !candidate.ownerName || !candidate.address || !candidate.propertyClass;
+          return {
+          line: candidate.sourceRow, tdNumber: candidate.tdNumber, previousTdNumber: candidate.previousTdNumber, pin: candidate.pin,
+          ownerName: candidate.ownerName, address: candidate.address, barangay: candidate.barangay,
+          propertyClass: candidate.propertyClass, lotAreaSqm: Number(candidate.lotAreaSqm.replace(/[,₱$\s]/g, '')) || 0,
+          marketValue: Number(candidate.marketValue.replace(/[,₱$\s]/g, '')) || 0, assessedValue: Number(candidate.assessedValue.replace(/[,₱$\s]/g, '')) || 0,
+          lastPaidYear: candidate.lastPaidYear ? Number(candidate.lastPaidYear) : HISTORICAL_BASELINE_YEAR, state: missingRequiredField ? 'ERROR' as CsvImportRowState : 'VALID_NEW' as CsvImportRowState,
+          isShell: !candidate.assessedValue || Number(candidate.assessedValue) <= 0, diffs: [],
+          encoderLabel: currentUser.name, entryType: 'CSV_IMPORT' as const,
+          error: missingRequiredField ? 'Missing required owner, address, or property class.' : undefined,
+          sourceSheet: candidate.sourceSheet,
+          sourceSheetIndex: candidate.sourceSheetIndex,
+          sourceCell: `${candidate.sourceSheet}!${candidate.sourceRow}`,
+          };
+        });
+        setParsedRows(rows);
+        setWorkbookSheets(parsedWorkbook.sheets);
+        return;
+      } catch (error) {
+        setImportError(error instanceof Error ? error.message : 'Unable to parse workbook.');
+        return;
+      }
+    }
+
     const reader = new FileReader();
     setUploadedFileHash('');
     setUploadedFileSize(file.size);
@@ -688,6 +742,9 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
         isShellRecord: r.isShell,
         encoderLabel: r.encoderLabel,
         entryType: r.entryType,
+        sourceSheet: r.sourceSheet,
+        sourceSheetIndex: r.sourceSheetIndex,
+        sourceCell: r.sourceCell,
       }));
 
       const importedBarangays = new Set(actionableRows.map(row => row.barangay));
@@ -706,6 +763,8 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
           fileSizeBytes: uploadedFileSize,
           rejectedRows: errorCount,
           errorCount,
+          sourceFormat: uploadedFileName.toLowerCase().endsWith('.xlsx') ? 'XLSX' : uploadedFileName.toLowerCase().endsWith('.xls') ? 'XLS' : 'CSV',
+          sourceSheets: workbookSheets,
         }
       );
 
@@ -858,7 +917,7 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
               {/* Upload & Barangay Filtering Control */}
               <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
                 <div className="space-y-1">
-                  <p className="font-bold text-slate-900 text-sm">Upload Barangay Assessment CSV</p>
+                   <p className="font-bold text-slate-900 text-sm">Upload Barangay Assessment CSV or Excel Workbook</p>
                   <p className="text-slate-500 text-[11px]">
                     Supports all <strong>33 Santa Rosa Barangays</strong>. Successive uploads for the same barangay automatically resolve conflicts via <em>"Last Import Wins"</em>.
                   </p>
@@ -897,12 +956,12 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
                     className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold gap-1.5 shadow-sm"
                   >
                     <Upload size={13} />
-                    Select CSV File
+                     Select Import File
                   </Button>
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".csv,.txt"
+                     accept=".csv,.txt,.xlsx,.xls"
                     onChange={handleFileUpload}
                     className="hidden"
                   />
