@@ -1442,39 +1442,20 @@ export class SupabaseRepository implements ITreasuryRepository {
         }
       }
     }
-    const { data, error } = await supabase.from('computation_schedule_versions').insert({
-      schedule_name: schedule.scheduleName,
-      authority_reference: schedule.authorityReference,
-      source_filename: schedule.sourceFilename,
-      source_file_hash: schedule.sourceFileHash,
-      status: 'DRAFT',
-      effective_from: schedule.effectiveFrom,
-      effective_to: schedule.effectiveTo || null,
-      uploaded_by: schedule.uploadedBy,
-    }).select().single();
+    const { data, error } = await supabase.rpc('create_computation_schedule_draft', {
+      p_schedule: {
+        schedule_name: schedule.scheduleName,
+        authority_reference: schedule.authorityReference,
+        source_filename: schedule.sourceFilename,
+        source_file_hash: schedule.sourceFileHash,
+        effective_from: schedule.effectiveFrom,
+        effective_to: schedule.effectiveTo || null,
+        uploaded_by: schedule.uploadedBy,
+      },
+      p_rows: schedule.rows,
+    });
     if (error || !data) throw new Error(error?.message || 'Failed to save computation schedule draft.');
-    const { error: rowsError } = await supabase.from('computation_schedule_rows').insert(schedule.rows.map((row) => ({
-      schedule_version_id: data.id,
-      period_label: row.periodLabel,
-      start_year: row.startYear,
-      end_year: row.endYear,
-      quarter_span: row.quarterSpan || null,
-      basic_tax_rate: row.basicTaxRate ?? null,
-      sef_tax_rate: row.sefTaxRate ?? null,
-      penalty_rate: row.penaltyRate ?? null,
-      discount_rate: row.discountRate ?? null,
-      penalty_months: row.penaltyMonths ?? null,
-      discount_type: row.discountType || null,
-      applicable_classes: row.applicableClasses || [],
-      source_sheet: row.sourceSheet || null,
-      source_row: row.sourceRow || null,
-      source_formula: row.sourceFormula || null,
-    })));
-    if (rowsError) {
-      await supabase.from('computation_schedule_versions').delete().eq('id', data.id);
-      throw new Error(`Failed to save computation schedule rules: ${rowsError.message}`);
-    }
-    return { ...schedule, id: data.id, status: 'DRAFT', createdAt: data.created_at };
+    return { ...schedule, id: Number(data.id), status: 'DRAFT' };
   }
 
   async getComputationSchedules(): Promise<ComputationScheduleVersion[]> {
