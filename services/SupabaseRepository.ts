@@ -76,7 +76,28 @@ export class SupabaseRepository implements ITreasuryRepository {
 
   async getPropertyAssessment(propertyId: string, fallbackProp?: Property, customSettings?: MunicipalTaxSettings): Promise<CalculationResult> {
     const settings = customSettings || await this.getMunicipalTaxSettings();
-    const penaltyScheduleOverride = await this.getActivePenaltySchedule();
+    const computationSchedule = await this.getActiveComputationSchedule();
+    const scheduleApplication: import('@/types').ComputationScheduleApplication = computationSchedule ? {
+      versionId: computationSchedule.id,
+      scheduleName: computationSchedule.scheduleName,
+      authorityReference: computationSchedule.authorityReference,
+      sourceFileHash: computationSchedule.sourceFileHash,
+      effectiveFrom: computationSchedule.effectiveFrom,
+      effectiveTo: computationSchedule.effectiveTo,
+      fallback: false,
+    } : { fallback: true, unavailable: true };
+    const penaltyScheduleOverride = Object.fromEntries((computationSchedule?.rows || [])
+      .filter((row) => row.penaltyRate !== undefined)
+      .map((row) => [row.periodLabel, row.penaltyRate as number]));
+    const basicTaxScheduleOverride = Object.fromEntries((computationSchedule?.rows || [])
+      .filter((row) => row.basicTaxRate !== undefined)
+      .map((row) => [row.periodLabel, row.basicTaxRate as number]));
+    const sefTaxScheduleOverride = Object.fromEntries((computationSchedule?.rows || [])
+      .filter((row) => row.sefTaxRate !== undefined)
+      .map((row) => [row.periodLabel, row.sefTaxRate as number]));
+    scheduleApplication.penaltyRates = penaltyScheduleOverride;
+    scheduleApplication.basicTaxRates = basicTaxScheduleOverride;
+    scheduleApplication.sefTaxRates = sefTaxScheduleOverride;
     const completed = await this.getPropertyCompletedRecords(propertyId, fallbackProp);
     const completedPeriodLabels = completed.map(r => r.periodLabel).filter(Boolean) as string[];
 
@@ -84,6 +105,9 @@ export class SupabaseRepository implements ITreasuryRepository {
       paymentDate: new Date(),
       settings,
       penaltyScheduleOverride: Object.keys(penaltyScheduleOverride).length > 0 ? penaltyScheduleOverride : undefined,
+      basicTaxScheduleOverride: Object.keys(basicTaxScheduleOverride).length > 0 ? basicTaxScheduleOverride : undefined,
+      sefTaxScheduleOverride: Object.keys(sefTaxScheduleOverride).length > 0 ? sefTaxScheduleOverride : undefined,
+      computationSchedule: scheduleApplication,
       completedPeriodLabels,
       splitCurrentYearQuarters: true,
       split2024Quarters: true,
@@ -422,6 +446,11 @@ export class SupabaseRepository implements ITreasuryRepository {
     remarks?: string;
     verifiedBy: number | string;
     stationId?: string;
+    computationSchedule?: {
+      versionId?: number;
+      authorityReference?: string;
+      sourceFileHash?: string;
+    };
   }): Promise<DelinquencyPeriodVerification> {
     const verifiedByNum = typeof payload.verifiedBy === 'number' ? payload.verifiedBy : parseInt(String(payload.verifiedBy), 10);
     const verifiedByValid = isNaN(verifiedByNum) ? null : verifiedByNum;
@@ -561,9 +590,14 @@ export class SupabaseRepository implements ITreasuryRepository {
       sourceReference?: string;
       remarks?: string;
     }>;
-    verifiedBy: number | string;
-    stationId?: string;
-  }): Promise<{
+     verifiedBy: number | string;
+     stationId?: string;
+     computationSchedule?: {
+       versionId?: number;
+       authorityReference?: string;
+       sourceFileHash?: string;
+     };
+   }): Promise<{
     verifications: DelinquencyPeriodVerification[];
     propertyBaseline: { lastPaidYear: number; lastPaidQuarter: number };
   }> {
@@ -573,6 +607,9 @@ export class SupabaseRepository implements ITreasuryRepository {
       p_periods: payload.periods,
       p_verified_by: String(payload.verifiedBy),
       p_station_id: payload.stationId || 'Verification-Desk',
+      p_schedule_version_id: payload.computationSchedule?.versionId || null,
+      p_schedule_reference: payload.computationSchedule?.authorityReference || null,
+      p_schedule_source_hash: payload.computationSchedule?.sourceFileHash || null,
     });
 
     if (error) {
@@ -1401,10 +1438,17 @@ export class SupabaseRepository implements ITreasuryRepository {
   }
 
   async getActivePenaltySchedule(asOf = new Date()): Promise<Record<string, number>> {
+    const schedule = await this.getActiveComputationSchedule(asOf);
+    return Object.fromEntries((schedule?.rows || [])
+      .filter((row) => row.penaltyRate !== undefined)
+      .map((row) => [row.periodLabel, row.penaltyRate as number]));
+  }
+
+  async getActiveComputationSchedule(asOf = new Date()): Promise<ComputationScheduleVersion | null> {
     const date = asOf.toISOString().slice(0, 10);
     const { data: version, error: versionError } = await supabase
       .from('computation_schedule_versions')
-      .select('id')
+      .select('*, computation_schedule_rows(*)')
       .eq('status', 'ACTIVE')
       .lte('effective_from', date)
       .or(`effective_to.is.null,effective_to.gte.${date}`)
@@ -1412,18 +1456,34 @@ export class SupabaseRepository implements ITreasuryRepository {
       .limit(1)
       .maybeSingle();
 
-    if (versionError || !version) return {};
-    const { data: rows, error: rowError } = await supabase
-      .from('computation_schedule_rows')
-      .select('period_label, penalty_rate')
-      .eq('schedule_version_id', version.id);
-    if (rowError || !rows) return {};
-
-    return Object.fromEntries(
-      rows
-        .filter((row) => row.penalty_rate !== null && Number.isFinite(Number(row.penalty_rate)))
-        .map((row) => [String(row.period_label), Number(row.penalty_rate)])
-    );
+    if (versionError) throw new Error(`Computation schedule lookup failed: ${versionError.message}`);
+    if (!version) return null;
+    return {
+      id: version.id,
+      scheduleName: version.schedule_name,
+      authorityReference: version.authority_reference,
+      sourceFilename: version.source_filename,
+      sourceFileHash: version.source_file_hash,
+      status: version.status,
+      effectiveFrom: version.effective_from,
+      effectiveTo: version.effective_to || undefined,
+      uploadedBy: version.uploaded_by,
+      approvedBy: version.approved_by || undefined,
+      createdAt: version.created_at,
+      activatedAt: version.activated_at || undefined,
+      rows: (version.computation_schedule_rows || []).map((item: Record<string, unknown>) => ({
+        id: Number(item.id), periodLabel: String(item.period_label), startYear: Number(item.start_year), endYear: Number(item.end_year),
+        quarterSpan: item.quarter_span as string | undefined,
+        basicTaxRate: item.basic_tax_rate === null ? undefined : Number(item.basic_tax_rate),
+        sefTaxRate: item.sef_tax_rate === null ? undefined : Number(item.sef_tax_rate),
+        penaltyRate: item.penalty_rate === null ? undefined : Number(item.penalty_rate),
+        discountRate: item.discount_rate === null ? undefined : Number(item.discount_rate),
+        penaltyMonths: item.penalty_months === null ? undefined : Number(item.penalty_months),
+        discountType: item.discount_type as string | undefined,
+        applicableClasses: (item.applicable_classes as string[]) || [], sourceSheet: item.source_sheet as string | undefined,
+        sourceRow: item.source_row === null ? undefined : Number(item.source_row), sourceFormula: item.source_formula as string | undefined,
+      })),
+    };
   }
 
   async createComputationSchedule(schedule: ComputationScheduleVersion): Promise<ComputationScheduleVersion> {
@@ -1431,11 +1491,21 @@ export class SupabaseRepository implements ITreasuryRepository {
       throw new Error('Authority reference, source hash, and effective date are required.');
     }
     if (!schedule.rows.length) throw new Error('Computation schedule must contain at least one rule.');
+    if (schedule.effectiveTo && schedule.effectiveTo < schedule.effectiveFrom) {
+      throw new Error('Effective end date cannot precede effective start date.');
+    }
     const labels = new Set<string>();
+    const ranges: Array<{ start: number; end: number; label: string }> = [];
     for (const row of schedule.rows) {
       if (labels.has(row.periodLabel)) throw new Error(`Duplicate computation period: ${row.periodLabel}`);
       labels.add(row.periodLabel);
       if (row.endYear < row.startYear) throw new Error(`Invalid year range: ${row.periodLabel}`);
+      for (const range of ranges) {
+        if (row.startYear <= range.end && row.endYear >= range.start) {
+          throw new Error(`Overlapping computation periods: ${row.periodLabel} and ${range.label}`);
+        }
+      }
+      ranges.push({ start: row.startYear, end: row.endYear, label: row.periodLabel });
       for (const rate of [row.basicTaxRate, row.sefTaxRate, row.penaltyRate, row.discountRate]) {
         if (rate !== undefined && (!Number.isFinite(rate) || rate < 0 || rate > 1)) {
           throw new Error(`Invalid rate in computation period: ${row.periodLabel}`);
@@ -1483,6 +1553,12 @@ export class SupabaseRepository implements ITreasuryRepository {
         sourceRow: item.source_row === null ? undefined : Number(item.source_row), sourceFormula: item.source_formula as string | undefined,
       })),
     }));
+  }
+
+  async validateComputationSchedule(scheduleId: number): Promise<ComputationScheduleVersion> {
+    const { data, error } = await supabase.rpc('validate_computation_schedule', { p_schedule_id: scheduleId });
+    if (error || !data) throw new Error(error?.message || 'Failed to validate computation schedule.');
+    return data as ComputationScheduleVersion;
   }
 
   async activateComputationSchedule(scheduleId: number, approvedBy: string): Promise<ComputationScheduleVersion> {

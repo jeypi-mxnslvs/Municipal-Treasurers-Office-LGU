@@ -73,6 +73,10 @@ export interface TaxYearRecord {
   isPayable?: boolean;
   isStatementReady?: boolean;
   isClearanceEligible?: boolean;
+  computationScheduleVersionId?: number;
+  computationScheduleReference?: string;
+  computationScheduleSourceHash?: string;
+  computationScheduleFallback?: boolean;
 }
 
 export interface TaxSummary {
@@ -92,6 +96,22 @@ export interface CalculationResult {
   records: TaxYearRecord[];
   summary?: TaxSummary;
   grandTotal: number;
+  computationSchedule?: ComputationScheduleApplication;
+}
+
+export interface ComputationScheduleApplication {
+  versionId?: number;
+  scheduleName?: string;
+  authorityReference?: string;
+  sourceFileHash?: string;
+  effectiveFrom?: string;
+  effectiveTo?: string;
+  fallback: boolean;
+  unavailable?: boolean;
+  lookupError?: string;
+  penaltyRates?: Record<string, number>;
+  basicTaxRates?: Record<string, number>;
+  sefTaxRates?: Record<string, number>;
 }
 
 export type DelinquencyPeriodStatus =
@@ -126,6 +146,9 @@ export interface DelinquencyPeriodVerification {
   supersedesId?: number | string;
   reversalReason?: string;
   createdAt?: string;
+  computationScheduleVersionId?: number;
+  computationScheduleReference?: string;
+  computationScheduleSourceHash?: string;
 }
 
 export interface ClearanceEligibilityResult {

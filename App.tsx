@@ -56,6 +56,11 @@ const App: React.FC = () => {
   const [periodProjection, setPeriodProjection] = useState<PropertyPeriodProjection>();
   const [isVerifyPeriodModalOpen, setIsVerifyPeriodModalOpen] = useState(false);
   const [noticeProperties, setNoticeProperties] = useState<Property[]>([]);
+  const [activeComputationSchedule, setActiveComputationSchedule] = useState<{
+    versionId?: number;
+    authorityReference?: string;
+    sourceFileHash?: string;
+  }>();
 
   // Unified Toast hook (replaces the old inline syncToast state)
   const { showToast } = useToast();
@@ -165,11 +170,20 @@ const App: React.FC = () => {
         api.getPeriodVerifications(property.id),
       ]);
       setTaxSummary(result.summary);
+      setActiveComputationSchedule(result.computationSchedule ? {
+        versionId: result.computationSchedule.versionId,
+        authorityReference: result.computationSchedule.authorityReference,
+        sourceFileHash: result.computationSchedule.sourceFileHash,
+      } : undefined);
       setGrandTotal(result.grandTotal);
       setSelectedScopeSubtotal(result.grandTotal);
       const projection = projectPropertyPeriods(property, verifications, {
         splitCurrentYearQuarters: true,
         completedPeriodLabels: completed.map(record => record.periodLabel).filter(Boolean) as string[],
+        computationSchedule: result.computationSchedule,
+        penaltyScheduleOverride: result.computationSchedule?.penaltyRates,
+        basicTaxScheduleOverride: result.computationSchedule?.basicTaxRates,
+        sefTaxScheduleOverride: result.computationSchedule?.sefTaxRates,
       });
       const projectedByKey = new Map(projection.periods.map(period => [period.periodKey, period]));
       const projectedRecords = result.records.map(record => {
@@ -340,6 +354,18 @@ const App: React.FC = () => {
       return;
     }
 
+    if (!activeComputationSchedule?.versionId || !activeComputationSchedule.authorityReference || !activeComputationSchedule.sourceFileHash) {
+      setBreakdownAlert({
+        isOpen: true,
+        severity: 'policy',
+        title: 'Verification Blocked — No Active Computation Schedule',
+        summary: 'An active approved computation schedule is required before delinquency verification can be recorded.',
+        guidance: 'Ask an authorized Treasurer/Admin user to validate and activate an official computation schedule, then reload this property.',
+        technicalDetail: 'Verification provenance requires active schedule version, authority reference, and source hash.',
+      });
+      return;
+    }
+
     setIsVerifyPeriodModalOpen(true);
   };
 
@@ -365,6 +391,7 @@ const App: React.FC = () => {
         })),
         verifiedBy: currentUser.id,
         stationId: currentUser.stationId,
+        computationSchedule: activeComputationSchedule,
       });
       setIsVerifyPeriodModalOpen(false);
 
@@ -380,10 +407,19 @@ const App: React.FC = () => {
         api.getPeriodVerifications(selectedProperty.id),
       ]);
       setGrandTotal(updatedResult.grandTotal);
+      setActiveComputationSchedule(updatedResult.computationSchedule ? {
+        versionId: updatedResult.computationSchedule.versionId,
+        authorityReference: updatedResult.computationSchedule.authorityReference,
+        sourceFileHash: updatedResult.computationSchedule.sourceFileHash,
+      } : undefined);
       setSelectedScopeSubtotal(updatedResult.grandTotal);
       const updatedProjection = projectPropertyPeriods(selectedProperty, updatedVerifications, {
         splitCurrentYearQuarters: true,
         completedPeriodLabels: updatedCompleted.map(record => record.periodLabel).filter(Boolean) as string[],
+        computationSchedule: updatedResult.computationSchedule,
+        penaltyScheduleOverride: updatedResult.computationSchedule?.penaltyRates,
+        basicTaxScheduleOverride: updatedResult.computationSchedule?.basicTaxRates,
+        sefTaxScheduleOverride: updatedResult.computationSchedule?.sefTaxRates,
       });
       const updatedProjectedByKey = new Map(updatedProjection.periods.map(period => [period.periodKey, period]));
       const updatedProjectedRecords = updatedResult.records.map(record => {
@@ -403,6 +439,14 @@ const App: React.FC = () => {
         hasDisputedPeriods: updatedProjection.hasDisputedPeriods,
         hasHistoricalGaps: updatedProjection.hasHistoricalGaps,
       });
+
+      if (updatedResult.computationSchedule?.unavailable) {
+        showToast({
+          type: 'warning',
+          title: 'Built-in computation baseline in use',
+          message: 'No active approved computation schedule was found. Review schedule availability before issuing a statement or clearance.',
+        });
+      }
 
       // Keep selectedProperty updated with newest clearance
       if (selectedRecords.length > 0) {

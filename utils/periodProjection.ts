@@ -116,6 +116,7 @@ export function projectPropertyPeriods(
 ): PropertyPeriodProjection {
   const propertyId = String(property.id);
   const isShell = getPropertyCompleteness(property).isShellRecord;
+  const scheduleUnavailable = Boolean(options?.computationSchedule?.unavailable);
 
   // 1. Resolve append-only verification events. A row referenced by supersedesId
   // is historical and cannot remain the effective state for its period.
@@ -301,6 +302,12 @@ export function projectPropertyPeriods(
   if (isShell) {
     ineligibilityReasons.push(
       'Property is classified as a shell record (lacking verified PIN or municipal valuation).'
+    );
+  }
+
+  if (scheduleUnavailable) {
+    ineligibilityReasons.push(
+      'No active approved computation schedule was available; built-in baseline requires authorized review before clearance.'
     );
   }
 

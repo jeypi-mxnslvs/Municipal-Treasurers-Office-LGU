@@ -347,6 +347,10 @@ export class LocalHttpRepository implements ITreasuryRepository {
     return this.request<Record<string, number>>(`/settings/computation-schedule?as_of=${encodeURIComponent(asOf.toISOString())}`);
   }
 
+  async getActiveComputationSchedule(asOf = new Date()): Promise<ComputationScheduleVersion | null> {
+    return this.request<ComputationScheduleVersion | null>(`/settings/computation-schedule?as_of=${encodeURIComponent(asOf.toISOString())}`);
+  }
+
   async createComputationSchedule(schedule: ComputationScheduleVersion): Promise<ComputationScheduleVersion> {
     return this.request<ComputationScheduleVersion>('/settings/computation-schedules', {
       method: 'POST', body: JSON.stringify(schedule),
@@ -355,6 +359,10 @@ export class LocalHttpRepository implements ITreasuryRepository {
 
   async getComputationSchedules(): Promise<ComputationScheduleVersion[]> {
     return this.request<ComputationScheduleVersion[]>('/settings/computation-schedules');
+  }
+
+  async validateComputationSchedule(scheduleId: number): Promise<ComputationScheduleVersion> {
+    return this.request<ComputationScheduleVersion>(`/settings/computation-schedules/${scheduleId}/validate`, { method: 'POST' });
   }
 
   async activateComputationSchedule(scheduleId: number, approvedBy: string): Promise<ComputationScheduleVersion> {

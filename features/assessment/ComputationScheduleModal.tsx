@@ -65,6 +65,7 @@ export default function ComputationScheduleModal({ isOpen, onClose, currentUser 
         startYear: row.startYear,
         endYear: row.endYear,
         basicTaxRate: row.baseTaxRate,
+        sefTaxRate: row.baseTaxRate,
         penaltyRate: row.adjustment === 'PENALTY' ? row.adjustmentRate : undefined,
         discountRate: row.adjustment === 'DISCOUNT' ? row.adjustmentRate : undefined,
         discountType: row.adjustment === 'DISCOUNT' ? 'SCHEDULED' : undefined,
@@ -73,6 +74,16 @@ export default function ComputationScheduleModal({ isOpen, onClose, currentUser 
         sourceFormula: row.sourceCells.map((cell) => `${cell.address}:${cell.formula}`).join(' | '),
       })));
       const workbookErrors = workbook.sheets.flatMap((sheet) => sheet.errors);
+      const labels = new Map<string, string>();
+      for (const sheet of workbook.sheets) {
+        for (const row of sheet.rows) {
+          const previousSheet = labels.get(row.periodLabel);
+          if (previousSheet && previousSheet !== row.sourceSheet) {
+            workbookErrors.push(`Period ${row.periodLabel} appears in both ${previousSheet} and ${row.sourceSheet}; select one authoritative sheet before import.`);
+          }
+          labels.set(row.periodLabel, row.sourceSheet);
+        }
+      }
       setErrors(workbookErrors);
       if (rows.length === 0 || workbookErrors.length > 0) return;
       setParsed({
@@ -129,6 +140,21 @@ export default function ComputationScheduleModal({ isOpen, onClose, currentUser 
     }
   };
 
+  const validate = async (schedule: ComputationScheduleVersion) => {
+    if (!schedule.id) return;
+    setBusy(true);
+    setMessage('');
+    try {
+      await api.validateComputationSchedule(schedule.id);
+      setMessage(`Schedule ${schedule.authorityReference} validated. Independent approval is still required before activation.`);
+      await loadSchedules();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to validate schedule.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (currentUser?.role !== 'Admin') return null;
 
   return (
@@ -168,7 +194,7 @@ export default function ComputationScheduleModal({ isOpen, onClose, currentUser 
         <div className="rounded border p-3">
           <h3 className="mb-2 font-semibold">Version history</h3>
           {schedules.length === 0 && <p className="text-sm text-slate-500">No registered schedules.</p>}
-          {schedules.map((schedule) => <div key={schedule.id} className="flex items-center justify-between gap-3 border-b py-2 text-sm"><div><div className="font-medium">{schedule.scheduleName} <Badge variant="outline">{schedule.status}</Badge></div><div>{schedule.authorityReference} · {schedule.effectiveFrom}{schedule.effectiveTo ? ` to ${schedule.effectiveTo}` : ' onward'} · {schedule.sourceFilename}</div></div>{schedule.status !== 'ACTIVE' && schedule.status !== 'SUPERSEDED' && <Button size="sm" disabled={busy} onClick={() => void activate(schedule)}><CheckCircle2 className="mr-1 h-4 w-4" /> Activate</Button>}</div>)}
+          {schedules.map((schedule) => <div key={schedule.id} className="flex items-center justify-between gap-3 border-b py-2 text-sm"><div><div className="font-medium">{schedule.scheduleName} <Badge variant="outline">{schedule.status}</Badge></div><div>{schedule.authorityReference} · {schedule.effectiveFrom}{schedule.effectiveTo ? ` to ${schedule.effectiveTo}` : ' onward'} · {schedule.sourceFilename}</div></div><div className="flex gap-2">{schedule.status === 'DRAFT' && <Button size="sm" variant="outline" disabled={busy} onClick={() => void validate(schedule)}>Validate</Button>}{(schedule.status === 'VALIDATED' || schedule.status === 'PENDING_APPROVAL') && <Button size="sm" disabled={busy} onClick={() => void activate(schedule)}><CheckCircle2 className="mr-1 h-4 w-4" /> Activate</Button>}</div></div>)}
         </div>
 
         <DialogFooter>

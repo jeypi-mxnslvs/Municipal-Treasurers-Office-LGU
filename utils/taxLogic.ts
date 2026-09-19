@@ -71,6 +71,9 @@ export interface TaxCalculationOptions {
   discountCurrentQuarters?: boolean;  // If true, enables prompt discount on 3-4 Q (defaults to false for Notice of Delinquency)
   completedPeriodLabels?: string[];   // Filter out already settled partial quarters/periods
   penaltyScheduleOverride?: Record<string, number>; // Dynamic municipal penalty schedule override
+  basicTaxScheduleOverride?: Record<string, number>;
+  sefTaxScheduleOverride?: Record<string, number>;
+  computationSchedule?: import('../types').ComputationScheduleApplication;
   periodValuations?: Record<string, PeriodValuationItem | number>; // Period-specific historical valuations
   assessmentPeriods?: Array<Partial<PropertyAssessmentPeriod> & { startYear: number; endYear: number; assessedValue: number }>;                  // Structured assessment periods
   overrides?: Record<number | string, {
@@ -263,8 +266,12 @@ export const calculateTaxLiability = (
     const isMissingVal = valuation.isMissingValuation;
     const rptarRef = valuation.rptarReference;
 
-    const annualBasicTax = isMissingVal ? 0 : Math.round(periodAssessedValue * 0.01 * 100) / 100;
-    const annualSefTax = isMissingVal ? 0 : Math.round(periodAssessedValue * 0.01 * 100) / 100;
+    const basicRate = periodLabel && options?.basicTaxScheduleOverride?.[periodLabel] !== undefined
+      ? options.basicTaxScheduleOverride[periodLabel] : 0.01;
+    const sefRate = periodLabel && options?.sefTaxScheduleOverride?.[periodLabel] !== undefined
+      ? options.sefTaxScheduleOverride[periodLabel] : 0.01;
+    const annualBasicTax = isMissingVal ? 0 : Math.round(periodAssessedValue * basicRate * 100) / 100;
+    const annualSefTax = isMissingVal ? 0 : Math.round(periodAssessedValue * sefRate * 100) / 100;
 
     const systemBasicTax = Math.round(annualBasicTax * multiplier * 100) / 100;
     const systemSefTax = Math.round(annualSefTax * multiplier * 100) / 100;
@@ -374,6 +381,10 @@ export const calculateTaxLiability = (
       discountAmount,
       totalDue,
       isPayable,
+      computationScheduleVersionId: options?.computationSchedule?.versionId,
+      computationScheduleReference: options?.computationSchedule?.authorityReference,
+      computationScheduleSourceHash: options?.computationSchedule?.sourceFileHash,
+      computationScheduleFallback: options?.computationSchedule?.fallback,
     });
 
     if (!isUnverified && totalDue !== null) {
@@ -611,5 +622,6 @@ export const calculateTaxLiability = (
     records,
     summary,
     grandTotal: Math.round(grandTotal * 100) / 100,
+    computationSchedule: options?.computationSchedule,
   };
 };

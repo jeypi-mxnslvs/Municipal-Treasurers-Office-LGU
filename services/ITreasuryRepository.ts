@@ -55,6 +55,11 @@ export interface ITreasuryRepository {
     remarks?: string;
     verifiedBy: number | string;
     stationId?: string;
+    computationSchedule?: {
+      versionId?: number;
+      authorityReference?: string;
+      sourceFileHash?: string;
+    };
   }): Promise<DelinquencyPeriodVerification>;
 
   verifyDelinquencyPeriodBatch(payload: {
@@ -72,6 +77,11 @@ export interface ITreasuryRepository {
     }>;
     verifiedBy: number | string;
     stationId?: string;
+    computationSchedule?: {
+      versionId?: number;
+      authorityReference?: string;
+      sourceFileHash?: string;
+    };
   }): Promise<{
     verifications: DelinquencyPeriodVerification[];
     propertyBaseline: { lastPaidYear: number; lastPaidQuarter: number };
@@ -138,8 +148,10 @@ export interface ITreasuryRepository {
   getMunicipalTaxSettings(): Promise<MunicipalTaxSettings>;
   updateMunicipalTaxSettings(settings: Partial<MunicipalTaxSettings>, updatedBy?: string): Promise<MunicipalTaxSettings>;
   getActivePenaltySchedule(asOf?: Date): Promise<Record<string, number>>;
+  getActiveComputationSchedule(asOf?: Date): Promise<ComputationScheduleVersion | null>;
   createComputationSchedule(schedule: ComputationScheduleVersion): Promise<ComputationScheduleVersion>;
   getComputationSchedules(): Promise<ComputationScheduleVersion[]>;
+  validateComputationSchedule(scheduleId: number): Promise<ComputationScheduleVersion>;
   activateComputationSchedule(scheduleId: number, approvedBy: string): Promise<ComputationScheduleVersion>;
 
   // 8. Assessor Import Center & Smart Upsert

@@ -90,6 +90,11 @@ export const api = {
     remarks?: string;
     verifiedBy: number | string;
     stationId?: string;
+    computationSchedule?: {
+      versionId?: number;
+      authorityReference?: string;
+      sourceFileHash?: string;
+    };
   }): Promise<DelinquencyPeriodVerification> {
     return treasuryRepository.verifyDelinquencyPeriod(payload);
   },
@@ -109,6 +114,11 @@ export const api = {
     }>;
     verifiedBy: number | string;
     stationId?: string;
+    computationSchedule?: {
+      versionId?: number;
+      authorityReference?: string;
+      sourceFileHash?: string;
+    };
   }): Promise<{
     verifications: DelinquencyPeriodVerification[];
     propertyBaseline: { lastPaidYear: number; lastPaidQuarter: number };
@@ -232,12 +242,20 @@ export const api = {
     return treasuryRepository.getActivePenaltySchedule(asOf);
   },
 
+  getActiveComputationSchedule(asOf?: Date): Promise<ComputationScheduleVersion | null> {
+    return treasuryRepository.getActiveComputationSchedule(asOf);
+  },
+
   createComputationSchedule(schedule: ComputationScheduleVersion): Promise<ComputationScheduleVersion> {
     return treasuryRepository.createComputationSchedule(schedule);
   },
 
   getComputationSchedules(): Promise<ComputationScheduleVersion[]> {
     return treasuryRepository.getComputationSchedules();
+  },
+
+  validateComputationSchedule(scheduleId: number): Promise<ComputationScheduleVersion> {
+    return treasuryRepository.validateComputationSchedule(scheduleId);
   },
 
   activateComputationSchedule(scheduleId: number, approvedBy: string): Promise<ComputationScheduleVersion> {
