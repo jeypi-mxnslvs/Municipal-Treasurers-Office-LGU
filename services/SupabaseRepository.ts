@@ -75,12 +75,14 @@ export class SupabaseRepository implements ITreasuryRepository {
 
   async getPropertyAssessment(propertyId: string, fallbackProp?: Property, customSettings?: MunicipalTaxSettings): Promise<CalculationResult> {
     const settings = customSettings || await this.getMunicipalTaxSettings();
+    const penaltyScheduleOverride = await this.getActivePenaltySchedule();
     const completed = await this.getPropertyCompletedRecords(propertyId, fallbackProp);
     const completedPeriodLabels = completed.map(r => r.periodLabel).filter(Boolean) as string[];
 
     const calcOptions = {
       paymentDate: new Date(),
       settings,
+      penaltyScheduleOverride: Object.keys(penaltyScheduleOverride).length > 0 ? penaltyScheduleOverride : undefined,
       completedPeriodLabels,
       splitCurrentYearQuarters: true,
       split2024Quarters: true,
@@ -1395,6 +1397,32 @@ export class SupabaseRepository implements ITreasuryRepository {
       updatedBy: data.updated_by,
       updatedAt: data.updated_at
     };
+  }
+
+  async getActivePenaltySchedule(asOf = new Date()): Promise<Record<string, number>> {
+    const date = asOf.toISOString().slice(0, 10);
+    const { data: version, error: versionError } = await supabase
+      .from('computation_schedule_versions')
+      .select('id')
+      .eq('status', 'ACTIVE')
+      .lte('effective_from', date)
+      .or(`effective_to.is.null,effective_to.gte.${date}`)
+      .order('effective_from', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (versionError || !version) return {};
+    const { data: rows, error: rowError } = await supabase
+      .from('computation_schedule_rows')
+      .select('period_label, penalty_rate')
+      .eq('schedule_version_id', version.id);
+    if (rowError || !rows) return {};
+
+    return Object.fromEntries(
+      rows
+        .filter((row) => row.penalty_rate !== null && Number.isFinite(Number(row.penalty_rate)))
+        .map((row) => [String(row.period_label), Number(row.penalty_rate)])
+    );
   }
 
   // 8. Assessor Import Center & Smart Upsert

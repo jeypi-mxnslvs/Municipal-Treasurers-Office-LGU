@@ -136,6 +136,7 @@ export interface ITreasuryRepository {
   // 7. Municipal Tax Settings & Ordinances
   getMunicipalTaxSettings(): Promise<MunicipalTaxSettings>;
   updateMunicipalTaxSettings(settings: Partial<MunicipalTaxSettings>, updatedBy?: string): Promise<MunicipalTaxSettings>;
+  getActivePenaltySchedule(asOf?: Date): Promise<Record<string, number>>;
 
   // 8. Assessor Import Center & Smart Upsert
   getImportBatches(barangay?: string): Promise<CsvImportBatch[]>;

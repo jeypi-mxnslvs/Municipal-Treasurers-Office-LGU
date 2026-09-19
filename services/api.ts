@@ -227,6 +227,10 @@ export const api = {
     return treasuryRepository.updateMunicipalTaxSettings(settings, updatedBy);
   },
 
+  getActivePenaltySchedule(asOf?: Date): Promise<Record<string, number>> {
+    return treasuryRepository.getActivePenaltySchedule(asOf);
+  },
+
   // 8. Assessor Import Center & Smart Upsert
   getImportBatches(barangay?: string): Promise<CsvImportBatch[]> {
     return treasuryRepository.getImportBatches(barangay);

@@ -342,6 +342,10 @@ export class LocalHttpRepository implements ITreasuryRepository {
     });
   }
 
+  async getActivePenaltySchedule(asOf = new Date()): Promise<Record<string, number>> {
+    return this.request<Record<string, number>>(`/settings/computation-schedule?as_of=${encodeURIComponent(asOf.toISOString())}`);
+  }
+
   // 8. Assessor Import Center & Smart Upsert
   async getImportBatches(barangay?: string): Promise<CsvImportBatch[]> {
     const params = new URLSearchParams();
