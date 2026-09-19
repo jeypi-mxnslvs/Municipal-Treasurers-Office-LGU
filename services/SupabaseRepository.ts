@@ -1442,10 +1442,14 @@ export class SupabaseRepository implements ITreasuryRepository {
     }
 
     const tdNumbers = validRows.map(p => String(p.tdNumber).trim());
-    const { data: existingData } = await supabase
+    const { data: existingData, error: existingError } = await supabase
       .from('properties')
       .select('*')
       .in('td_number', tdNumbers);
+
+    if (existingError) {
+      throw new Error(`Import preflight failed while loading existing TD records: ${existingError.message}`);
+    }
 
     const existingMap = new Map<string, Record<string, unknown>>();
     (existingData || []).forEach(p => existingMap.set(p.td_number, p));
@@ -1492,13 +1496,21 @@ export class SupabaseRepository implements ITreasuryRepository {
       delinquency_start_year: p.delinquencyStartYear !== undefined && p.delinquencyStartYear !== null && !isNaN(Number(p.delinquencyStartYear)) ? Number(p.delinquencyStartYear) : null,
       parcel_origin_year: p.parcelOriginYear !== undefined && p.parcelOriginYear !== null && !isNaN(Number(p.parcelOriginYear)) ? Number(p.parcelOriginYear) : null,
       historical_assessed_values: p.historicalAssessedValues || {},
+      encoder_label: (p.encoderLabel as string) || assessorName,
+      entry_type: (p.entryType as string) || 'CSV_IMPORT',
     }));
 
     let batchHandled = false;
+    let rpcUnavailable = false;
     try {
       const { data: rpcResult, error: rpcError } = await supabase.rpc('batch_upsert_properties', {
         p_properties: rowsToUpsert,
       });
+
+      rpcUnavailable = Boolean(rpcError && (rpcError.code === '42883' || rpcError.code === 'PGRST202'));
+      if (rpcError && !rpcUnavailable) {
+        throw new Error(`Import batch transaction failed: ${rpcError.message}`);
+      }
 
       if (!rpcError && rpcResult) {
         insertedCount = Number(rpcResult.inserted) || 0;
@@ -1506,8 +1518,8 @@ export class SupabaseRepository implements ITreasuryRepository {
         updatedCount = Math.max(0, totalTouchedUpdates - unchangedCount);
         batchHandled = true;
       }
-    } catch {
-      // Fallback below if RPC is not registered
+    } catch (error) {
+      if (!rpcUnavailable) throw error;
     }
 
     if (!batchHandled) {
@@ -1638,13 +1650,17 @@ export class SupabaseRepository implements ITreasuryRepository {
       // Non-blocking
     }
 
-    await supabase.from('rptar_audit_logs').insert({
+    const { error: auditError } = await supabase.from('rptar_audit_logs').insert({
       td_number: 'BATCH-IMPORT',
       action_type: 'UPDATED',
       assessor_name: assessorName,
       station_id: stationId,
       details: `Smart upsert processed ${validRows.length} parcels (${insertedCount} new, ${updatedCount} updated, ${unchangedCount} unchanged) for Barangay ${primaryBarangay}`
     });
+
+    if (auditError) {
+      errors.push({ stage: 'audit', message: auditError.message });
+    }
 
     return {
       message: `Processed ${validRows.length} parcels: ${insertedCount} added, ${updatedCount} updated, ${unchangedCount} unchanged`,

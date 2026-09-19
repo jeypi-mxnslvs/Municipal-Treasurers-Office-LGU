@@ -4,7 +4,7 @@ import { BARANGAYS, PROPERTY_CLASSES, HISTORICAL_BASELINE_YEAR } from '@/constan
 import { api } from '@/services/api';
 import { mergeEncoderLabel } from '@/utils/encoderAttribution';
 import { getPropertyCompleteness } from '@/utils/propertyCompleteness';
-import { validatePin } from '@/utils/validationPipeline';
+import { parseAuthoritativeNumeric, validatePin } from '@/utils/validationPipeline';
 import { BreakdownAlertModal } from '@/components/common/BreakdownAlertModal';
 import {
   Dialog,
@@ -129,12 +129,13 @@ const parseCsv = (text: string): Array<{ line: number; fields: string[] }> => {
   return rows;
 };
 
-const parseImportNumber = (raw: string | undefined, fallback: number): number => {
+const parseImportNumber = (raw: string | undefined, fallback?: number): number => {
   const value = (raw || '').trim();
-  if (!value) return fallback;
-  if (!/^[-+]?\d+(?:\.\d+)?$/.test(value.replace(/,/g, ''))) return Number.NaN;
-  return Number(value.replace(/,/g, ''));
+  if (!value) return fallback === undefined ? Number.NaN : fallback;
+  return parseAuthoritativeNumeric(value).value;
 };
+
+const normalizeTdNumber = (value: string): string => value.trim().toUpperCase();
 
 const csvEscape = (value: unknown): string => {
   const text = String(value ?? '');
@@ -300,16 +301,16 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
       const csvRow = csvRows[i];
       const cleanCols = csvRow.fields;
 
-      const tdNumber = cleanCols[colTd] || '';
+       const tdNumber = normalizeTdNumber(cleanCols[colTd] || '');
       const previousTdNumber = cleanCols[colPrevTd] || '';
       const pin = cleanCols[colPin] || '';
       const ownerName = cleanCols[colOwner] || '';
       const address = cleanCols[colAddress] || 'Santa Rosa, Nueva Ecija';
       const rawBarangay = cleanCols[colBarangay] || '';
       const rawPropertyClass = cleanCols[colClass] || '';
-      const lotAreaSqm = parseImportNumber(cleanCols[colLotArea], 100);
-      const marketValue = parseImportNumber(cleanCols[colMv], 0);
-      const assessedValue = parseImportNumber(cleanCols[colAv], 0);
+       const lotAreaSqm = parseImportNumber(cleanCols[colLotArea]);
+       const marketValue = parseImportNumber(cleanCols[colMv]);
+       const assessedValue = parseImportNumber(cleanCols[colAv]);
       const rawLastPaid = colLastPaid !== -1 ? cleanCols[colLastPaid]?.trim() || '' : '';
       const rawStartYear = colStartYear !== -1 ? cleanCols[colStartYear]?.trim() || '' : '';
       const rawOriginYear = colOriginYear !== -1 ? cleanCols[colOriginYear]?.trim() || '' : '';
@@ -383,7 +384,7 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
         const pinCheck = validatePin(r.pin);
         if (!pinCheck.isValid) {
           state = 'INVALID_NUMERIC_VALUE';
-          error = pinCheck.error || 'Invalid Cadastral PIN format (024-XX-XXX-XX-XXX)';
+           error = pinCheck.error || 'Invalid Cadastral PIN format';
         }
       }
 
@@ -471,17 +472,28 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
       }
 
       // Statutory Delinquency Start Year, Last Paid Year & Parcel Origin Resolution
-      const parsedStart = r.rawStartYear ? parseInt(r.rawStartYear, 10) : NaN;
-      const parsedPaid = r.rawLastPaid ? parseInt(r.rawLastPaid, 10) : NaN;
-      const parsedOrigin = r.rawOriginYear ? parseInt(r.rawOriginYear, 10) : NaN;
+      const parsedStart = parseImportNumber(r.rawStartYear);
+      const parsedPaid = parseImportNumber(r.rawLastPaid);
+      const parsedOrigin = parseImportNumber(r.rawOriginYear);
 
-      const parcelOriginYear: number | null = !isNaN(parsedOrigin) ? parsedOrigin : (existingProperty?.parcelOriginYear ?? null);
+      const hasStart = Number.isInteger(parsedStart) && parsedStart >= 1970 && parsedStart <= 2026;
+      const hasPaid = Number.isInteger(parsedPaid) && parsedPaid >= 1970 && parsedPaid <= 2026;
+      const hasOrigin = Number.isInteger(parsedOrigin) && parsedOrigin >= HISTORICAL_BASELINE_YEAR && parsedOrigin <= 2026;
+      const parcelOriginYear: number | null = hasOrigin ? parsedOrigin : (existingProperty?.parcelOriginYear ?? null);
 
       let resolvedLastPaidYear: number;
       let resolvedDelinquencyStartYear: number | undefined;
 
-      const hasStart = !isNaN(parsedStart) && parsedStart >= 1970 && parsedStart <= 2026;
-      const hasPaid = !isNaN(parsedPaid) && parsedPaid >= 1970 && parsedPaid <= 2026;
+      if (r.rawStartYear && !hasStart) {
+        state = 'INVALID_NUMERIC_VALUE';
+        error = `Invalid Delinquency Start Year: "${r.rawStartYear}"`;
+      } else if (r.rawLastPaid && !hasPaid) {
+        state = 'INVALID_NUMERIC_VALUE';
+        error = `Invalid Last Paid Year: "${r.rawLastPaid}"`;
+      } else if (r.rawOriginYear && !hasOrigin) {
+        state = 'INVALID_NUMERIC_VALUE';
+        error = `Invalid Parcel Origin Year: "${r.rawOriginYear}"`;
+      }
 
       if (hasStart && hasPaid) {
         // Both columns provided: enforce strict consistency: start_year === last_paid_year + 1
@@ -686,6 +698,10 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
           barangay: detectedBarangay,
         }
       );
+
+      if (res.errors.length > 0) {
+        throw new Error(`Import completed with ${res.errors.length} database error${res.errors.length === 1 ? '' : 's'}. No success confirmation issued.`);
+      }
 
       setImportResult({
         inserted: res.insertedCount,
