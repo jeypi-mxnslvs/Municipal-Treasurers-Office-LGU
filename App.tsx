@@ -9,6 +9,7 @@ import { LoginPage, UserManagementModal, PasswordConfirmationModal } from '@/fea
 import { DashboardStats } from '@/features/dashboard';
 import { DashboardTable, PropertyCard, RptarModal, BulkImportModal } from '@/features/properties';
 import { DelinquencyTable } from '@/features/assessment';
+import ComputationScheduleModal from '@/features/assessment/ComputationScheduleModal';
 import VerifyPeriodModal from '@/features/assessment/VerifyPeriodModal';
 import type { VerificationModalValue } from '@/features/assessment/VerifyPeriodModal';
 import { AuditLogModal } from '@/features/audit';
@@ -37,6 +38,7 @@ const App: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalInitialData, setModalInitialData] = useState<Property | null>(null);
   const [isUserManagementModalOpen, setIsUserManagementModalOpen] = useState(false);
+  const [isComputationScheduleModalOpen, setIsComputationScheduleModalOpen] = useState(false);
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [auditTargetProperty, setAuditTargetProperty] = useState<Property | null>(null);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
@@ -519,6 +521,7 @@ const App: React.FC = () => {
         user={currentUser} 
         onLogout={() => handleLogout()}
         onOpenUserManagement={() => setIsUserManagementModalOpen(true)}
+        onOpenComputationSchedules={() => setIsComputationScheduleModalOpen(true)}
         onOpenBatchNotices={() => {
           const delinquents = properties.filter(p => p.lastPaidYear < 2026 && !p.isShellRecord);
           setNoticeProperties(delinquents);
@@ -767,6 +770,12 @@ const App: React.FC = () => {
       <UserManagementModal
         isOpen={isUserManagementModalOpen}
         onClose={() => setIsUserManagementModalOpen(false)}
+        currentUser={currentUser}
+      />
+
+      <ComputationScheduleModal
+        isOpen={isComputationScheduleModalOpen}
+        onClose={() => setIsComputationScheduleModalOpen(false)}
         currentUser={currentUser}
       />
 

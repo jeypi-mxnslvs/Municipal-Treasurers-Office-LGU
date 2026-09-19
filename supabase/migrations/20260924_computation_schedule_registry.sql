@@ -64,15 +64,59 @@ ALTER TABLE public.computation_schedule_versions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.computation_schedule_rows ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Allow all on computation_schedule_versions" ON public.computation_schedule_versions;
-CREATE POLICY "Allow all on computation_schedule_versions"
+DROP POLICY IF EXISTS "Authenticated can view computation schedules" ON public.computation_schedule_versions;
+CREATE POLICY "Authenticated can view computation schedules"
     ON public.computation_schedule_versions
-    FOR ALL TO anon, authenticated
-    USING (true) WITH CHECK (true);
+    FOR SELECT TO authenticated
+    USING (true);
 
 DROP POLICY IF EXISTS "Allow all on computation_schedule_rows" ON public.computation_schedule_rows;
-CREATE POLICY "Allow all on computation_schedule_rows"
+DROP POLICY IF EXISTS "Authenticated can view computation schedule rows" ON public.computation_schedule_rows;
+CREATE POLICY "Authenticated can view computation schedule rows"
     ON public.computation_schedule_rows
-    FOR ALL TO anon, authenticated
-    USING (true) WITH CHECK (true);
+    FOR SELECT TO authenticated
+    USING (true);
 
 NOTIFY pgrst, 'reload schema';
+
+CREATE OR REPLACE FUNCTION public.activate_computation_schedule(
+    p_schedule_id BIGINT,
+    p_approved_by TEXT
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_schedule computation_schedule_versions%ROWTYPE;
+BEGIN
+    IF NULLIF(trim(p_approved_by), '') IS NULL THEN
+        RAISE EXCEPTION 'Approver identity is required';
+    END IF;
+    SELECT * INTO v_schedule
+    FROM computation_schedule_versions
+    WHERE id = p_schedule_id
+    FOR UPDATE;
+    IF NOT FOUND OR v_schedule.status NOT IN ('DRAFT', 'VALIDATED', 'PENDING_APPROVAL') THEN
+        RAISE EXCEPTION 'Only draft or validated schedules can be activated';
+    END IF;
+    UPDATE computation_schedule_versions
+    SET status = 'SUPERSEDED'
+    WHERE status = 'ACTIVE'
+      AND effective_from <= COALESCE(v_schedule.effective_to, '9999-12-31'::DATE)
+      AND COALESCE(effective_to, '9999-12-31'::DATE) >= v_schedule.effective_from;
+    UPDATE computation_schedule_versions
+    SET status = 'ACTIVE', approved_by = p_approved_by, activated_at = timezone('utc', now())
+    WHERE id = p_schedule_id;
+    INSERT INTO rptar_audit_logs (action_type, assessor_name, details)
+    VALUES ('COMPUTATION_SCHEDULE_ACTIVATED', p_approved_by,
+            format('Activated computation schedule %s (%s)', v_schedule.id, v_schedule.authority_reference));
+    RETURN jsonb_build_object('id', p_schedule_id, 'status', 'ACTIVE', 'approvedBy', p_approved_by);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.activate_computation_schedule(BIGINT, TEXT)
+    FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.activate_computation_schedule(BIGINT, TEXT)
+    TO service_role, postgres;

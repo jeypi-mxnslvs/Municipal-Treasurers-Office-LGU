@@ -11,6 +11,7 @@ import {
   TaxYearRecord,
   MunicipalTaxSettings,
   CsvImportBatch,
+  ComputationScheduleVersion,
   HistoricalAssessedValueItem,
   DelinquencyPeriodVerification,
   DelinquencyPeriodStatus,
@@ -1423,6 +1424,91 @@ export class SupabaseRepository implements ITreasuryRepository {
         .filter((row) => row.penalty_rate !== null && Number.isFinite(Number(row.penalty_rate)))
         .map((row) => [String(row.period_label), Number(row.penalty_rate)])
     );
+  }
+
+  async createComputationSchedule(schedule: ComputationScheduleVersion): Promise<ComputationScheduleVersion> {
+    if (!schedule.authorityReference.trim() || !schedule.sourceFileHash.trim() || !schedule.effectiveFrom) {
+      throw new Error('Authority reference, source hash, and effective date are required.');
+    }
+    if (!schedule.rows.length) throw new Error('Computation schedule must contain at least one rule.');
+    const labels = new Set<string>();
+    for (const row of schedule.rows) {
+      if (labels.has(row.periodLabel)) throw new Error(`Duplicate computation period: ${row.periodLabel}`);
+      labels.add(row.periodLabel);
+      if (row.endYear < row.startYear) throw new Error(`Invalid year range: ${row.periodLabel}`);
+      for (const rate of [row.basicTaxRate, row.sefTaxRate, row.penaltyRate, row.discountRate]) {
+        if (rate !== undefined && (!Number.isFinite(rate) || rate < 0 || rate > 1)) {
+          throw new Error(`Invalid rate in computation period: ${row.periodLabel}`);
+        }
+      }
+    }
+    const { data, error } = await supabase.from('computation_schedule_versions').insert({
+      schedule_name: schedule.scheduleName,
+      authority_reference: schedule.authorityReference,
+      source_filename: schedule.sourceFilename,
+      source_file_hash: schedule.sourceFileHash,
+      status: 'DRAFT',
+      effective_from: schedule.effectiveFrom,
+      effective_to: schedule.effectiveTo || null,
+      uploaded_by: schedule.uploadedBy,
+    }).select().single();
+    if (error || !data) throw new Error(error?.message || 'Failed to save computation schedule draft.');
+    const { error: rowsError } = await supabase.from('computation_schedule_rows').insert(schedule.rows.map((row) => ({
+      schedule_version_id: data.id,
+      period_label: row.periodLabel,
+      start_year: row.startYear,
+      end_year: row.endYear,
+      quarter_span: row.quarterSpan || null,
+      basic_tax_rate: row.basicTaxRate ?? null,
+      sef_tax_rate: row.sefTaxRate ?? null,
+      penalty_rate: row.penaltyRate ?? null,
+      discount_rate: row.discountRate ?? null,
+      penalty_months: row.penaltyMonths ?? null,
+      discount_type: row.discountType || null,
+      applicable_classes: row.applicableClasses || [],
+      source_sheet: row.sourceSheet || null,
+      source_row: row.sourceRow || null,
+      source_formula: row.sourceFormula || null,
+    })));
+    if (rowsError) {
+      await supabase.from('computation_schedule_versions').delete().eq('id', data.id);
+      throw new Error(`Failed to save computation schedule rules: ${rowsError.message}`);
+    }
+    return { ...schedule, id: data.id, status: 'DRAFT', createdAt: data.created_at };
+  }
+
+  async getComputationSchedules(): Promise<ComputationScheduleVersion[]> {
+    const { data, error } = await supabase.from('computation_schedule_versions').select('*, computation_schedule_rows(*)').order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map((row) => ({
+      id: row.id,
+      scheduleName: row.schedule_name,
+      authorityReference: row.authority_reference,
+      sourceFilename: row.source_filename,
+      sourceFileHash: row.source_file_hash,
+      status: row.status,
+      effectiveFrom: row.effective_from,
+      effectiveTo: row.effective_to || undefined,
+      uploadedBy: row.uploaded_by,
+      approvedBy: row.approved_by || undefined,
+      createdAt: row.created_at,
+      activatedAt: row.activated_at || undefined,
+      rows: (row.computation_schedule_rows || []).map((item: Record<string, unknown>) => ({
+        id: Number(item.id), periodLabel: String(item.period_label), startYear: Number(item.start_year), endYear: Number(item.end_year),
+        quarterSpan: item.quarter_span as string | undefined, basicTaxRate: item.basic_tax_rate === null ? undefined : Number(item.basic_tax_rate),
+        sefTaxRate: item.sef_tax_rate === null ? undefined : Number(item.sef_tax_rate), penaltyRate: item.penalty_rate === null ? undefined : Number(item.penalty_rate),
+        discountRate: item.discount_rate === null ? undefined : Number(item.discount_rate), penaltyMonths: item.penalty_months === null ? undefined : Number(item.penalty_months),
+        discountType: item.discount_type as string | undefined, applicableClasses: (item.applicable_classes as string[]) || [], sourceSheet: item.source_sheet as string | undefined,
+        sourceRow: item.source_row === null ? undefined : Number(item.source_row), sourceFormula: item.source_formula as string | undefined,
+      })),
+    }));
+  }
+
+  async activateComputationSchedule(scheduleId: number, approvedBy: string): Promise<ComputationScheduleVersion> {
+    if (!approvedBy.trim()) throw new Error('Approver identity is required.');
+    const { data, error } = await supabase.rpc('activate_computation_schedule', { p_schedule_id: scheduleId, p_approved_by: approvedBy });
+    if (error || !data) throw new Error(error?.message || 'Failed to activate computation schedule.');
+    return data as ComputationScheduleVersion;
   }
 
   // 8. Assessor Import Center & Smart Upsert

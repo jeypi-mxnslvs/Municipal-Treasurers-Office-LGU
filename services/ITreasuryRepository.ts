@@ -9,6 +9,7 @@ import {
   TaxYearRecord,
   MunicipalTaxSettings,
   CsvImportBatch,
+  ComputationScheduleVersion,
   DelinquencyPeriodVerification,
   DelinquencyPeriodStatus,
   VerificationType
@@ -137,6 +138,9 @@ export interface ITreasuryRepository {
   getMunicipalTaxSettings(): Promise<MunicipalTaxSettings>;
   updateMunicipalTaxSettings(settings: Partial<MunicipalTaxSettings>, updatedBy?: string): Promise<MunicipalTaxSettings>;
   getActivePenaltySchedule(asOf?: Date): Promise<Record<string, number>>;
+  createComputationSchedule(schedule: ComputationScheduleVersion): Promise<ComputationScheduleVersion>;
+  getComputationSchedules(): Promise<ComputationScheduleVersion[]>;
+  activateComputationSchedule(scheduleId: number, approvedBy: string): Promise<ComputationScheduleVersion>;
 
   // 8. Assessor Import Center & Smart Upsert
   getImportBatches(barangay?: string): Promise<CsvImportBatch[]>;

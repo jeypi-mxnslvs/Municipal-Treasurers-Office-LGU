@@ -9,6 +9,7 @@ import {
   SecurityAuditLog,
   TaxYearRecord,
   MunicipalTaxSettings,
+  ComputationScheduleVersion,
   CsvImportBatch,
   DelinquencyPeriodVerification,
   DelinquencyPeriodStatus,
@@ -344,6 +345,22 @@ export class LocalHttpRepository implements ITreasuryRepository {
 
   async getActivePenaltySchedule(asOf = new Date()): Promise<Record<string, number>> {
     return this.request<Record<string, number>>(`/settings/computation-schedule?as_of=${encodeURIComponent(asOf.toISOString())}`);
+  }
+
+  async createComputationSchedule(schedule: ComputationScheduleVersion): Promise<ComputationScheduleVersion> {
+    return this.request<ComputationScheduleVersion>('/settings/computation-schedules', {
+      method: 'POST', body: JSON.stringify(schedule),
+    });
+  }
+
+  async getComputationSchedules(): Promise<ComputationScheduleVersion[]> {
+    return this.request<ComputationScheduleVersion[]>('/settings/computation-schedules');
+  }
+
+  async activateComputationSchedule(scheduleId: number, approvedBy: string): Promise<ComputationScheduleVersion> {
+    return this.request<ComputationScheduleVersion>(`/settings/computation-schedules/${scheduleId}/activate`, {
+      method: 'POST', body: JSON.stringify({ approvedBy }),
+    });
   }
 
   // 8. Assessor Import Center & Smart Upsert

@@ -285,6 +285,48 @@ export interface CsvImportBatch {
   createdAt?: string;
 }
 
+export type ComputationScheduleStatus =
+  | 'DRAFT'
+  | 'VALIDATED'
+  | 'PENDING_APPROVAL'
+  | 'ACTIVE'
+  | 'EXPIRED'
+  | 'SUPERSEDED';
+
+export interface ComputationScheduleRow {
+  id?: number;
+  periodLabel: string;
+  startYear: number;
+  endYear: number;
+  quarterSpan?: string;
+  basicTaxRate?: number;
+  sefTaxRate?: number;
+  penaltyRate?: number;
+  discountRate?: number;
+  penaltyMonths?: number;
+  discountType?: string;
+  applicableClasses?: string[];
+  sourceSheet?: string;
+  sourceRow?: number;
+  sourceFormula?: string;
+}
+
+export interface ComputationScheduleVersion {
+  id?: number;
+  scheduleName: string;
+  authorityReference: string;
+  sourceFilename: string;
+  sourceFileHash: string;
+  status: ComputationScheduleStatus;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  uploadedBy: string;
+  approvedBy?: string;
+  createdAt?: string;
+  activatedAt?: string;
+  rows: ComputationScheduleRow[];
+}
+
 export interface SecurityAuditLog {
   id: number;
   event_type: 'LOGIN_SUCCESS' | 'LOGIN_FAILURE' | 'USER_CREATED' | 'ROLE_CHANGED' | 'PASSWORD_RESET' | 'USER_DELETED' | 'ACCESS_DENIED';

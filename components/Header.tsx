@@ -1,5 +1,5 @@
 import React from 'react';
-import { UserCircle, LogOut, Users, FileText } from 'lucide-react';
+import { UserCircle, LogOut, Users, FileText, Settings2 } from 'lucide-react';
 import { User } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -9,6 +9,7 @@ interface HeaderProps {
   onLogout: () => void;
   onOpenUserManagement: () => void;
   onOpenBatchNotices?: () => void;
+  onOpenComputationSchedules?: () => void;
 }
 
 const Header: React.FC<HeaderProps> = ({
@@ -16,6 +17,7 @@ const Header: React.FC<HeaderProps> = ({
   onLogout,
   onOpenUserManagement,
   onOpenBatchNotices,
+  onOpenComputationSchedules,
 }) => {
   const getRoleBadgeVariant = (role: 'Admin' | 'Assessor') => {
     switch (role) {
@@ -55,16 +57,29 @@ const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center gap-2.5">
           {/* Admin User Management Button */}
           {user.role === 'Admin' && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={onOpenUserManagement}
-              className="bg-emerald-800/30 hover:bg-emerald-700 text-emerald-200 hover:text-white border-emerald-600/40 text-xs font-bold gap-1.5"
-            >
-              <Users size={14} />
-              <span className="hidden md:inline">Register Staff</span>
-            </Button>
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onOpenComputationSchedules}
+                className="bg-emerald-800/30 hover:bg-emerald-700 text-emerald-200 hover:text-white border-emerald-600/40 text-xs font-bold gap-1.5"
+                title="Computation Schedule Registry"
+              >
+                <Settings2 size={14} />
+                <span className="hidden lg:inline">Schedules</span>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onOpenUserManagement}
+                className="bg-emerald-800/30 hover:bg-emerald-700 text-emerald-200 hover:text-white border-emerald-600/40 text-xs font-bold gap-1.5"
+              >
+                <Users size={14} />
+                <span className="hidden md:inline">Register Staff</span>
+              </Button>
+            </>
           )}
 
           {/* Batch Delinquency Notices Button */}

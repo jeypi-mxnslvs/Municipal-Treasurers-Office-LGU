@@ -11,6 +11,7 @@ import {
   SecurityAuditLog,
   TaxYearRecord,
   MunicipalTaxSettings,
+  ComputationScheduleVersion,
   CsvImportBatch,
   DelinquencyPeriodVerification,
   DelinquencyPeriodStatus,
@@ -229,6 +230,18 @@ export const api = {
 
   getActivePenaltySchedule(asOf?: Date): Promise<Record<string, number>> {
     return treasuryRepository.getActivePenaltySchedule(asOf);
+  },
+
+  createComputationSchedule(schedule: ComputationScheduleVersion): Promise<ComputationScheduleVersion> {
+    return treasuryRepository.createComputationSchedule(schedule);
+  },
+
+  getComputationSchedules(): Promise<ComputationScheduleVersion[]> {
+    return treasuryRepository.getComputationSchedules();
+  },
+
+  activateComputationSchedule(scheduleId: number, approvedBy: string): Promise<ComputationScheduleVersion> {
+    return treasuryRepository.activateComputationSchedule(scheduleId, approvedBy);
   },
 
   // 8. Assessor Import Center & Smart Upsert
