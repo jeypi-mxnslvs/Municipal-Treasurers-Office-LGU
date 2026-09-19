@@ -168,7 +168,7 @@ export interface User {
   id: string | number;
   name: string;
   username?: string;
-  role: 'Admin' | 'Assessor';
+  role: 'Admin' | 'Assessor' | 'SystemMaintenance';
   stationId: string;
 }
 
@@ -237,6 +237,19 @@ export interface DashboardStatsData {
   collectionEfficiency: number;
   monthlyTrend: Array<{ month: string; collections: number; target: number }>;
   barangayBreakdown: Array<{ barangay: string; properties: number; outstandingDebt: number }>;
+}
+
+export interface TestMasterlistPurgePreview {
+  batchIds: number[];
+  propertyCount: number;
+  verificationCount: number;
+  rowOutcomeCount: number;
+  protectedTables: string[];
+}
+
+export interface TestBatchClassificationResult {
+  batchIds: number[];
+  classifiedCount: number;
 }
 
 export interface RptarAuditLog {
@@ -310,6 +323,7 @@ export interface CsvImportBatch {
   errorCount?: number;
   completedAt?: string;
   createdAt?: string;
+  isTestData?: boolean;
 }
 
 export type ComputationScheduleStatus =

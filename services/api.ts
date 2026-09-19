@@ -15,7 +15,9 @@ import {
   CsvImportBatch,
   DelinquencyPeriodVerification,
   DelinquencyPeriodStatus,
-  VerificationType
+  VerificationType,
+  TestMasterlistPurgePreview,
+  TestBatchClassificationResult
 } from '@/types';
 
 /**
@@ -215,6 +217,15 @@ export const api = {
 
   getSecurityAuditLogs(): Promise<SecurityAuditLog[]> {
     return treasuryRepository.getSecurityAuditLogs();
+  },
+  previewTestMasterlistPurge(batchIds: number[]): Promise<TestMasterlistPurgePreview> {
+    return treasuryRepository.previewTestMasterlistPurge(batchIds);
+  },
+  classifyTestImportBatches(payload: { batchIds: number[]; reason: string; authorizedBy: string; authorizedRole: string; approvalReference: string }): Promise<TestBatchClassificationResult> {
+    return treasuryRepository.classifyTestImportBatches(payload);
+  },
+  purgeTestMasterlist(payload: { batchIds: number[]; confirmation: string; reason: string; authorizedBy: string; authorizedRole: string; approvalReference: string }): Promise<TestMasterlistPurgePreview> {
+    return treasuryRepository.purgeTestMasterlist(payload);
   },
 
   logFieldOverrideAudit(entry: {

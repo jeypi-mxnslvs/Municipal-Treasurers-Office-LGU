@@ -6,6 +6,7 @@ import { BreakdownAlertModal } from '@/components/common/BreakdownAlertModal';
 import type { AlertSeverity, FieldFailureDetail } from '@/components/common/BreakdownAlertModal';
 import { useToast } from '@/components/common/Toast';
 import { LoginPage, UserManagementModal, PasswordConfirmationModal } from '@/features/auth';
+import SystemMaintenanceModal from '@/features/auth/SystemMaintenanceModal';
 import { DashboardStats } from '@/features/dashboard';
 import { DashboardTable, PropertyCard, RptarModal, BulkImportModal } from '@/features/properties';
 import { DelinquencyTable } from '@/features/assessment';
@@ -38,6 +39,7 @@ const App: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalInitialData, setModalInitialData] = useState<Property | null>(null);
   const [isUserManagementModalOpen, setIsUserManagementModalOpen] = useState(false);
+  const [isSystemMaintenanceModalOpen, setIsSystemMaintenanceModalOpen] = useState(false);
   const [isComputationScheduleModalOpen, setIsComputationScheduleModalOpen] = useState(false);
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [auditTargetProperty, setAuditTargetProperty] = useState<Property | null>(null);
@@ -576,6 +578,7 @@ const App: React.FC = () => {
         onLogout={() => handleLogout()}
         onOpenUserManagement={() => setIsUserManagementModalOpen(true)}
         onOpenComputationSchedules={() => setIsComputationScheduleModalOpen(true)}
+        onOpenSystemMaintenance={() => setIsSystemMaintenanceModalOpen(true)}
         onOpenBatchNotices={() => {
           const delinquents = properties.filter(p => p.lastPaidYear < 2026 && !p.isShellRecord);
           setNoticeProperties(delinquents);
@@ -826,6 +829,7 @@ const App: React.FC = () => {
         onClose={() => setIsUserManagementModalOpen(false)}
         currentUser={currentUser}
       />
+      <SystemMaintenanceModal isOpen={isSystemMaintenanceModalOpen} onClose={() => setIsSystemMaintenanceModalOpen(false)} currentUser={currentUser} />
 
       <ComputationScheduleModal
         isOpen={isComputationScheduleModalOpen}

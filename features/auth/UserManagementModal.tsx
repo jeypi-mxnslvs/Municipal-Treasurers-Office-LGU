@@ -46,7 +46,7 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'Assessor' | 'Admin'>('Assessor');
+  const [role, setRole] = useState<'Assessor' | 'Admin' | 'SystemMaintenance'>('Assessor');
   const [stationId, setStationId] = useState('Assessor-Desk-03');
   const [statusMessage, setStatusMessage] = useState<{
     type: 'success' | 'error';
@@ -325,6 +325,7 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
                 >
                   <option value="Assessor">Assessor (RPTAR & Dues Verification)</option>
                   <option value="Admin">Admin (Full System Administration)</option>
+                  <option value="SystemMaintenance">IT / System Maintenance (Technical Administration)</option>
                 </select>
               </div>
 

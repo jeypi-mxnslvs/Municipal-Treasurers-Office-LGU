@@ -1,5 +1,5 @@
 import React from 'react';
-import { UserCircle, LogOut, Users, FileText, Settings2 } from 'lucide-react';
+import { UserCircle, LogOut, Users, FileText, Settings2, Wrench } from 'lucide-react';
 import { User } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -10,6 +10,7 @@ interface HeaderProps {
   onOpenUserManagement: () => void;
   onOpenBatchNotices?: () => void;
   onOpenComputationSchedules?: () => void;
+  onOpenSystemMaintenance?: () => void;
 }
 
 const Header: React.FC<HeaderProps> = ({
@@ -18,8 +19,9 @@ const Header: React.FC<HeaderProps> = ({
   onOpenUserManagement,
   onOpenBatchNotices,
   onOpenComputationSchedules,
+  onOpenSystemMaintenance,
 }) => {
-  const getRoleBadgeVariant = (role: 'Admin' | 'Assessor') => {
+  const getRoleBadgeVariant = (role: 'Admin' | 'Assessor' | 'SystemMaintenance') => {
     switch (role) {
       case 'Admin':
         return 'default';
@@ -80,6 +82,12 @@ const Header: React.FC<HeaderProps> = ({
                 <span className="hidden md:inline">Register Staff</span>
               </Button>
             </>
+          )}
+          {user.role === 'SystemMaintenance' && onOpenSystemMaintenance && (
+            <Button type="button" variant="outline" size="sm" onClick={onOpenSystemMaintenance} className="bg-amber-800/30 hover:bg-amber-700 text-amber-200 hover:text-white border-amber-600/40 text-xs font-bold gap-1.5">
+              <Wrench size={14} />
+              <span className="hidden lg:inline">Maintenance</span>
+            </Button>
           )}
 
           {/* Batch Delinquency Notices Button */}

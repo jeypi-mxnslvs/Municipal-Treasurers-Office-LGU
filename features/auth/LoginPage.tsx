@@ -13,7 +13,7 @@ interface LoginPageProps {
 
 interface WorkstationAccount {
   email: string;
-  role: 'Admin' | 'Assessor';
+  role: 'Admin' | 'Assessor' | 'SystemMaintenance';
   name: string;
   stationId: string;
 }
@@ -56,6 +56,9 @@ const WORKSTATION_ACCOUNTS: Record<string, WorkstationAccount> = {
     name: 'Municipal Assessor',
     stationId: 'Assessor-Desk',
   },
+  'maintenance@example.com': {
+    email: 'maintenance@example.com', role: 'SystemMaintenance', name: 'IT / System Maintenance', stationId: 'MIS-Desk',
+  },
 };
 
 const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, sessionWarning }) => {
@@ -94,13 +97,13 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, sessionWarning })
       // Activated when database stored procedures are unmigrated, permissions restricted, or network unavailable
       if (matchedAccount) {
         const expectedPassword =
-          matchedAccount.role === 'Admin'
+          matchedAccount.role === 'Admin' || matchedAccount.role === 'SystemMaintenance'
             ? (import.meta.env.VITE_ADMIN_PASSWORD as string | undefined) || 'admin123'
             : (import.meta.env.VITE_ASSESSOR_PASSWORD as string | undefined) || 'assessor123';
 
         const isValidPassword =
           cleanPassword === expectedPassword ||
-          (matchedAccount.role === 'Admin' && cleanPassword === 'admin123') ||
+            ((matchedAccount.role === 'Admin' || matchedAccount.role === 'SystemMaintenance') && cleanPassword === 'admin123') ||
           (matchedAccount.role === 'Assessor' && (cleanPassword === 'assessor123' || cleanPassword === 'admin123'));
 
         if (isValidPassword) {

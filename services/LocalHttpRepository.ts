@@ -127,6 +127,18 @@ export class LocalHttpRepository implements ITreasuryRepository {
     });
   }
 
+  async previewTestMasterlistPurge(batchIds: number[]): Promise<import('@/types').TestMasterlistPurgePreview> {
+    return this.request('/maintenance/purge-preview', { method: 'POST', body: JSON.stringify({ batchIds }) });
+  }
+
+  async classifyTestImportBatches(payload: { batchIds: number[]; reason: string; authorizedBy: string; authorizedRole: string; approvalReference: string }): Promise<import('@/types').TestBatchClassificationResult> {
+    return this.request('/maintenance/classify-test-batches', { method: 'POST', body: JSON.stringify(payload) });
+  }
+
+  async purgeTestMasterlist(payload: { batchIds: number[]; confirmation: string; reason: string; authorizedBy: string; authorizedRole: string; approvalReference: string }): Promise<import('@/types').TestMasterlistPurgePreview> {
+    return this.request('/maintenance/purge-sample-masterlist', { method: 'POST', body: JSON.stringify(payload) });
+  }
+
   async lookupSfmv(barangay: string, propertyClass: string): Promise<{ base_rate_sqm: number; assessment_level: number }> {
     const params = new URLSearchParams({ barangay, property_class: propertyClass });
     return this.request<{ base_rate_sqm: number; assessment_level: number }>(`/sfmv?${params.toString()}`);
