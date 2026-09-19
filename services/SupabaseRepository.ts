@@ -1416,6 +1416,13 @@ export class SupabaseRepository implements ITreasuryRepository {
         updatedRows: b.updated_rows,
         unchangedRows: b.unchanged_rows,
         importedBy: b.imported_by,
+        fileHash: b.file_hash,
+        fileSizeBytes: b.file_size_bytes,
+        stationId: b.station_id,
+        status: b.status,
+        rejectedRows: b.rejected_rows,
+        errorCount: b.error_count,
+        completedAt: b.completed_at,
         createdAt: b.created_at
       }));
     } catch {
@@ -1427,7 +1434,14 @@ export class SupabaseRepository implements ITreasuryRepository {
     properties: Array<Partial<Property> & Record<string, unknown>>,
     assessorName = 'Juan Reyes',
     stationId = 'Assessor-Desk-02',
-    batchMetadata?: { filename?: string; barangay?: string }
+    batchMetadata?: {
+      filename?: string;
+      barangay?: string;
+      fileHash?: string;
+      fileSizeBytes?: number;
+      rejectedRows?: number;
+      errorCount?: number;
+    }
   ): Promise<{
     message: string;
     insertedCount: number;
@@ -1439,6 +1453,16 @@ export class SupabaseRepository implements ITreasuryRepository {
     const validRows = properties.filter(p => p.tdNumber);
     if (validRows.length === 0) {
       return { message: 'No valid rows to import', insertedCount: 0, updatedCount: 0, unchangedCount: 0, errors: [] };
+    }
+
+    if (batchMetadata?.fileHash) {
+      const { data: duplicateBatch, error: duplicateError } = await supabase
+        .from('csv_import_batches')
+        .select('id')
+        .eq('file_hash', batchMetadata.fileHash)
+        .maybeSingle();
+      if (duplicateError) throw new Error(`Import preflight failed while checking file history: ${duplicateError.message}`);
+      if (duplicateBatch) throw new Error(`This CSV was already imported as batch #${duplicateBatch.id}.`);
     }
 
     const tdNumbers = validRows.map(p => String(p.tdNumber).trim());
@@ -1634,7 +1658,7 @@ export class SupabaseRepository implements ITreasuryRepository {
     let batchId: number | undefined;
 
     try {
-      const { data: batchData } = await supabase.from('csv_import_batches').insert({
+      const { data: batchData, error: batchError } = await supabase.from('csv_import_batches').insert({
         batch_name: `Batch-${Date.now().toString().slice(-6)}`,
         barangay: primaryBarangay,
         filename,
@@ -1642,9 +1666,17 @@ export class SupabaseRepository implements ITreasuryRepository {
         inserted_rows: insertedCount,
         updated_rows: updatedCount,
         unchanged_rows: unchangedCount,
-        imported_by: assessorName
+        imported_by: assessorName,
+        file_hash: batchMetadata?.fileHash || null,
+        file_size_bytes: batchMetadata?.fileSizeBytes || null,
+        station_id: stationId,
+        status: errors.length > 0 ? 'COMMITTED_WITH_ERRORS' : 'COMMITTED',
+        rejected_rows: batchMetadata?.rejectedRows || 0,
+        error_count: batchMetadata?.errorCount || errors.length,
+        completed_at: new Date().toISOString()
       }).select('id').single();
 
+      if (batchError) throw batchError;
       batchId = batchData?.id;
     } catch {
       // Non-blocking
@@ -1660,6 +1692,32 @@ export class SupabaseRepository implements ITreasuryRepository {
 
     if (auditError) {
       errors.push({ stage: 'audit', message: auditError.message });
+    }
+
+    if (batchId) {
+      const outcomes = validRows.map((row) => {
+        const existing = existingMap.get(String(row.tdNumber).trim());
+        const unchanged = existing &&
+          String(existing.owner_name).trim() === String(row.ownerName || '').trim() &&
+          String(existing.address).trim() === String(row.address || '').trim() &&
+          String(existing.barangay).trim() === String(row.barangay || '').trim() &&
+          String(existing.property_class).trim() === String(row.propertyClass || '').trim() &&
+          Number(existing.assessed_value) === Number(row.assessedValue || 0) &&
+          Number(existing.market_value) === Number(row.marketValue || 0);
+        const outcome = !existing ? 'INSERTED' : unchanged ? 'UNCHANGED' : 'UPDATED';
+        return {
+          batch_id: batchId,
+          td_number: String(row.tdNumber).trim(),
+          outcome,
+        };
+      });
+      const { error: outcomeError } = await supabase.from('csv_import_row_outcomes').insert(outcomes);
+      if (outcomeError) errors.push({ stage: 'row_outcomes', message: outcomeError.message });
+    }
+
+    const reconciled = insertedCount + updatedCount + unchangedCount + errors.length === validRows.length;
+    if (!reconciled && batchId) {
+      await supabase.from('csv_import_batches').update({ status: 'RECONCILIATION_FAILED' }).eq('id', batchId);
     }
 
     return {

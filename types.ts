@@ -275,6 +275,13 @@ export interface CsvImportBatch {
   updatedRows: number;
   unchangedRows: number;
   importedBy: string;
+  fileHash?: string;
+  fileSizeBytes?: number;
+  stationId?: string;
+  status?: string;
+  rejectedRows?: number;
+  errorCount?: number;
+  completedAt?: string;
   createdAt?: string;
 }
 

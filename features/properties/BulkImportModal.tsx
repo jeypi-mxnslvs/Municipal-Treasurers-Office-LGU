@@ -189,6 +189,8 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
     batchId?: number;
   } | null>(null);
   const [uploadedFileName, setUploadedFileName] = useState<string>('');
+  const [uploadedFileHash, setUploadedFileHash] = useState<string>('');
+  const [uploadedFileSize, setUploadedFileSize] = useState<number>(0);
   const [selectedBarangayFilter, setSelectedBarangayFilter] = useState<string>('All');
   const [stateFilter, setStateFilter] = useState<string>('ALL');
   const [importBatches, setImportBatches] = useState<CsvImportBatch[]>([]);
@@ -587,11 +589,15 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
     setParsedRows(rows);
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
+    setUploadedFileHash('');
+    setUploadedFileSize(file.size);
+    const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+    setUploadedFileHash(Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join(''));
     reader.onload = (event) => {
       const text = event.target?.result as string;
       handleParseCsv(text, file.name);
@@ -696,6 +702,10 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
         {
           filename: uploadedFileName || `Santa_Rosa_Import_${new Date().toISOString().split('T')[0]}.csv`,
           barangay: detectedBarangay,
+          fileHash: uploadedFileHash,
+          fileSizeBytes: uploadedFileSize,
+          rejectedRows: errorCount,
+          errorCount,
         }
       );
 

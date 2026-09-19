@@ -353,7 +353,14 @@ export class LocalHttpRepository implements ITreasuryRepository {
     properties: Array<Partial<Property> & Record<string, unknown>>,
     assessorName?: string,
     stationId?: string,
-    batchMetadata?: { filename?: string; barangay?: string }
+    batchMetadata?: {
+      filename?: string;
+      barangay?: string;
+      fileHash?: string;
+      fileSizeBytes?: number;
+      rejectedRows?: number;
+      errorCount?: number;
+    }
   ): Promise<{
     message: string;
     insertedCount: number;
