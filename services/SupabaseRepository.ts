@@ -45,6 +45,10 @@ const mapPropertyRow = (row: Record<string, unknown>): Property => ({
   entryType: (row.entry_type as 'MANUAL' | 'CSV_IMPORT') || (String(row.encoder_label || '').includes('(Manual)') ? 'MANUAL' : 'CSV_IMPORT'),
   createdAt: row.created_at as string | undefined,
   updatedAt: row.updated_at as string | undefined,
+  disposition: (row.disposition as Property['disposition']) || 'ACTIVE',
+  dispositionReason: row.disposition_reason as string | undefined,
+  dispositionAuthorizedBy: row.disposition_authorized_by as string | undefined,
+  dispositionAt: row.disposition_at as string | undefined,
 });
 
 /**
@@ -75,6 +79,9 @@ export class SupabaseRepository implements ITreasuryRepository {
   }
 
   async getPropertyAssessment(propertyId: string, fallbackProp?: Property, customSettings?: MunicipalTaxSettings): Promise<CalculationResult> {
+    if (fallbackProp?.disposition && fallbackProp.disposition !== 'ACTIVE') {
+      throw new Error('Archived or retired property records are excluded from tax computation.');
+    }
     const settings = customSettings || await this.getMunicipalTaxSettings();
     const computationSchedule = await this.getActiveComputationSchedule();
     const scheduleApplication: import('@/types').ComputationScheduleApplication = computationSchedule ? {
@@ -119,6 +126,9 @@ export class SupabaseRepository implements ITreasuryRepository {
     const { data } = await supabase.from('properties').select('*').eq('id', propertyId).single();
     if (data) {
       const prop = mapPropertyRow(data);
+      if (prop.disposition && prop.disposition !== 'ACTIVE') {
+        throw new Error('Archived or retired property records are excluded from tax computation.');
+      }
       return localCalculateTaxLiability(prop, calcOptions);
     }
     return { records: [], grandTotal: 0 };
@@ -417,6 +427,21 @@ export class SupabaseRepository implements ITreasuryRepository {
         details: `Deleted property record ${target.td_number}`
       });
     }
+  }
+
+  async archiveProperty(propertyId: string, reason: string, authorizedBy: string, authorizedRole: string): Promise<Property> {
+    if (authorizedRole !== 'Admin') throw new Error('Only System Admin may archive property records.');
+    const { data, error } = await supabase.rpc('archive_property', {
+      p_property_id: Number(propertyId),
+      p_reason: reason,
+      p_authorized_by: authorizedBy,
+      p_authorized_role: authorizedRole,
+    });
+    if (error) throw new Error(`Failed to archive property: ${error.message}`);
+    const { data: archived, error: readError } = await supabase.from('properties').select('*').eq('id', Number(propertyId)).single();
+    if (readError || !archived) throw new Error(`Archived record could not be reloaded: ${readError?.message || 'not found'}`);
+    void data;
+    return mapPropertyRow(archived);
   }
 
   async lookupSfmv(barangay: string, propertyClass: string): Promise<{ base_rate_sqm: number; assessment_level: number }> {
@@ -735,7 +760,7 @@ export class SupabaseRepository implements ITreasuryRepository {
 
   // 4. Reporting, Analytics & Live Multi-Assessor Sync
   async getDashboardStats(): Promise<DashboardStatsData> {
-    const { data: props } = await supabase.from('properties').select('*');
+    const { data: props } = await supabase.from('properties').select('*').eq('disposition', 'ACTIVE');
     const list = props || [];
     const { data: verificationRows } = await supabase
       .from('delinquency_period_verifications')

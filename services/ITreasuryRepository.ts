@@ -40,6 +40,7 @@ export interface ITreasuryRepository {
     reason?: string;
   }): Promise<Property>;
   deleteProperty(propertyId: string): Promise<void>;
+  archiveProperty(propertyId: string, reason: string, authorizedBy: string, authorizedRole: string): Promise<Property>;
   lookupSfmv(barangay: string, propertyClass: string): Promise<{ base_rate_sqm: number; assessment_level: number }>;
 
   // 2. Delinquency Period Verification & External Settlement Evidence

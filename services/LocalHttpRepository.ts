@@ -119,6 +119,14 @@ export class LocalHttpRepository implements ITreasuryRepository {
     await this.request(`/properties/${propertyId}`, { method: 'DELETE' });
   }
 
+  async archiveProperty(propertyId: string, reason: string, authorizedBy: string, authorizedRole: string): Promise<Property> {
+    if (authorizedRole !== 'Admin') throw new Error('Only System Admin may archive property records.');
+    return this.request<Property>(`/properties/${propertyId}/archive`, {
+      method: 'POST',
+      body: JSON.stringify({ reason, authorizedBy, authorizedRole }),
+    });
+  }
+
   async lookupSfmv(barangay: string, propertyClass: string): Promise<{ base_rate_sqm: number; assessment_level: number }> {
     const params = new URLSearchParams({ barangay, property_class: propertyClass });
     return this.request<{ base_rate_sqm: number; assessment_level: number }>(`/sfmv?${params.toString()}`);

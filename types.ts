@@ -32,6 +32,10 @@ export interface Property {
   entryType?: 'MANUAL' | 'CSV_IMPORT'; // 'MANUAL' entries prioritized in #1 position
   createdAt?: string;
   updatedAt?: string;
+  disposition?: 'ACTIVE' | 'SAMPLE_RECORD' | 'VOIDED' | 'CANCELLED' | 'SUPERSEDED' | 'ARCHIVED';
+  dispositionReason?: string;
+  dispositionAuthorizedBy?: string;
+  dispositionAt?: string;
 }
 
 export interface TaxYearRecord {

@@ -73,6 +73,10 @@ export const api = {
     return treasuryRepository.deleteProperty(propertyId);
   },
 
+  archiveProperty(propertyId: string, reason: string, authorizedBy: string, authorizedRole: string): Promise<Property> {
+    return treasuryRepository.archiveProperty(propertyId, reason, authorizedBy, authorizedRole);
+  },
+
   lookupSfmv(barangay: string, propertyClass: string): Promise<{ base_rate_sqm: number; assessment_level: number }> {
     return treasuryRepository.lookupSfmv(barangay, propertyClass);
   },

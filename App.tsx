@@ -147,6 +147,10 @@ const App: React.FC = () => {
   const initialRestoredRef = useRef(false);
 
   const handlePostPaymentView = useCallback(async (property: Property) => {
+    if (property.disposition && property.disposition !== 'ACTIVE') {
+      showToast({ type: 'warning', title: 'Archived record', message: 'Archived records are view-only and excluded from tax computation.' });
+      return;
+    }
     setSelectedProperty(property);
     setIsLoading(true);
     setView('posting');
@@ -208,7 +212,7 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [showToast]);
 
   useEffect(() => {
     if (!currentUser || !selectedProperty) return;
@@ -277,12 +281,18 @@ const App: React.FC = () => {
   };
 
   const handleDelete = (id: string) => {
-    setPropertyPendingDeletion(id);
+    if (currentUser?.role !== 'Admin') return;
+    const reason = window.prompt('Required archive reason (for example: training sample, duplicate, or cancelled TD):');
+    if (!reason?.trim()) return;
+    setPropertyPendingDeletion(`${id}::${reason.trim()}`);
   };
 
   const confirmDeleteProperty = async () => {
     if (!propertyPendingDeletion) return;
-    await api.deleteProperty(propertyPendingDeletion);
+    const separator = propertyPendingDeletion.indexOf('::');
+    const propertyId = separator >= 0 ? propertyPendingDeletion.slice(0, separator) : propertyPendingDeletion;
+    const reason = separator >= 0 ? propertyPendingDeletion.slice(separator + 2) : 'Admin-directed archival';
+    await api.archiveProperty(propertyId, reason, currentUser.name, currentUser.role);
     setPropertyPendingDeletion(null);
     await loadData();
   };
@@ -842,10 +852,10 @@ const App: React.FC = () => {
       {/* Destructive Action Password Re-authentication Modal */}
       <PasswordConfirmationModal
         isOpen={Boolean(propertyPendingDeletion)}
-        title="Authorize Property Deletion"
-        description="Deleting a real property assessment record permanently removes it from the RPTAR masterlist and affects historical ledger records. Please confirm your password to proceed."
+        title="Authorize Property Archival"
+        description="This retains record for audit but removes it from active operations. Confirm Admin password to archive it."
         username={currentUser?.username || 'admin'}
-        destructiveActionLabel="Permanently Delete Record"
+        destructiveActionLabel="Archive Record"
         onConfirm={confirmDeleteProperty}
         onClose={() => setPropertyPendingDeletion(null)}
       />
