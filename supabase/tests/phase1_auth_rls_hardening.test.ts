@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-const migration = readFileSync(fileURLToPath(new URL('./20261002_phase1_auth_rls_hardening.sql', import.meta.url)), 'utf8');
+const migration = readFileSync(fileURLToPath(new URL('../migrations/20261002_phase1_auth_rls_hardening.sql', import.meta.url)), 'utf8');
 
 describe('Phase 1 authorization migration', () => {
   it('revokes anonymous access and blocks legacy password authentication', () => {
