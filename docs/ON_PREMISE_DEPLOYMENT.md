@@ -1,117 +1,70 @@
 # On-Premise Deployment Guide — Air-Gapped Municipal Hall Setup
-**LGU Treasury Connect — Real Property Tax Administration System (RPTAS)**  
+**LGU Treasury Connect — Real Property Tax Delinquency Verification & Statement System**
 **Municipality of Santa Rosa, Province of Nueva Ecija, Philippines**
 
----
+## 1. Deployment boundary
 
-## 1. Executive Summary
+Supabase Cloud is the production authority unless the deployment operator and database owner approve the controlled on-premise target. On-premise Compose is a development or isolated-LAN deployment only. PostgreSQL and PostgREST are internal container services; Nginx is the only published service.
 
-This guide outlines the procedure for deploying **LGU Treasury Connect** on a dedicated local physical server inside the Municipal Treasurer's Office of Santa Rosa, Nueva Ecija. This deployment operates completely disconnected from the public internet (air-gapped), fulfilling the strict data sovereignty and business continuity mandates of the Local Government Unit.
+Never use retired `schema.sql` or `supabase/migration.sql`. Canonical schema history is the ordered `supabase/migrations/*.sql` chain.
 
-The system utilizes an architectural driver pattern (`ITreasuryRepository`) that can switch between **Cloud (Supabase)** and **Local On-Premise (PostgreSQL + PostgREST + Nginx)** with zero modifications to UI components.
+## 2. Prerequisites
 
----
+- Ubuntu Server 22.04/24.04, Docker Engine 24+, Docker Compose v2.20+.
+- Internal LAN firewall permits only TCP 80 or approved HTTPS port to Nginx.
+- PostgreSQL major version matches the approved Supabase target. Current local Supabase config uses PostgreSQL 17.
+- Deployment secrets are supplied through an external environment file, Docker secret, or secret manager. Do not commit them.
 
-## 2. Server Prerequisites
+## 3. Deploy
 
-### 2.1 Minimum Hardware Specifications
-* **Processor**: Intel Core i5 / Xeon (4 Cores, 2.5 GHz or higher)
-* **Memory**: 8 GB RAM (16 GB recommended)
-* **Storage**: 256 GB NVMe SSD (RAID 1 mirrored recommended for database fault tolerance)
-* **Network**: Dual Gigabit Ethernet NIC (Internal Municipal Hall LAN)
-* **Power**: Uninterruptible Power Supply (UPS) with at least 30 minutes battery backup
-
-### 2.2 Software Environment
-* **Operating System**: Ubuntu Server 22.04 LTS or 24.04 LTS (x86_64)
-* **Container Engine**: Docker Engine v24.0+ & Docker Compose v2.20+
-* **Firewall (UFW)**: Allow ports `80` (HTTP) and `3000` (API internal LAN)
-
----
-
-## 3. Architecture Overview
-
-```mermaid
-graph TD
-    Teller1["Teller Terminal 1<br/>(192.168.1.101)"] -->|HTTP /port 80| Nginx["Nginx Web Server<br/>(192.168.1.10:80)"]
-    Teller2["Teller Terminal 2<br/>(192.168.1.102)"] -->|HTTP /port 80| Nginx
-    Assessor["Assessor Workstation<br/>(192.168.1.105)"] -->|HTTP /port 80| Nginx
-    
-    subgraph "Local On-Premise Server (192.168.1.10)"
-        Nginx -->|Static Assets| Dist["Built SPA (dist/)"]
-        Nginx -->|Proxy /api/v1/| PostgREST["PostgREST API Engine<br/>(:3000)"]
-        PostgREST -->|SQL / RPC| Postgres["PostgreSQL 16 DB<br/>(:5432)"]
-        Postgres --> PgData[("Local Persistent Volume<br/>(pgdata)")]
-    end
-```
-
----
-
-## 4. Deployment Steps
-
-### Step 1: Clone or Transfer Repository
-Copy the release artifact to the on-premise server:
 ```bash
-scp -r Municipal-Treasurers-Office-LGU.tar.gz admin@192.168.1.10:/opt/
-ssh admin@192.168.1.10
-cd /opt && tar -xzf Municipal-Treasurers-Office-LGU.tar.gz
-cd Municipal-Treasurers-Office-LGU
-```
-
-### Step 2: Build Frontend for Local Environment
-Create an `.env.local` configuration for building the frontend:
-```env
-VITE_BACKEND_DRIVER=local-http
-VITE_API_BASE_URL=http://192.168.1.10/api/v1
-```
-
-Build the static bundle:
-```bash
-npm install
+npm ci
 npm run build
-```
-*(The built production assets will be placed in `./dist`)*
+cp .env.deploy.example /secure/path/lgu-treasury.env
+# Edit secure file: set POSTGRES_PASSWORD and PGRST_DB_URI without committing it.
+set -a
+. /secure/path/lgu-treasury.env
+set +a
 
-### Step 3: Launch Containers via Docker Compose
-Run Docker Compose in detached mode:
-```bash
-docker compose up -d
+./scripts/apply-migrations.sh --dry-run
+./scripts/apply-migrations.sh
+
+docker compose --env-file /secure/path/lgu-treasury.env up -d
+
+docker compose ps
+curl -fsS http://127.0.0.1/ >/dev/null
 ```
 
-Verify that all three containers are healthy:
+Migration failures stop deployment. Do not manually patch the database. Create a forward migration, review it, and rerun the dry-run.
+
+## 4. TLS and network controls
+
+For isolated-LAN HTTP, document the approved exception with the municipal IT/security owner and restrict ingress to the municipal VLAN. For any non-isolated network, terminate HTTPS at an approved reverse proxy, use HSTS, and publish no PostgreSQL or PostgREST port. Compose exposes PostgreSQL/PostgREST only to the internal Docker network.
+
+## 5. Backup, restore, rollback
+
+Use an external secret file and an off-host backup destination. Example scheduled dump:
+
 ```bash
+0 17 * * 1-5 set -a; . /secure/path/lgu-treasury.env; set +a; \
+  mkdir -p /opt/backups && \
+  docker compose --env-file /secure/path/lgu-treasury.env exec -T postgres \
+  pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" | gzip > \
+  /opt/backups/rptas_$(date +\%Y\%m\%d_\%H\%M).sql.gz
+```
+
+Retain encrypted daily backups according to the municipal retention schedule and copy them off-host. Monthly, restore the newest backup into a disposable PostgreSQL instance, run the migration/test checks, and record the result. Rollback means stop the application, preserve the failed deployment logs and backup, restore the approved backup into a clean target, then redeploy the previously approved image and migration state.
+
+## 6. Verification
+
+```bash
+npx supabase migration list
+npx supabase db push --include-all --dry-run
+npm run test:unit
+npx tsc --noEmit
+npm run lint
+npm run build
 docker compose ps
 ```
-Output:
-```
-NAME                    IMAGE                    STATUS                   PORTS
-santa_rosa_rptas_db     postgres:16-alpine       Up (healthy)             0.0.0.0:5432->5432/tcp
-santa_rosa_rptas_api    postgrest/postgrest:v12  Up                       0.0.0.0:3000->3000/tcp
-santa_rosa_rptas_web    nginx:alpine             Up                       0.0.0.0:80->80/tcp
-```
 
----
-
-## 5. Daily Backup and COA Audit Archiving
-
-In accordance with Commission on Audit (COA) Circulars on electronic records retention, perform automated daily database dumps at 5:00 PM:
-
-```bash
-# Add to crontab: crontab -e
-0 17 * * 1-5 docker exec -t santa_rosa_rptas_db pg_dump -U treasury_admin rptas_treasury | gzip > /opt/backups/rptas_$(date +\%Y\%m\%d_\%H\%M).sql.gz
-```
-
----
-
-## 6. Verification and Troubleshooting
-
-1. **Verify Database Initialization**:
-   ```bash
-   docker exec -it santa_rosa_rptas_db psql -U treasury_admin -d rptas_treasury -c "SELECT count(*) FROM properties;"
-   ```
-2. **Verify REST API**:
-   ```bash
-   curl -i http://localhost:3000/properties?limit=5
-   ```
-3. **Verify Web Interface**:
-   Open a browser on any workstation connected to the Santa Rosa Municipal Hall LAN and navigate to:
-   `http://192.168.1.10/`
+Never run `npx supabase db reset` against remote municipal data.

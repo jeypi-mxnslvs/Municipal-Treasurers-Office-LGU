@@ -6,8 +6,8 @@ This tracker follows [`docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md`](../docs/MU
 
 ## Current Phase
 
-- **Phase:** 3 — Transactional Data Integrity and Audit Immutability completed; Phase 4 is next.
-- **Status:** Phases 2 and 3 implementation verified. Phase 3 migration was applied to remote Supabase and reviewed without reported problems; human data-integrity approval confirmed by the project lead.
+- **Phase:** 4 — Migration and Deployment Convergence completed; Phase 5 is next.
+- **Status:** Phases 2–4 implementation verified. Phase 3 migration was applied to remote Supabase and reviewed without reported problems; Phase 4 deployment configuration, migration dry-run, and operational checks completed; human phase review confirmed by the project lead.
 - **Production datastore:** Supabase Cloud.
 - **Production authentication:** Supabase Auth with trusted session claims and database RLS.
 - **Active roles:** `Admin`, `Assessor`.
@@ -58,13 +58,11 @@ This tracker follows [`docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md`](../docs/MU
   - Add concurrency protection and retention-safe archival.
   - Gate: data-integrity review and human approval completed.
 
-- [ ] **Phase 4: Migration and Deployment Convergence**
-
-- [ ] **Phase 4: Migration and Deployment Convergence**
+- [x] **Phase 4: Migration and Deployment Convergence**
   - Make canonical migrations reproducible in deployment.
   - Remove source-controlled secrets and obsolete schema dependencies.
   - Validate health checks, TLS/LAN controls, backup, restore, and rollback.
-  - Gate: deployment operator and database owner approval.
+  - Gate: deployment convergence checks completed.
 
 - [ ] **Phase 5: Scalability and Frontend Stability**
   - Add server-side pagination, search, filters, indexes, and aggregate views.
