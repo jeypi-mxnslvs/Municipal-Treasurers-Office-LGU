@@ -16,7 +16,9 @@ import type { VerificationModalValue } from '@/features/assessment/VerifyPeriodM
 import { AuditLogModal } from '@/features/audit';
 import { NoticeOfDelinquencyModal, TaxClearanceModal } from '@/features/reports';
 import { Printer, ArrowLeft, CheckCircle2, ShieldCheck, CheckCircle, RefreshCw, FileText, AlertTriangle } from 'lucide-react';
-import { verifySessionToken, DEFAULT_SESSION_TIMEOUT_MS } from './lib/crypto';
+import { DEFAULT_SESSION_TIMEOUT_MS } from './lib/crypto';
+import { supabase } from './services/supabase';
+import { mapSupabaseUser } from './services/supabaseSession';
 import { mergeEncoderLabel } from './utils/encoderAttribution';
 import { projectPropertyPeriods, derivePeriodKeyFromRecord } from './utils/periodProjection';
 import type { PropertyPeriodProjection } from './utils/periodProjection';
@@ -24,10 +26,7 @@ import { auditPropertyForVerification } from './utils/validationPipeline';
 
 const App: React.FC = () => {
   // Authentication State
-  const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('lgu_user');
-    return saved ? JSON.parse(saved) : null;
-  });
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [sessionWarning, setSessionWarning] = useState<string | null>(null);
 
   const [view, setView] = useState<'dashboard' | 'posting'>('dashboard');
@@ -506,33 +505,47 @@ const App: React.FC = () => {
     }
   };
 
-  const handleLogout = useCallback((reason?: unknown) => {
-    localStorage.removeItem('lgu_user');
-    localStorage.removeItem('lgu_token');
-    localStorage.removeItem('lgu_active_td');
-    localStorage.removeItem('lgu_active_view');
-    setCurrentUser(null);
-    setView('dashboard');
-    if (typeof reason === 'string' && reason.trim()) {
-      setSessionWarning(reason);
-    } else {
-      setSessionWarning(null);
+  const handleLogout = useCallback(async (reason?: unknown) => {
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      localStorage.removeItem('lgu_active_td');
+      localStorage.removeItem('lgu_active_view');
+      setCurrentUser(null);
+      setView('dashboard');
+      setSessionWarning(typeof reason === 'string' && reason.trim() ? reason : null);
     }
   }, []);
 
-  // 1. Initial boot session verification
+  // 1. Initial boot session verification from Supabase Auth
   useEffect(() => {
-    const token = localStorage.getItem('lgu_token');
-    if (token) {
-      verifySessionToken(token).then((payload) => {
-        if (!payload) {
-          handleLogout('Your session has expired. Please sign in again.');
-        }
-      });
-    } else if (currentUser) {
-      handleLogout('No active session token found. Please sign in again.');
-    }
-  }, [currentUser, handleLogout]);
+    let active = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!active || !data.session?.user) return;
+      try {
+        setCurrentUser(mapSupabaseUser(data.session.user));
+      } catch {
+        void handleLogout('Your account has no approved system role.');
+      }
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session?.user) {
+        setCurrentUser(null);
+        return;
+      }
+      try {
+        setCurrentUser(mapSupabaseUser(session.user));
+      } catch {
+        void handleLogout('Your account has no approved system role.');
+      }
+    });
+
+    return () => {
+      active = false;
+      listener.subscription.unsubscribe();
+    };
+  }, [handleLogout]);
 
   // 2. 15-Minute Inactivity Auto-Logout Timer (Terminal Protection)
   useEffect(() => {

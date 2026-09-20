@@ -1,6 +1,8 @@
 import { User } from '@/types';
 import { ITreasuryRepository } from './ITreasuryRepository';
 import { SupabaseRepository } from './SupabaseRepository';
+import { supabase } from './supabase';
+import { mapSupabaseUser } from './supabaseSession';
 
 export interface LoginResult {
   token: string;
@@ -18,7 +20,7 @@ export interface IAuthService {
   verifyPassword(username: string, password: string): Promise<boolean>;
   lookupUser(username: string): Promise<User | null>;
   getCurrentUser(): User | null;
-  logout(): void;
+  logout(): Promise<void>;
 }
 
 export class AuthService implements IAuthService {
@@ -32,30 +34,45 @@ export class AuthService implements IAuthService {
     this.repository = repository;
   }
 
-  async login(username: string, password: string, stationId = 'Workstation'): Promise<LoginResult> {
-    return this.repository.login(username, password, stationId);
+  async login(username: string, password: string, _stationId = 'Workstation'): Promise<LoginResult> {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: username.trim().toLowerCase(),
+      password,
+    });
+
+    if (error || !data.session || !data.user) {
+      throw error || new Error('Invalid credentials');
+    }
+
+    return {
+      token: data.session.access_token,
+      user: mapSupabaseUser(data.user),
+    };
   }
 
   async verifyPassword(username: string, password: string): Promise<boolean> {
-    return this.repository.verifyPassword(username, password);
-  }
-
-  async lookupUser(username: string): Promise<User | null> {
-    return this.repository.lookupUser(username);
-  }
-
-  getCurrentUser(): User | null {
     try {
-      const saved = localStorage.getItem('lgu_user');
-      return saved ? JSON.parse(saved) : null;
+      await this.login(username, password);
+      return true;
     } catch {
-      return null;
+      return false;
     }
   }
 
-  logout(): void {
-    localStorage.removeItem('lgu_token');
-    localStorage.removeItem('lgu_user');
+  async lookupUser(username: string): Promise<User | null> {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const user = sessionData.session?.user;
+    if (!user || user.email?.toLowerCase() !== username.trim().toLowerCase()) return null;
+    return mapSupabaseUser(user);
+  }
+
+  getCurrentUser(): User | null {
+    return null;
+  }
+
+  async logout(): Promise<void> {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
   }
 }
 

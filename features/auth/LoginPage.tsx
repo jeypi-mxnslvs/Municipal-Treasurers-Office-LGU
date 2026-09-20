@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { User } from '@/types';
-import { api } from '@/services/api';
-import { createSessionToken } from '@/lib/crypto';
-import { Lock, User as UserIcon, ArrowRight, ShieldAlert, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
+import { authService } from '@/services/authService';
+import { Lock, User as UserIcon, ArrowRight, ShieldAlert, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -11,56 +10,6 @@ interface LoginPageProps {
   sessionWarning?: string | null;
 }
 
-interface WorkstationAccount {
-  email: string;
-  role: 'Admin' | 'Assessor' | 'SystemMaintenance';
-  name: string;
-  stationId: string;
-}
-
-const WORKSTATION_ACCOUNTS: Record<string, WorkstationAccount> = {
-  'admin@example.com': {
-    email: 'admin@example.com',
-    role: 'Admin',
-    name: 'System Administrator',
-    stationId: 'Main-HQ',
-  },
-  'test-admin@example.com': {
-    email: 'test-admin@example.com',
-    role: 'Admin',
-    name: 'System Administrator',
-    stationId: 'Main-HQ',
-  },
-  'assessor@example.com': {
-    email: 'assessor@example.com',
-    role: 'Assessor',
-    name: 'Municipal Assessor',
-    stationId: 'Assessor-Desk',
-  },
-  'test-assessor@example.com': {
-    email: 'test-assessor@example.com',
-    role: 'Assessor',
-    name: 'Municipal Assessor',
-    stationId: 'Assessor-Desk',
-  },
-  // Convenient developer aliases
-  'admin': {
-    email: 'admin@example.com',
-    role: 'Admin',
-    name: 'System Administrator',
-    stationId: 'Main-HQ',
-  },
-  'assessor': {
-    email: 'assessor@example.com',
-    role: 'Assessor',
-    name: 'Municipal Assessor',
-    stationId: 'Assessor-Desk',
-  },
-  'maintenance@example.com': {
-    email: 'maintenance@example.com', role: 'SystemMaintenance', name: 'IT / System Maintenance', stationId: 'MIS-Desk',
-  },
-};
-
 const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, sessionWarning }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -68,16 +17,13 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, sessionWarning })
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const cleanInput = username.trim().toLowerCase();
-  const matchedAccount = WORKSTATION_ACCOUNTS[cleanInput];
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setIsLoading(true);
 
     const cleanUsername = username.trim().toLowerCase();
-    const cleanPassword = password.trim();
+    const cleanPassword = password;
 
     if (!cleanUsername || !cleanPassword) {
       setError('Please enter both your workstation account and password.');
@@ -86,43 +32,9 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, sessionWarning })
     }
 
     try {
-      // Authenticate strictly via API / database authentication engine
-      const selectedStation = matchedAccount?.stationId || 'Workstation';
-      const res = await api.login(cleanUsername, cleanPassword, selectedStation);
-      localStorage.setItem('lgu_token', res.token);
-      localStorage.setItem('lgu_user', JSON.stringify(res.user));
+      const res = await authService.login(cleanUsername, cleanPassword);
       onLoginSuccess(res.user);
     } catch (err) {
-      // Resilient fallback for authorized workstation accounts (Admin & Assessor)
-      // Activated when database stored procedures are unmigrated, permissions restricted, or network unavailable
-      if (matchedAccount) {
-        const expectedPassword =
-          matchedAccount.role === 'Admin' || matchedAccount.role === 'SystemMaintenance'
-            ? (import.meta.env.VITE_ADMIN_PASSWORD as string | undefined) || 'admin123'
-            : (import.meta.env.VITE_ASSESSOR_PASSWORD as string | undefined) || 'assessor123';
-
-        const isValidPassword =
-          cleanPassword === expectedPassword ||
-            ((matchedAccount.role === 'Admin' || matchedAccount.role === 'SystemMaintenance') && cleanPassword === 'admin123') ||
-          (matchedAccount.role === 'Assessor' && (cleanPassword === 'assessor123' || cleanPassword === 'admin123'));
-
-        if (isValidPassword) {
-          const fallbackUser: User = {
-            id: matchedAccount.email,
-            name: matchedAccount.name,
-            username: matchedAccount.email,
-            role: matchedAccount.role,
-            stationId: matchedAccount.stationId,
-          };
-
-          const token = await createSessionToken(fallbackUser);
-          localStorage.setItem('lgu_token', token);
-          localStorage.setItem('lgu_user', JSON.stringify(fallbackUser));
-          onLoginSuccess(fallbackUser);
-          return;
-        }
-      }
-
       setError(
         err instanceof Error
           ? err.message
@@ -184,14 +96,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, sessionWarning })
                   required
                   autoFocus
                 />
-                {matchedAccount && (
-                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded">
-                      <CheckCircle2 size={11} className="text-emerald-600" />
-                      {matchedAccount.role}
-                    </span>
-                  </div>
-                )}
+
               </div>
             </div>
 
