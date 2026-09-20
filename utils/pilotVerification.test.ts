@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { Property, TaxYearRecord, DelinquencyPeriodVerification } from '@/types';
 import { calculateTaxLiability } from '@/utils/taxLogic';
 import { LocalHttpRepository } from '@/services/LocalHttpRepository';
@@ -206,5 +208,11 @@ describe('Stage 14: Real-World Pilot & End-to-End Workflow Verification', () => 
     expect(repoAny.voidReceipt).toBeUndefined();
     expect(repoAny.getActiveBooklet).toBeUndefined();
     expect(repoAny.assignBooklet).toBeUndefined();
+  });
+
+  it('keeps active repository paths free of legacy payment and completion table access', () => {
+    const source = readFileSync(resolve(process.cwd(), 'services/SupabaseRepository.ts'), 'utf8');
+    expect(source).not.toMatch(/from\(['"]payment_postings['"]\)/);
+    expect(source).not.toMatch(/from\(['"]delinquency_year_completions['"]\)/);
   });
 });

@@ -54,8 +54,8 @@ export const api = {
     return treasuryRepository.getPropertyAssessment(propertyId, fallbackProp, customSettings);
   },
 
-  getPropertyCompletedRecords(propertyId: string | number, property?: Property): Promise<TaxYearRecord[]> {
-    return treasuryRepository.getPropertyCompletedRecords(propertyId, property);
+  getPropertyVerificationEvidence(propertyId: string | number, property?: Property): Promise<TaxYearRecord[]> {
+    return treasuryRepository.getPropertyVerificationEvidence(propertyId, property);
   },
 
   saveProperty(propertyData: Partial<Property>): Promise<Property> {

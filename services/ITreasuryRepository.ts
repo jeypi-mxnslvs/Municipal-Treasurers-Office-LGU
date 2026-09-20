@@ -32,7 +32,7 @@ export interface ITreasuryRepository {
   // 1. Properties & Assessment
   getProperties(search?: string, barangay?: string): Promise<Property[]>;
   getPropertyAssessment(propertyId: string, fallbackProp?: Property, customSettings?: MunicipalTaxSettings): Promise<CalculationResult>;
-  getPropertyCompletedRecords(propertyId: string | number, property?: Property): Promise<TaxYearRecord[]>;
+  getPropertyVerificationEvidence(propertyId: string | number, property?: Property): Promise<TaxYearRecord[]>;
   saveProperty(propertyData: Partial<Property>): Promise<Property>;
   saveHistoricalAssessedValue(payload: {
     propertyId: string | number;

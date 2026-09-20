@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { calculateTaxLiability } from "./taxLogic";
-import { Property, MunicipalTaxSettings, OfficialReceipt } from "../types";
+import { Property, MunicipalTaxSettings } from "../types";
 import { CURRENT_YEAR, MAX_PENALTY_MONTHS } from "../constants";
 import {
   FIXTURE_MULTI_ERA_PROPERTY,
@@ -298,8 +298,8 @@ describe("taxLogic - Municipal Payment-Date Policy & Assessor Overrides", () => 
     expect(auditEntries[2]).toEqual({ field: "DISCOUNT_RATE", oldValue: 0.20, newValue: 0.15, difference: -0.05 });
   });
 
-  // Test 11: Posted payment preserves final applied values
-  it("11. verifies posted official receipt snapshot matches final applied values exactly", () => {
+  // Test 11: External evidence preserves final applied values
+  it("11. verifies external settlement evidence preserves final applied values exactly", () => {
     const janDate = new Date(CURRENT_YEAR, 0, 15);
     const result = calculateTaxLiability(
       { ...mockProperty, lastPaidYear: CURRENT_YEAR - 1 },
@@ -313,42 +313,28 @@ describe("taxLogic - Municipal Payment-Date Policy & Assessor Overrides", () => 
     );
 
     const record = result.records[0];
-    const receiptSnapshot: OfficialReceipt = {
-      receiptNo: "AF51-4500001",
-      date: new Date().toISOString(),
-      property: {
-        id: mockProperty.id,
-        tdNumber: mockProperty.tdNumber,
-        ownerName: mockProperty.ownerName,
-        address: mockProperty.address,
-        barangay: mockProperty.barangay,
-        assessedValue: mockProperty.assessedValue,
-        propertyClass: mockProperty.propertyClass,
-      },
-      itemizedRecords: [record],
-      summary: {
-        basicTax: record.basicTax!,
-        sefTax: record.sefTax!,
-        baseTaxTotal: record.baseTax,
-        penalty: record.penaltyAmount,
-        discount: record.discountAmount!,
-        totalPaid: record.totalDue,
-      },
-      tenderType: "CASH",
-      postedBy: "juan.assessor",
+    const evidenceSnapshot = {
+      sourceReference: "AF51-4500001",
+      verificationStatus: "VERIFIED_SETTLED_EXTERNALLY" as const,
+      basicTax: record.basicTax!,
+      sefTax: record.sefTax!,
+      baseTaxTotal: record.baseTax,
+      penalty: record.penaltyAmount,
+      discount: record.discountAmount!,
+      verifiedAmount: record.totalDue,
     };
 
-    expect(receiptSnapshot.summary.basicTax).toBe(900);
-    expect(receiptSnapshot.summary.sefTax).toBe(950);
-    expect(receiptSnapshot.summary.baseTaxTotal).toBe(1850);
-    expect(receiptSnapshot.summary.discount).toBe(277.5); // 1850 * 0.15
-    expect(receiptSnapshot.summary.totalPaid).toBe(1850 + record.penaltyAmount - 277.5);
+    expect(evidenceSnapshot.basicTax).toBe(900);
+    expect(evidenceSnapshot.sefTax).toBe(950);
+    expect(evidenceSnapshot.baseTaxTotal).toBe(1850);
+    expect(evidenceSnapshot.discount).toBe(277.5); // 1850 * 0.15
+    expect(evidenceSnapshot.verifiedAmount).toBe(1850 + record.penaltyAmount - 277.5);
   });
 
-  // Test 12: Later policy changes do not modify historical posted payments
-  it("12. ensures subsequent policy rate modifications do not alter existing receipt snapshots", () => {
-    // Original receipt issued under 20% discount policy
-    const historicalReceiptTotal = 1600; // Base: 2000 - 400 discount
+  // Test 12: Later policy changes do not modify historical evidence
+  it("12. ensures subsequent policy rate modifications do not alter existing settlement evidence", () => {
+    // Historical external settlement recorded under 20% discount policy
+    const historicalSettlementTotal = 1600; // Base: 2000 - 400 discount
 
     // Later, city council changes discount policy to 10%
     const newPolicySettings: MunicipalTaxSettings = {
@@ -365,9 +351,9 @@ describe("taxLogic - Municipal Payment-Date Policy & Assessor Overrides", () => 
     // New calculation yields 1800 (2000 - 200 discount)
     expect(newLiability.records[0].totalDue).toBe(1800 + newLiability.records[0].penaltyAmount);
 
-    // Historical receipt must remain intact and unchanged at 1600
-    expect(historicalReceiptTotal).toBe(1600);
-    expect(historicalReceiptTotal).not.toBe(newLiability.records[0].totalDue);
+    // Historical settlement evidence must remain intact and unchanged at 1600
+    expect(historicalSettlementTotal).toBe(1600);
+    expect(historicalSettlementTotal).not.toBe(newLiability.records[0].totalDue);
   });
 
   // Test 13: Identical CSV re-upload does not create unnecessary property updates (Idempotency)

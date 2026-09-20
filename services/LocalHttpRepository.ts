@@ -82,9 +82,9 @@ export class LocalHttpRepository implements ITreasuryRepository {
     }
   }
 
-  async getPropertyCompletedRecords(propertyId: string | number, _property?: Property): Promise<TaxYearRecord[]> {
+  async getPropertyVerificationEvidence(propertyId: string | number, _property?: Property): Promise<TaxYearRecord[]> {
     try {
-      return await this.request<TaxYearRecord[]>(`/properties/${propertyId}/completed-records`);
+      return await this.request<TaxYearRecord[]>(`/properties/${propertyId}/legacy-evidence`);
     } catch {
       return [];
     }

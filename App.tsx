@@ -174,7 +174,7 @@ const App: React.FC = () => {
     try {
       const [result, completed, verifications] = await Promise.all([
         api.getPropertyAssessment(property.id, property),
-        api.getPropertyCompletedRecords(property.id, property),
+        api.getPropertyVerificationEvidence(property.id, property),
         api.getPeriodVerifications(property.id),
       ]);
       setTaxSummary(result.summary);
@@ -417,7 +417,7 @@ const App: React.FC = () => {
 
       const [updatedResult, updatedCompleted, updatedVerifications] = await Promise.all([
         api.getPropertyAssessment(selectedProperty.id, selectedProperty),
-        api.getPropertyCompletedRecords(selectedProperty.id, selectedProperty),
+        api.getPropertyVerificationEvidence(selectedProperty.id, selectedProperty),
         api.getPeriodVerifications(selectedProperty.id),
       ]);
       setGrandTotal(updatedResult.grandTotal);

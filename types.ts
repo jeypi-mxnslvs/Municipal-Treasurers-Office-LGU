@@ -191,50 +191,13 @@ export interface PropertyAssessmentPeriod {
   updatedAt?: string;
 }
 
-export interface OfficialReceipt {
-  receiptNo: string;
-  date: string;
-  status?: 'ISSUED' | 'VOIDED';
-  voidReason?: string;
-  voidedBy?: string;
-  voidedAt?: string;
-  bookletId?: string;
-  isOffline?: boolean;
-  offlineSyncStatus?: 'PENDING' | 'SYNCING' | 'SYNCED' | 'CONFLICT' | 'FAILED';
-  property: {
-    id: string | number;
-    tdNumber: string;
-    pin?: string;
-    ownerName: string;
-    address: string;
-    barangay: string;
-    assessedValue: number;
-    propertyClass: string;
-  };
-  itemizedRecords: TaxYearRecord[];
-  summary: {
-    basicTax: number;
-    sefTax: number;
-    baseTaxTotal: number;
-    penalty: number;
-    discount: number;
-    totalPaid: number;
-  };
-  tenderType: 'CASH' | 'CHECK' | 'ONLINE';
-  tenderReference?: string;
-  postedBy: string;
-}
-
 export interface DashboardStatsData {
   totalProperties: number;
   clearedCount: number;
   delinquentCount: number;
   partialCount: number;
   shellRecordsCount: number;
-  totalCollected: number;
-  todayCollected: number;
   totalDelinquentDebt: number;
-  collectionEfficiency: number;
   monthlyTrend: Array<{ month: string; collections: number; target: number }>;
   barangayBreakdown: Array<{ barangay: string; properties: number; outstandingDebt: number }>;
 }
@@ -269,7 +232,7 @@ export interface RptarAuditLog {
   property_id?: number;
   td_number: string;
   tax_year?: number;
-  action_type: 'CREATED' | 'UPDATED' | 'VALUATION_REVISED' | 'FIELD_OVERRIDE' | 'CLEARED' | 'DUES_CLEARED' | 'DELETED' | 'RECEIPT_VOIDED';
+  action_type: 'CREATED' | 'UPDATED' | 'VALUATION_REVISED' | 'FIELD_OVERRIDE' | 'CLEARED' | 'DUES_CLEARED' | 'DELETED';
   field_changed?: 'BASIC_TAX' | 'SEF_TAX' | 'DISCOUNT_RATE' | string;
   original_value?: number;
   new_value?: number;
