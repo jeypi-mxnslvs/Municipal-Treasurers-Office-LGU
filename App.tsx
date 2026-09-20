@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import type { User as SupabaseAuthUser } from '@supabase/supabase-js';
 import { Property, TaxYearRecord, User, DashboardStatsData, TaxSummary } from './types';
 import { api } from './services/api';
 import Header from './components/Header';
@@ -16,18 +17,20 @@ import type { VerificationModalValue } from '@/features/assessment/VerifyPeriodM
 import { AuditLogModal } from '@/features/audit';
 import { NoticeOfDelinquencyModal, TaxClearanceModal } from '@/features/reports';
 import { Printer, ArrowLeft, CheckCircle2, ShieldCheck, CheckCircle, RefreshCw, FileText, AlertTriangle } from 'lucide-react';
-import { DEFAULT_SESSION_TIMEOUT_MS } from './lib/crypto';
 import { supabase } from './services/supabase';
-import { mapSupabaseUser } from './services/supabaseSession';
+import { mapSupabaseUser, MAX_SESSION_AGE_MS, sessionWithinMaximumAge } from './services/supabaseSession';
 import { mergeEncoderLabel } from './utils/encoderAttribution';
 import { projectPropertyPeriods, derivePeriodKeyFromRecord } from './utils/periodProjection';
 import type { PropertyPeriodProjection } from './utils/periodProjection';
 import { auditPropertyForVerification } from './utils/validationPipeline';
 
+const DEFAULT_SESSION_TIMEOUT_MS = 15 * 60 * 1000;
+
 const App: React.FC = () => {
   // Authentication State
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [sessionWarning, setSessionWarning] = useState<string | null>(null);
+  const [sessionExpiresAt, setSessionExpiresAt] = useState<number | null>(null);
 
   const [view, setView] = useState<'dashboard' | 'posting'>('dashboard');
   const [properties, setProperties] = useState<Property[]>([]);
@@ -512,6 +515,7 @@ const App: React.FC = () => {
       localStorage.removeItem('lgu_active_td');
       localStorage.removeItem('lgu_active_view');
       setCurrentUser(null);
+      setSessionExpiresAt(null);
       setView('dashboard');
       setSessionWarning(typeof reason === 'string' && reason.trim() ? reason : null);
     }
@@ -520,25 +524,38 @@ const App: React.FC = () => {
   // 1. Initial boot session verification from Supabase Auth
   useEffect(() => {
     let active = true;
-    supabase.auth.getSession().then(({ data }) => {
-      if (!active || !data.session?.user) return;
+    const acceptUser = (user: SupabaseAuthUser) => {
       try {
-        setCurrentUser(mapSupabaseUser(data.session.user));
+        if (!sessionWithinMaximumAge(user.last_sign_in_at)) {
+          void handleLogout('Your eight-hour session has expired. Please sign in again.');
+          return;
+        }
+        setSessionExpiresAt(Date.parse(user.last_sign_in_at!) + MAX_SESSION_AGE_MS);
+        setCurrentUser(mapSupabaseUser(user));
       } catch {
         void handleLogout('Your account has no approved system role.');
+      }
+    };
+
+    void supabase.auth.getSession().then(async ({ data: sessionData }) => {
+      if (!active || !sessionData.session) return;
+      const { data, error } = await supabase.auth.getUser();
+      if (!active) return;
+      if (error || !data.user) {
+        void handleLogout('Your session could not be verified. Please sign in again.');
+      } else {
+        acceptUser(data.user);
       }
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'INITIAL_SESSION') return;
       if (!session?.user) {
         setCurrentUser(null);
+        setSessionExpiresAt(null);
         return;
       }
-      try {
-        setCurrentUser(mapSupabaseUser(session.user));
-      } catch {
-        void handleLogout('Your account has no approved system role.');
-      }
+      acceptUser(session.user);
     });
 
     return () => {
@@ -546,6 +563,14 @@ const App: React.FC = () => {
       listener.subscription.unsubscribe();
     };
   }, [handleLogout]);
+
+  useEffect(() => {
+    if (!currentUser || !sessionExpiresAt) return;
+    const timer = setTimeout(() => {
+      void handleLogout('Your eight-hour session has expired. Please sign in again.');
+    }, Math.max(0, sessionExpiresAt - Date.now()));
+    return () => clearTimeout(timer);
+  }, [currentUser, sessionExpiresAt, handleLogout]);
 
   // 2. 15-Minute Inactivity Auto-Logout Timer (Terminal Protection)
   useEffect(() => {

@@ -1027,19 +1027,8 @@ export class SupabaseRepository implements ITreasuryRepository {
     throw new Error('User provisioning must use the Supabase Auth administrator boundary.');
   }
 
-  async deleteUser(id: string | number, adminUsername = 'admin'): Promise<{ message: string }> {
-    const { data: targetUser } = await supabase.from('users').select('username, full_name').eq('id', id).single();
-    const { error } = await supabase.from('users').delete().eq('id', id);
-    if (error) throw error;
-
-    await this.logSecurityEvent({
-      eventType: 'USER_DELETED',
-      username: adminUsername,
-      userId: typeof id === 'number' ? id : parseInt(id, 10),
-      details: `Deleted account for ${targetUser?.full_name || id} (${targetUser?.username || 'unknown'})`
-    });
-
-    return { message: 'User deleted successfully' };
+  async deleteUser(_id: string | number, _adminUsername = 'admin'): Promise<{ message: string }> {
+    throw new Error('User deletion must use the Supabase Auth administrator boundary.');
   }
 
   async resetUserPassword(_id: string | number, _newPassword: string, _adminUsername = 'admin'): Promise<{ message: string }> {
@@ -1686,18 +1675,6 @@ export class SupabaseRepository implements ITreasuryRepository {
       batchId = batchData?.id;
     } catch {
       // Non-blocking
-    }
-
-    const { error: auditError } = await supabase.from('rptar_audit_logs').insert({
-      td_number: 'BATCH-IMPORT',
-      action_type: 'UPDATED',
-      assessor_name: assessorName,
-      station_id: stationId,
-      details: `Smart upsert processed ${validRows.length} parcels (${insertedCount} new, ${updatedCount} updated, ${unchangedCount} unchanged) for Barangay ${primaryBarangay}`
-    });
-
-    if (auditError) {
-      errors.push({ stage: 'audit', message: auditError.message });
     }
 
     if (batchId) {

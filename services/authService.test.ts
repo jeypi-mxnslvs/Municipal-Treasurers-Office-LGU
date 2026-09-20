@@ -21,7 +21,8 @@ describe('AuthService Supabase Auth boundary', () => {
         user: {
           id: 'auth-user-1',
           email: 'assessor@example.com',
-          user_metadata: { name: 'Municipal Assessor', role: 'Assessor', stationId: 'Desk-1' },
+          app_metadata: { role: 'Assessor' },
+          user_metadata: { name: 'Municipal Assessor', stationId: 'Desk-1' },
         },
         session: { access_token: 'supabase-session' },
       },

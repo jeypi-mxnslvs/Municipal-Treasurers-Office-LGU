@@ -5,6 +5,7 @@ import type { ComputationScheduleVersion, User } from '@/types';
 import { parseComputationWorkbook } from '@/utils/computationWorkbook';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import PasswordConfirmationModal from '@/features/auth/PasswordConfirmationModal';
 import {
   Dialog,
   DialogContent,
@@ -38,6 +39,7 @@ export default function ComputationScheduleModal({ isOpen, onClose, currentUser 
   const [errors, setErrors] = useState<string[]>([]);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [pendingActivation, setPendingActivation] = useState<ComputationScheduleVersion | null>(null);
 
   const loadSchedules = async () => {
     try {
@@ -158,6 +160,7 @@ export default function ComputationScheduleModal({ isOpen, onClose, currentUser 
   if (currentUser?.role !== 'Admin') return null;
 
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -194,7 +197,7 @@ export default function ComputationScheduleModal({ isOpen, onClose, currentUser 
         <div className="rounded border p-3">
           <h3 className="mb-2 font-semibold">Version history</h3>
           {schedules.length === 0 && <p className="text-sm text-slate-500">No registered schedules.</p>}
-          {schedules.map((schedule) => <div key={schedule.id} className="flex items-center justify-between gap-3 border-b py-2 text-sm"><div><div className="font-medium">{schedule.scheduleName} <Badge variant="outline">{schedule.status}</Badge></div><div>{schedule.authorityReference} · {schedule.effectiveFrom}{schedule.effectiveTo ? ` to ${schedule.effectiveTo}` : ' onward'} · {schedule.sourceFilename}</div></div><div className="flex gap-2">{schedule.status === 'DRAFT' && <Button size="sm" variant="outline" disabled={busy} onClick={() => void validate(schedule)}>Validate</Button>}{(schedule.status === 'VALIDATED' || schedule.status === 'PENDING_APPROVAL') && <Button size="sm" disabled={busy} onClick={() => void activate(schedule)}><CheckCircle2 className="mr-1 h-4 w-4" /> Activate</Button>}</div></div>)}
+          {schedules.map((schedule) => <div key={schedule.id} className="flex items-center justify-between gap-3 border-b py-2 text-sm"><div><div className="font-medium">{schedule.scheduleName} <Badge variant="outline">{schedule.status}</Badge></div><div>{schedule.authorityReference} · {schedule.effectiveFrom}{schedule.effectiveTo ? ` to ${schedule.effectiveTo}` : ' onward'} · {schedule.sourceFilename}</div></div><div className="flex gap-2">{schedule.status === 'DRAFT' && <Button size="sm" variant="outline" disabled={busy} onClick={() => void validate(schedule)}>Validate</Button>}{(schedule.status === 'VALIDATED' || schedule.status === 'PENDING_APPROVAL') && <Button size="sm" disabled={busy} onClick={() => setPendingActivation(schedule)}><CheckCircle2 className="mr-1 h-4 w-4" /> Activate</Button>}</div></div>)}
         </div>
 
         <DialogFooter>
@@ -203,5 +206,15 @@ export default function ComputationScheduleModal({ isOpen, onClose, currentUser 
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    <PasswordConfirmationModal
+      isOpen={Boolean(pendingActivation)}
+      title="Activate computation schedule"
+      description="Confirm your Admin password before changing the active tax computation schedule."
+      username={currentUser.username || ''}
+      onConfirm={() => pendingActivation ? activate(pendingActivation) : undefined}
+      onClose={() => setPendingActivation(null)}
+      destructiveActionLabel="Activate schedule"
+    />
+    </>
   );
 }

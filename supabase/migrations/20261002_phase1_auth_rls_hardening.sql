@@ -38,8 +38,12 @@ DROP POLICY IF EXISTS "Allow authenticated full access" ON public.rptar_audit_lo
 
 CREATE POLICY phase1_users_select ON public.users FOR SELECT TO authenticated
   USING (public.is_admin() OR id::text = auth.uid()::text);
-CREATE POLICY phase1_users_admin_write ON public.users FOR ALL TO authenticated
+CREATE POLICY phase1_users_admin_insert ON public.users FOR INSERT TO authenticated
+  WITH CHECK (public.is_admin());
+CREATE POLICY phase1_users_admin_update ON public.users FOR UPDATE TO authenticated
   USING (public.is_admin()) WITH CHECK (public.is_admin());
+CREATE POLICY phase1_users_admin_delete ON public.users FOR DELETE TO authenticated
+  USING (public.is_admin());
 CREATE POLICY phase1_properties_access ON public.properties FOR SELECT TO authenticated
   USING (public.is_assessor_or_admin());
 CREATE POLICY phase1_properties_insert ON public.properties FOR INSERT TO authenticated
@@ -48,8 +52,12 @@ CREATE POLICY phase1_properties_update ON public.properties FOR UPDATE TO authen
   USING (public.is_assessor_or_admin()) WITH CHECK (public.is_assessor_or_admin());
 CREATE POLICY phase1_sfmv_access ON public.schedule_of_market_values FOR SELECT TO authenticated
   USING (public.is_assessor_or_admin());
-CREATE POLICY phase1_sfmv_admin_write ON public.schedule_of_market_values FOR INSERT, UPDATE, DELETE TO authenticated
+CREATE POLICY phase1_sfmv_admin_insert ON public.schedule_of_market_values FOR INSERT TO authenticated
+  WITH CHECK (public.is_admin());
+CREATE POLICY phase1_sfmv_admin_update ON public.schedule_of_market_values FOR UPDATE TO authenticated
   USING (public.is_admin()) WITH CHECK (public.is_admin());
+CREATE POLICY phase1_sfmv_admin_delete ON public.schedule_of_market_values FOR DELETE TO authenticated
+  USING (public.is_admin());
 CREATE POLICY phase1_audit_select ON public.rptar_audit_logs FOR SELECT TO authenticated
   USING (public.is_assessor_or_admin());
 CREATE POLICY phase1_audit_no_delete ON public.rptar_audit_logs FOR DELETE TO authenticated

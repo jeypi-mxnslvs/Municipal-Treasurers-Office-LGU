@@ -48,11 +48,6 @@ export const PasswordConfirmationModal: React.FC<PasswordConfirmationModalProps>
     try {
       const isValid = await api.verifyPassword(username, password);
       if (!isValid) {
-        await api.logSecurityEvent({
-          eventType: 'ACCESS_DENIED',
-          username,
-          details: `Failed authorization check for: ${title}`,
-        });
         setError('Incorrect password. Authorization rejected.');
         return;
       }

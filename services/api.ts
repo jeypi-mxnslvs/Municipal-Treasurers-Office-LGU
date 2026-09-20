@@ -1,6 +1,7 @@
 import { ITreasuryRepository } from './ITreasuryRepository';
 import { SupabaseRepository } from './SupabaseRepository';
 import { LocalHttpRepository } from './LocalHttpRepository';
+import { authService } from './authService';
 import {
   Property,
   CalculationResult,
@@ -27,7 +28,7 @@ import {
  * Supports Cloud (Supabase) and Local On-Premise (LocalHttpRepository).
  * Controlled seamlessly via VITE_BACKEND_DRIVER environment variable.
  */
-const backendDriver = import.meta.env.VITE_BACKEND_DRIVER || 'supabase';
+const backendDriver = import.meta.env.PROD ? 'supabase' : (import.meta.env.VITE_BACKEND_DRIVER || 'supabase');
 const localBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
 
 const baseDriver: ITreasuryRepository =
@@ -168,11 +169,11 @@ export const api = {
   },
 
   login(username: string, password: string, stationId?: string): Promise<{ token: string; user: User }> {
-    return treasuryRepository.login(username, password, stationId);
+    return authService.login(username, password, stationId);
   },
 
   verifyPassword(username: string, password: string): Promise<boolean> {
-    return treasuryRepository.verifyPassword(username, password);
+    return authService.verifyPassword(username, password);
   },
 
   registerUser(userData: {
