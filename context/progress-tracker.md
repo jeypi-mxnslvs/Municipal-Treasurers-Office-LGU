@@ -7,7 +7,7 @@ This tracker follows [`docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md`](../docs/MU
 ## Current Phase
 
 - **Phase:** 4 — Migration and Deployment Convergence completed; Phase 5 is next.
-- **Status:** Phases 2–4 implementation verified. Phase 3 migration was applied to remote Supabase and reviewed without reported problems; Phase 4 deployment configuration, migration dry-run, and operational checks completed; human phase review confirmed by the project lead.
+- **Status:** Phase 4 clean-install and Docker deployment defects were corrected. Local migration replay, restore, web health, and authorization checks passed; the compatibility migration was applied to linked Supabase and remote history is current. The project lead authorized the Phase 4 completion and branch push.
 - **Production datastore:** Supabase Cloud.
 - **Production authentication:** Supabase Auth with trusted session claims and database RLS.
 - **Active roles:** `Admin`, `Assessor`.
@@ -62,7 +62,7 @@ This tracker follows [`docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md`](../docs/MU
   - Make canonical migrations reproducible in deployment.
   - Remove source-controlled secrets and obsolete schema dependencies.
   - Validate health checks, TLS/LAN controls, backup, restore, and rollback.
-  - Gate: deployment convergence checks completed.
+  - Gate: deployment convergence checks and linked migration completed; project lead authorized completion.
 
 - [ ] **Phase 5: Scalability and Frontend Stability**
   - Add server-side pagination, search, filters, indexes, and aggregate views.

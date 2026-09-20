@@ -98,7 +98,7 @@ server/               Inactive legacy Express/SQLite code; do not use
 
 Requirements: Node.js 18 or newer and npm.
 
-For on-premise deployment, use only ordered files under `supabase/migrations/`; `schema.sql` and `supabase/migration.sql` are retired and must not be mounted or executed. Copy `.env.deploy.example` outside source control, inject database secrets, then run `scripts/apply-migrations.sh --dry-run` followed by `scripts/apply-migrations.sh` against the approved database. Docker Compose keeps PostgreSQL and PostgREST internal; Nginx is the only published service.
+For deployment, use only ordered files under `supabase/migrations/`; `schema.sql` and `supabase/migration.sql` are retired. Supply an explicit Supabase Cloud database URL to `scripts/apply-migrations.sh --dry-run` and then `scripts/apply-migrations.sh`. Docker Compose serves the web build only; see [`docs/ON_PREMISE_DEPLOYMENT.md`](docs/ON_PREMISE_DEPLOYMENT.md) for target checks, HTTPS, backups, restore, and rollback.
 
 ```bash
 npm install
