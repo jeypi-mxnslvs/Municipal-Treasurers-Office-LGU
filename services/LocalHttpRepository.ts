@@ -1,6 +1,8 @@
 import { ITreasuryRepository } from './ITreasuryRepository';
 import {
   Property,
+  PropertyQuery,
+  PropertyPage,
   CalculationResult,
   DashboardStatsData,
   User,
@@ -62,11 +64,16 @@ export class LocalHttpRepository implements ITreasuryRepository {
   }
 
   // 1. Properties & Assessment
-  async getProperties(search?: string, barangay?: string): Promise<Property[]> {
+  async getProperties(query: PropertyQuery = {}): Promise<PropertyPage> {
     const params = new URLSearchParams();
-    if (search) params.append('search', search);
-    if (barangay && barangay !== 'All') params.append('barangay', barangay);
-    return this.request<Property[]>(`/properties?${params.toString()}`);
+    params.set('page', String(query.page || 1));
+    params.set('pageSize', String(Math.min(100, Math.max(1, query.pageSize || 25))));
+    if (query.search) params.set('search', query.search);
+    if (query.barangay && query.barangay !== 'All') params.set('barangay', query.barangay);
+    if (query.disposition) params.set('disposition', query.disposition);
+    if (query.sort) params.set('sort', query.sort);
+    if (query.direction) params.set('direction', query.direction);
+    return this.request<PropertyPage>(`/properties?${params.toString()}`, { signal: query.signal });
   }
 
   async getPropertyAssessment(propertyId: string, fallbackProp?: Property, customSettings?: MunicipalTaxSettings): Promise<CalculationResult> {

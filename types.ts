@@ -191,6 +191,25 @@ export interface PropertyAssessmentPeriod {
   updatedAt?: string;
 }
 
+export interface PropertyQuery {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  barangay?: string;
+  disposition?: Property['disposition'];
+  sort?: 'ownerName' | 'tdNumber' | 'barangay';
+  direction?: 'asc' | 'desc';
+  signal?: AbortSignal;
+}
+
+export interface PropertyPage {
+  items: Property[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasNextPage: boolean;
+}
+
 export interface DashboardStatsData {
   totalProperties: number;
   clearedCount: number;

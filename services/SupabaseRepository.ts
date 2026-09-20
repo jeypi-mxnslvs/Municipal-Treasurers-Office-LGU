@@ -2,6 +2,8 @@ import { supabase } from './supabase';
 import { ITreasuryRepository } from './ITreasuryRepository';
 import {
   Property,
+  PropertyQuery,
+  PropertyPage,
   CalculationResult,
   DashboardStatsData,
   User,
@@ -61,20 +63,22 @@ export class SupabaseRepository implements ITreasuryRepository {
   private mutationChannel: ReturnType<typeof supabase.channel> | null = null;
 
   // 1. Properties & Assessment
-  async getProperties(search?: string, barangay?: string): Promise<Property[]> {
-    let query = supabase.from('properties').select('*');
-
-    if (barangay && barangay !== 'All') {
-      query = query.eq('barangay', barangay);
-    }
-    if (search) {
-      query = query.or(`owner_name.ilike.%${search}%,td_number.ilike.%${search}%,previous_td_number.ilike.%${search}%`);
-    }
-
-    const { data, error } = await query.order('id', { ascending: true });
+  async getProperties(queryOptions: PropertyQuery = {}): Promise<PropertyPage> {
+    const page = Math.max(1, Math.floor(queryOptions.page || 1));
+    const pageSize = Math.min(100, Math.max(1, Math.floor(queryOptions.pageSize || 25)));
+    const sortColumns = { ownerName: 'owner_name', tdNumber: 'td_number', barangay: 'barangay' } as const;
+    const sortColumn = sortColumns[queryOptions.sort || 'ownerName'];
+    const ascending = queryOptions.direction !== 'desc';
+    const disposition = queryOptions.disposition || 'ACTIVE';
+    let query = supabase.from('properties').select('*', { count: 'exact' }).eq('disposition', disposition);
+    const search = queryOptions.search?.trim().replace(/[%,_]/g, '\\$&');
+    if (queryOptions.barangay && queryOptions.barangay !== 'All') query = query.eq('barangay', queryOptions.barangay);
+    if (search) query = query.or(`owner_name.ilike.%${search}%,td_number.ilike.%${search}%,previous_td_number.ilike.%${search}%`);
+    const from = (page - 1) * pageSize;
+    const { data, error, count } = await query.order(sortColumn, { ascending }).order('id', { ascending: true }).range(from, from + pageSize - 1);
     if (error) throw error;
-
-    return (data || []).map(row => mapPropertyRow(row));
+    const total = count || 0;
+    return { items: (data || []).map(row => mapPropertyRow(row)), total, page, pageSize, hasNextPage: from + pageSize < total };
   }
 
   async getPropertyAssessment(propertyId: string, fallbackProp?: Property, customSettings?: MunicipalTaxSettings): Promise<CalculationResult> {

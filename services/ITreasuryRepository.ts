@@ -1,5 +1,7 @@
 import {
   Property,
+  PropertyQuery,
+  PropertyPage,
   CalculationResult,
   DashboardStatsData,
   User,
@@ -30,7 +32,7 @@ import {
  */
 export interface ITreasuryRepository {
   // 1. Properties & Assessment
-  getProperties(search?: string, barangay?: string): Promise<Property[]>;
+  getProperties(query?: PropertyQuery): Promise<PropertyPage>;
   getPropertyAssessment(propertyId: string, fallbackProp?: Property, customSettings?: MunicipalTaxSettings): Promise<CalculationResult>;
   getPropertyVerificationEvidence(propertyId: string | number, property?: Property): Promise<TaxYearRecord[]>;
   saveProperty(propertyData: Partial<Property>): Promise<Property>;

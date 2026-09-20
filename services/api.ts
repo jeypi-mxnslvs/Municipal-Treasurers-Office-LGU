@@ -4,6 +4,8 @@ import { LocalHttpRepository } from './LocalHttpRepository';
 import { authService } from './authService';
 import {
   Property,
+  PropertyQuery,
+  PropertyPage,
   CalculationResult,
   DashboardStatsData,
   User,
@@ -46,8 +48,8 @@ export const treasuryRepository: ITreasuryRepository = baseDriver;
  */
 export const api = {
   // 1. Properties & Assessment
-  getProperties(search?: string, barangay?: string): Promise<Property[]> {
-    return treasuryRepository.getProperties(search, barangay);
+  getProperties(query?: PropertyQuery): Promise<PropertyPage> {
+    return treasuryRepository.getProperties(query);
   },
 
   getPropertyAssessment(propertyId: string, fallbackProp?: Property, customSettings?: MunicipalTaxSettings): Promise<CalculationResult> {
