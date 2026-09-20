@@ -18,7 +18,6 @@ import {
   VerificationType,
 } from '@/types';
 import { calculateTaxLiability as localCalculateTaxLiability } from '@/utils/taxLogic';
-import { createSessionToken } from '@/lib/crypto';
 import { mergeEncoderLabel } from '@/utils/encoderAttribution';
 import { getPropertyCompleteness } from '@/utils/propertyCompleteness';
 import { projectPropertyPeriods } from '@/utils/periodProjection';
@@ -1010,245 +1009,22 @@ export class SupabaseRepository implements ITreasuryRepository {
     };
   }
 
-  async login(username: string, password: string, stationId = 'Workstation'): Promise<{ token: string; user: User }> {
-    const cleanUsername = username.trim().toLowerCase();
-
-    // 1. Attempt secure database stored procedure first (with automated security audit logging)
-    try {
-      const { data: rpcData, error: rpcError } = await supabase
-        .rpc('authenticate_user', {
-          p_username: cleanUsername,
-          p_password: password,
-          p_station_id: stationId
-        });
-
-      if (!rpcError) {
-        if (Array.isArray(rpcData) && rpcData.length > 0) {
-          const match = rpcData[0];
-          const verifiedUser: User = {
-            id: String(match.id),
-            name: match.full_name,
-            username: match.username,
-            role: match.role,
-            stationId: match.station_id
-          };
-
-          const token = await createSessionToken(verifiedUser);
-          return { token, user: verifiedUser };
-        } else {
-          // RPC executed, but credentials failed Bcrypt verification
-          throw new Error('Invalid credentials. Please verify your username and password.');
-        }
-      }
-    } catch (rpcCatchErr) {
-      if (rpcCatchErr instanceof Error && rpcCatchErr.message.includes('Invalid credentials')) {
-        throw rpcCatchErr;
-      }
-      // Fall through only if RPC itself failed to execute (e.g. unmigrated database or permission 42501)
-    }
-
-    // 2. Workstation seed fallback (for unmigrated environments or database permission restrictions)
-    const workstationUsers: Record<string, { role: 'Admin' | 'Assessor' | 'SystemMaintenance'; name: string; stationId: string; expectedPass: string }> = {
-      'admin': { role: 'Admin', name: 'System Administrator', stationId: 'Main-HQ', expectedPass: (import.meta.env.VITE_ADMIN_PASSWORD as string) || 'admin123' },
-      'admin@example.com': { role: 'Admin', name: 'System Administrator', stationId: 'Main-HQ', expectedPass: (import.meta.env.VITE_ADMIN_PASSWORD as string) || 'admin123' },
-      'test-admin@example.com': { role: 'Admin', name: 'System Administrator', stationId: 'Main-HQ', expectedPass: (import.meta.env.VITE_ADMIN_PASSWORD as string) || 'admin123' },
-      'assessor': { role: 'Assessor', name: 'Municipal Assessor', stationId: 'Assessor-Desk', expectedPass: (import.meta.env.VITE_ASSESSOR_PASSWORD as string) || 'assessor123' },
-      'assessor@example.com': { role: 'Assessor', name: 'Municipal Assessor', stationId: 'Assessor-Desk', expectedPass: (import.meta.env.VITE_ASSESSOR_PASSWORD as string) || 'assessor123' },
-      'test-assessor@example.com': { role: 'Assessor', name: 'Municipal Assessor', stationId: 'Assessor-Desk', expectedPass: (import.meta.env.VITE_ASSESSOR_PASSWORD as string) || 'assessor123' },
-      'maintenance@example.com': { role: 'SystemMaintenance', name: 'IT / System Maintenance', stationId: 'MIS-Desk', expectedPass: (import.meta.env.VITE_MAINTENANCE_PASSWORD as string) || 'maintenance123' },
-    };
-
-    const seedAccount = workstationUsers[cleanUsername];
-    if (seedAccount) {
-      const isPassValid =
-        password === seedAccount.expectedPass ||
-        password === 'admin123' ||
-        ((seedAccount.role === 'Assessor' && (password === 'assessor123' || password === 'admin123')) ||
-          (seedAccount.role === 'SystemMaintenance' && (password === 'maintenance123' || password === 'admin123')));
-
-      if (isPassValid) {
-        const authenticatedUser: User = {
-          id: cleanUsername,
-          name: seedAccount.name,
-          username: cleanUsername,
-          role: seedAccount.role,
-          stationId: stationId || seedAccount.stationId
-        };
-
-        await this.logSecurityEvent({
-          eventType: 'LOGIN_SUCCESS',
-          username: cleanUsername,
-          stationId: authenticatedUser.stationId,
-          details: 'Authenticated via workstation seed credentials'
-        });
-
-        const token = await createSessionToken(authenticatedUser);
-        return { token, user: authenticatedUser };
-      }
-    }
-
-    // 3. Direct verification fallback against users table
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('id, full_name, username, role, station_id, password_hash')
-      .eq('username', cleanUsername)
-      .single();
-
-    if (error || !user) {
-      await this.logSecurityEvent({
-        eventType: 'LOGIN_FAILURE',
-        username: cleanUsername,
-        stationId,
-        details: 'Staff account not found'
-      });
-      throw new Error('Invalid credentials. Staff account not found.');
-    }
-
-    const isBcrypt = Boolean(user.password_hash && user.password_hash.startsWith('$2'));
-    const isValid = isBcrypt
-      ? (password === 'admin123' ||
-         password === 'assessor123' ||
-         password === (import.meta.env.VITE_ADMIN_PASSWORD as string | undefined) ||
-         password === (import.meta.env.VITE_ASSESSOR_PASSWORD as string | undefined))
-      : (user.password_hash ? user.password_hash === password : false);
-
-    if (!isValid) {
-      await this.logSecurityEvent({
-        eventType: 'LOGIN_FAILURE',
-        username: cleanUsername,
-        userId: user.id,
-        stationId,
-        details: 'Invalid password'
-      });
-      throw new Error('Invalid credentials. Please verify your username and password.');
-    }
-
-    const authenticatedUser: User = {
-      id: String(user.id),
-      name: user.full_name,
-      username: user.username,
-      role: user.role,
-      stationId: user.station_id
-    };
-
-    await this.logSecurityEvent({
-      eventType: 'LOGIN_SUCCESS',
-      username: authenticatedUser.username || cleanUsername,
-      userId: Number(authenticatedUser.id),
-      stationId,
-      details: 'Authenticated via database fallback'
-    });
-
-    const token = await createSessionToken(authenticatedUser);
-    return { token, user: authenticatedUser };
+  async login(_username: string, _password: string, _stationId = 'Workstation'): Promise<{ token: string; user: User }> {
+    throw new Error('Use Supabase Auth through AuthService.login().');
   }
 
-  async verifyPassword(username: string, password: string): Promise<boolean> {
-    const cleanUsername = username.trim().toLowerCase();
-    try {
-      const { data, error } = await supabase.rpc('authenticate_user', {
-        p_username: cleanUsername,
-        p_password: password,
-        p_station_id: 'Security-Reauth'
-      });
-      if (!error) {
-        return Array.isArray(data) && data.length > 0;
-      }
-    } catch {
-      // Fallback check
-    }
-
-    const workstationPasswords: Record<string, string> = {
-      'admin': (import.meta.env.VITE_ADMIN_PASSWORD as string) || 'admin123',
-      'admin@example.com': (import.meta.env.VITE_ADMIN_PASSWORD as string) || 'admin123',
-      'test-admin@example.com': (import.meta.env.VITE_ADMIN_PASSWORD as string) || 'admin123',
-      'assessor': (import.meta.env.VITE_ASSESSOR_PASSWORD as string) || 'assessor123',
-      'assessor@example.com': (import.meta.env.VITE_ASSESSOR_PASSWORD as string) || 'assessor123',
-      'test-assessor@example.com': (import.meta.env.VITE_ASSESSOR_PASSWORD as string) || 'assessor123',
-    };
-
-    if (workstationPasswords[cleanUsername]) {
-      const expected = workstationPasswords[cleanUsername];
-      if (password === expected || password === 'admin123' || password === 'assessor123') {
-        return true;
-      }
-    }
-
-    try {
-      const { data: user } = await supabase
-        .from('users')
-        .select('password_hash')
-        .eq('username', cleanUsername)
-        .single();
-
-      if (!user || !user.password_hash) return false;
-      if (user.password_hash.startsWith('$2')) {
-        return password === 'admin123' || password === 'assessor123';
-      }
-      return user.password_hash === password;
-    } catch {
-      return false;
-    }
+  async verifyPassword(_username: string, _password: string): Promise<boolean> {
+    return false;
   }
 
-  async registerUser(userData: {
+  async registerUser(_userData: {
     username: string;
     password: string;
     fullName: string;
     role: string;
     stationId: string;
   }): Promise<{ message: string; user: User }> {
-    const cleanUsername = userData.username.trim().toLowerCase();
-    const insertPayload: Record<string, unknown> = {
-      username: cleanUsername,
-      password: userData.password,
-      password_hash: userData.password,
-      full_name: userData.fullName,
-      role: userData.role,
-      station_id: userData.stationId
-    };
-
-    let { data, error } = await supabase
-      .from('users')
-      .insert(insertPayload)
-      .select('id, full_name, username, role, station_id')
-      .single();
-
-    if (error && (error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('password'))) {
-      if (error.message?.includes('password_hash')) {
-        delete insertPayload.password_hash;
-      } else if (error.message?.includes('password')) {
-        delete insertPayload.password;
-      }
-      const retry = await supabase
-        .from('users')
-        .insert(insertPayload)
-        .select('id, full_name, username, role, station_id')
-        .single();
-      data = retry.data;
-      error = retry.error;
-    }
-
-    if (error) throw new Error(error.message);
-
-    await this.logSecurityEvent({
-      eventType: 'USER_CREATED',
-      username: cleanUsername,
-      userId: data.id,
-      stationId: userData.stationId,
-      details: `Created staff account for ${userData.fullName} with role ${userData.role}`
-    });
-
-    return {
-      message: 'User registered successfully',
-      user: {
-        id: String(data.id),
-        name: data.full_name,
-        username: data.username,
-        role: data.role,
-        stationId: data.station_id
-      }
-    };
+    throw new Error('User provisioning must use the Supabase Auth administrator boundary.');
   }
 
   async deleteUser(id: string | number, adminUsername = 'admin'): Promise<{ message: string }> {
@@ -1266,40 +1042,8 @@ export class SupabaseRepository implements ITreasuryRepository {
     return { message: 'User deleted successfully' };
   }
 
-  async resetUserPassword(id: string | number, newPassword: string, adminUsername = 'admin'): Promise<{ message: string }> {
-    const updatePayload: Record<string, unknown> = {
-      password: newPassword,
-      password_hash: newPassword
-    };
-
-    let { error } = await supabase
-      .from('users')
-      .update(updatePayload)
-      .eq('id', id);
-
-    if (error && (error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('password'))) {
-      if (error.message?.includes('password_hash')) {
-        delete updatePayload.password_hash;
-      } else if (error.message?.includes('password')) {
-        delete updatePayload.password;
-      }
-      const retry = await supabase
-        .from('users')
-        .update(updatePayload)
-        .eq('id', id);
-      error = retry.error;
-    }
-
-    if (error) throw error;
-
-    await this.logSecurityEvent({
-      eventType: 'PASSWORD_RESET',
-      username: adminUsername,
-      userId: typeof id === 'number' ? id : parseInt(id, 10),
-      details: `Password reset for user ID ${id}`
-    });
-
-    return { message: 'Password reset successfully' };
+  async resetUserPassword(_id: string | number, _newPassword: string, _adminUsername = 'admin'): Promise<{ message: string }> {
+    throw new Error('Password changes must use the Supabase Auth administrator boundary.');
   }
 
   // 6. Audit Logs & Forensic History
