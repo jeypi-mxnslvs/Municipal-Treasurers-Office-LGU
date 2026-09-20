@@ -13,7 +13,7 @@
 | **Jurisdiction** | Municipality of Santa Rosa, Province of Nueva Ecija, Region III, Philippines |
 | **Statutory Framework** | Republic Act No. 7160 (Local Government Code of 1991, Title II), Provincial Tax Ordinance of Nueva Ecija, Municipal Revenue Code of Santa Rosa |
 | **Current Baseline** | v1.0.0 (Vite + React 18 + TypeScript + Local Tailwind CSS + shadcn/ui + Vitest) |
-| **Plan Companion** | [`IMPLEMENTATION_PLAN_VERIFICATION_STATEMENT_SYSTEM.md`](file:///home/jeipyyy/Documents/Projects/Municipal-Treasurers-Office-Delinquency-System/Municipal-Treasurers-Office-Delinquency-System/docs/IMPLEMENTATION_PLAN_VERIFICATION_STATEMENT_SYSTEM.md) |
+| **Plan Companion** | [`MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md`](file:///home/jeipyyy/Documents/Projects/Municipal-Treasurers-Office-Delinquency-System/Municipal-Treasurers-Office-Delinquency-System/docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md) |
 
 ---
 
@@ -194,7 +194,7 @@ For each period or aggregated bracket above, calculations are governed by the of
 
 ## 3. Canonical Data Architecture & Schemas
 
-The database schema must adhere to this unified specification across Supabase Cloud and On-Premise PostgreSQL.
+Supabase Cloud is the production datastore authority. The local HTTP/PostgreSQL adapter may remain for development and controlled testing, but is not an equal production authority. The database schema must adhere to this specification in the production Supabase project.
 
 ```mermaid
 erDiagram
@@ -438,9 +438,10 @@ The system strictly authorizes two workstation roles: **Admin** and **Assessor**
 | **View Audit Logs** | ✅ | ✅ (Read-Only) |
 
 ### 5.2 Password & Authentication Policy
-- **Storage**: Passwords must be hashed using `Bcrypt` (minimum work factor 10). No plaintext passwords may exist in database columns or REST payloads.
-- **Sessions**: JWT tokens with 8-hour maximum lifetime; automatic UI inactivity lock after 15 minutes of idle time.
-- **Database Enforcement**: Row-Level Security (RLS) enabled on all PostgreSQL tables using verified JWT claims (`auth.uid()` and `auth.jwt() ->> 'role'`).
+- **Authority**: Supabase Auth is the sole production authentication authority. Custom browser password comparison, seeded fallback credentials, and forgeable client tokens are prohibited.
+- **Storage**: Supabase Auth owns password hashing. Password hashes and plaintext passwords must never enter browser payloads or application tables.
+- **Sessions**: Supabase-issued sessions with an 8-hour maximum lifetime; automatic UI inactivity lock after 15 minutes of idle time.
+- **Database Enforcement**: Row-Level Security (RLS) enabled on all PostgreSQL tables using verified Supabase JWT claims (`auth.uid()` and approved role claims).
 
 ---
 
@@ -626,25 +627,18 @@ The canonical administrative officers and signatories for the Municipality of Sa
 
 ## 8. Alignment with Verification & Statement System Implementation Plan
 
-Every system component aligns with the implementation plan defined in [`IMPLEMENTATION_PLAN_VERIFICATION_STATEMENT_SYSTEM.md`](file:///home/jeipyyy/Documents/Projects/Municipal-Treasurers-Office-Delinquency-System/Municipal-Treasurers-Office-Delinquency-System/docs/IMPLEMENTATION_PLAN_VERIFICATION_STATEMENT_SYSTEM.md):
+Every system component aligns with the implementation plan defined in [`MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md`](file:///home/jeipyyy/Documents/Projects/Municipal-Treasurers-Office-Delinquency-System/Municipal-Treasurers-Office-Delinquency-System/docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md):
 
-| Implementation Stage | SSOT Governing Section | Key Deliverable |
+| Implementation Phase | SSOT Governing Section | Key Deliverable |
 |---|---|---|
-| **Stage 0: Scope Lock** | Section 1 & 4 | Verification & Statement System boundary, purge cashiering |
-| **Stage 1: Domain Vocabulary** | Section 1 & 4.1 | Explicit verification statuses (`UNVERIFIED`, `VERIFIED_SETTLED_EXTERNALLY`) |
-| **Stage 2: Role & Access Simplification** | Section 5.1 | Admin and Assessor RBAC, purge cashier/teller roles |
-| **Stage 3: Purge Payment Workflows** | Section 4 & 6.2 | Remove cash collection, AF-51 stubs, and voiding |
-| **Stage 4: Purge Offline Tellering** | Section 6 | Remove IndexedDB payment queue and offline sync |
-| **Stage 5: Verification & Evidence Storage** | Section 3 & 4.2 | `delinquency_period_verifications` and settlement citations |
-| **Stage 6: Assessment & Historical Provenance** | Section 2.2 & 3.1 | Historical AV provenance with RPTAR page references |
-| **Stage 7: Delinquency Calculation Hardening** | Section 2.3 & 2.4 | Santa Rosa statutory roll brackets and penalty formulas |
-| **Stage 8: Statement of Account UI & CSV** | Section 4.4 | Itemized SOA presentation and CSV statement export |
-| **Stage 9: Notice of Delinquency** | Section 2.9 & 4.4 | RA 7160 Sec. 254 statutory notice generation |
-| **Stage 10: Import Review Pipeline** | Section 3.2 | Smart barangay upsert and durable staging review |
-| **Stage 11: Conditional Tax Clearance** | Section 4.5 | Certified clearance issuance for 0-delinquency parcels |
-| **Stage 12: Audit & Provenance Integrity** | Section 2.6 & 4.3 | Field-level RPTAR logs and supervisor reversal audit |
-| **Stage 13: UI Simplification** | Section 6.1 | Clean Santa Rosa Treasury tokens, tabs, and modals |
-| **Stage 14: Pilot Roll Verification** | Section 2 & 9 | Automated pilot verification test suites and quality gates |
+| **Phase 0: Governance, Scope, and Architecture Lock** | Sections 1, 4, 5, 6 | Authoritative boundary, datastore, authentication, roles, and evidence policy |
+| **Phase 1: Security Containment and Authentication Hardening** | Section 5 | Supabase Auth, RLS, trusted claims, and secure sessions |
+| **Phase 2: Domain and Scope Convergence** | Sections 4 & 6.2 | Remove active collection behavior and isolate legacy evidence |
+| **Phase 3: Transactional Data Integrity and Audit Immutability** | Sections 3 & 4.3 | Atomic domain/audit writes and superseding reversals |
+| **Phase 4: Migration and Deployment Convergence** | Section 6 | Reproducible canonical migration deployment |
+| **Phase 5: Scalability and Frontend Stability** | Sections 3 & 6 | Paginated queries, aggregate views, and bounded client loading |
+| **Phase 6: Real-World Pilot and Functional Verification** | Sections 2, 3, 4 | Representative-data workflow and statutory verification |
+| **Phase 7: Release and Operational Sign-Off** | Sections 8 & 9 | Evidence-based release review and human sign-off |
 
 ---
 

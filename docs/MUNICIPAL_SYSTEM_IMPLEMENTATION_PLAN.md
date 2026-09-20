@@ -12,6 +12,8 @@ This is not a cashiering system.
 
 - Stack: React, TypeScript, Vite, Supabase/PostgreSQL, Vitest, Tailwind.
 - Canonical schema history: `supabase/migrations/*.sql`.
+- Production datastore authority: Supabase Cloud. `LocalHttpRepository` is development/test-only and is not an equal production authority.
+- Production authentication authority: Supabase Auth. Browser password comparison, seeded fallback credentials, and client-generated authorization tokens are prohibited.
 - Main application entry: `App.tsx`.
 - Repository boundary: `services/ITreasuryRepository.ts`.
 - Supabase driver: `services/SupabaseRepository.ts`.
@@ -25,7 +27,7 @@ This is not a cashiering system.
 ### In scope
 
 - Admin and Assessor authentication.
-- Controlled System Maintenance authority only for disposable test-data maintenance, if retained after security review.
+- Controlled System Maintenance authority only for disposable test-data maintenance in non-production environments, if retained after security review.
 - Property masterlist.
 - Current and historical assessment records.
 - Historical assessed-value transcription and provenance.
@@ -37,7 +39,7 @@ This is not a cashiering system.
 - RA 7160 Section 254 Notice of Delinquency generation and CSV export.
 - Conditional tax-clearance eligibility decision.
 - Append-only audit and security provenance.
-- Cloud deployment or on-premise deployment, but only after one is selected as production authority.
+- Supabase Cloud deployment as the selected production authority; local/on-premise adapters may remain for development and controlled testing only.
 
 ### Out of scope
 
@@ -53,7 +55,7 @@ This is not a cashiering system.
 - POS hardware.
 - AI/MCP automation.
 
-Legacy payment records may remain in the database as read-only historical evidence only if municipal policy requires them. They must not be writable through the active application.
+Legacy payment records may remain in the database as read-only historical evidence only if municipal policy requires them. They are not system receipts or collection authority and must not be writable through the active application.
 
 ## Non-Negotiable Rules
 
@@ -106,15 +108,15 @@ If Supabase CLI or linked-project access is unavailable, report that fact. Do no
 
 **Goal:** Establish one authoritative product definition before security or feature work.
 
-**Budget:** Documentation and tests only; maximum 8 files. No production schema change.
+**Budget:** Documentation only; maximum 9 files. No production schema, API, UI, or business-logic change.
 
 **Tasks:**
 
-1. Reconcile `docs/SSOT.md`, `docs/IMPLEMENTATION_PLAN_VERIFICATION_STATEMENT_SYSTEM.md`, `docs/ROADMAP_AND_PHASES.md`, `AGENTS.md`, `README.md`, `context/*`, and architecture notes.
-2. Mark legacy collection records as read-only historical evidence or remove their active references. Choose one policy; do not leave ambiguity.
-3. Decide production datastore: Supabase Cloud or on-premise PostgreSQL. The other driver may remain as a tested secondary adapter but must not be presented as equal production authority.
-4. Decide authentication authority: Supabase Auth or authenticated local API. Do not retain custom browser password verification as production auth.
-5. Define approved roles. Recommended active roles: `Admin`, `Assessor`; separate `SystemMaintenance` only for disposable test-data maintenance and never for ordinary treasury operations.
+1. Reconcile `docs/SSOT.md`, `AGENTS.md`, `README.md`, `context/*`, and architecture notes against this plan; missing legacy plan filenames are not recreated as duplicate authorities.
+2. Mark legacy collection records as read-only historical evidence. They are not system receipts or collection authority.
+3. Confirmed Supabase Cloud as production datastore. The local driver remains a tested development/secondary adapter and is not an equal production authority.
+4. Confirmed Supabase Auth as production authentication authority. Custom browser password verification is not production authentication.
+5. Confirmed approved roles: `Admin`, `Assessor`; `SystemMaintenance` is non-production/service-only for disposable test-data maintenance and never ordinary treasury operations.
 6. Document who may approve assessments, historical AV, delinquency verification, external settlement evidence, reversals, clearance eligibility, imports, and maintenance purge.
 
 **Acceptance criteria:**

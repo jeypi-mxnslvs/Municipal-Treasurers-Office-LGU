@@ -1,5 +1,7 @@
 # SYSTEM ARCHITECTURE — LGU Treasury Connect
 
+> **Document status:** Historical forensic snapshot. This document records an earlier repository analysis and is not current architecture authority. Current decisions are governed by [`docs/SSOT.md`](./SSOT.md) and [`docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md`](./MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md).
+
 > **Analysis Date:** 2026-09-01
 > **Analyzed By:** Claude Opus 4.6 (Thinking) — Senior Software Architect role
 > **Repository:** `jeypi-mxnslvs/Municipal-Treasurers-Office-LGU`

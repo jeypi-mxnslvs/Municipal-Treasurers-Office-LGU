@@ -1,12 +1,12 @@
 # AGENTS.md — AI Agent Operating System & Engineering Protocol
-**LGU Treasury Connect — Real Property Tax Administration System (RPTAS)**  
+**LGU Treasury Connect — Real Property Tax Delinquency Verification & Statement System**  
 **Municipality of Santa Rosa, Province of Nueva Ecija, Philippines**
 
 ---
 
 ## 1. System Identity & Mission
 
-**LGU Treasury Connect** is a mission-critical Real Property Tax Administration System (RPTAS) engineered for the Municipal Treasurer's Office of Santa Rosa, Nueva Ecija. It administers property assessments (RPTAR masterlist), calculates statutory tax liabilities and delinquency surcharges under **Republic Act No. 7160 (Local Government Code of 1991)**, issues official receipts (Accountable Form 51), and provides real-time executive revenue dashboards.
+**LGU Treasury Connect** is a mission-critical Real Property Tax Delinquency Verification & Statement System engineered for the Municipal Treasurer's Office of Santa Rosa, Nueva Ecija. It administers property assessments (RPTAR masterlist), calculates statutory tax liabilities and delinquency surcharges under **Republic Act No. 7160 (Local Government Code of 1991)**, records external settlement evidence without system cash collection, and generates auditable statements and notices.
 
 All AI agents working in this repository must operate under this protocol to ensure zero financial data corruption, statutory legal compliance, and architectural consistency.
 
@@ -18,13 +18,13 @@ When making architectural, mathematical, or implementation decisions, agents mus
 
 ```mermaid
 graph TD
-    SSOT["1. SSOT.md (Highest Authority)<br/>Canonical schemas, statutory formulas, AF-51 rules, RBAC"] --> Roadmap["2. ROADMAP_AND_PHASES.md<br/>Phases 0-6 boundaries, branching model, acceptance criteria"]
-    Roadmap --> ClaudeArch["3. Claude Architectures/ & .agents/rules/<br/>Detailed forensic analysis, threat model, task standards"]
+    SSOT["1. SSOT.md (Highest Authority)<br/>Canonical schemas, statutory formulas, verification rules, RBAC"] --> Plan["2. MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md<br/>Phases 0-7 boundaries, gates, acceptance criteria"]
+    Plan --> ClaudeArch["3. Claude Architectures/ & .agents/rules/<br/>Detailed forensic analysis, threat model, task standards"]
     ClaudeArch --> ExistingCode["4. Active Source Code<br/>services/api.ts, types.ts, utils/taxLogic.ts, supabase/migrations/*.sql"]
 ```
 
-1. **[`docs/SSOT.md`](file:///home/jeipyyy/Documents/Projects/LGU-Treasury-Connect/lgu-treasury-connect/docs/SSOT.md)** *(Highest Authority)*: The definitive Single Source of Truth for database schemas, statutory tax math, COA financial controls, role permissions, and interface contracts.
-2. **[`docs/ROADMAP_AND_PHASES.md`](file:///home/jeipyyy/Documents/Projects/LGU-Treasury-Connect/lgu-treasury-connect/docs/ROADMAP_AND_PHASES.md)**: Defines the phased delivery plan, branch boundaries, acceptance criteria, and git workflow.
+1. **[`docs/SSOT.md`](file:///home/jeipyyy/Documents/Projects/Municipal-Treasurers-Office-Delinquency-System/Municipal-Treasurers-Office-Delinquency-System/docs/SSOT.md)** *(Highest Authority)*: The definitive Single Source of Truth for database schemas, statutory tax math, verification rules, role permissions, and interface contracts.
+2. **[`docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md`](file:///home/jeipyyy/Documents/Projects/Municipal-Treasurers-Office-Delinquency-System/Municipal-Treasurers-Office-Delinquency-System/docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md)**: Defines the phased delivery plan, gates, acceptance criteria, and change budgets.
 3. **[`docs/Claude Architectures/`](file:///home/jeipyyy/Documents/Projects/LGU-Treasury-Connect/lgu-treasury-connect/docs/Claude%20Architectures)** & **[`.agents/rules/task_standards.md`](file:///home/jeipyyy/Documents/Projects/LGU-Treasury-Connect/lgu-treasury-connect/.agents/rules/task_standards.md)**: Deep forensic architectural documentation, security risk registries, and operational task constraints.
 4. **Active Source Code**: Ground reality of the working tree. When code diverges from the SSOT, the SSOT governs and the code must be refactored toward the SSOT.
 
@@ -76,7 +76,7 @@ The following statutory rules are non-negotiable and legally binding under Phili
 
 ### 4.4 Delinquency Verification & External Settlement Evidence Protocol
 - **Canonical Lifecycle**: Verification uses explicit states (`UNVERIFIED`, `VERIFIED_OUTSTANDING`, `VERIFIED_SETTLED_EXTERNALLY`, `DISPUTED`, `NOT_APPLICABLE`, `SUPERSEDED`).
-- **External Evidence Standards**: Store external official receipt (AF-51) number, check reference, or registry folio citation without performing system cash collection.
+- **External Evidence Standards**: Store external settlement reference, check reference, or registry folio citation without performing system cash collection. AF-51 numbers, where retained, are external evidence only.
 - **Supervisory Reversal**: Reversing or superseding a verified record requires `Admin` authorization and logs a mandatory justification to `rptar_audit_logs`.
 
 ---
@@ -109,7 +109,7 @@ lgu-treasury-connect/
 │   └── taxLogic.test.ts # Vitest unit test suite
 ├── docs/                # Project Documentation & Single Source of Truth
 │   ├── SSOT.md          # Canonical Single Source of Truth
-│   ├── IMPLEMENTATION_PLAN_VERIFICATION_STATEMENT_SYSTEM.md # Authoritative Scope & Execution Plan
+│   ├── MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md # Authoritative Scope & Execution Plan
 │   └── Claude Architectures/# Historical deep-dive documentation (REFERENCE ONLY)
 ├── supabase/migrations/ # Canonical, ordered database migration history
 ├── server/              # DEAD CODE: Legacy Express/SQLite server (DO NOT USE)
@@ -134,13 +134,13 @@ lgu-treasury-connect/
 
 ## 6. Implementation Plan & Branching Protocol
 
-Agents must work within the boundaries defined in [`docs/IMPLEMENTATION_PLAN_VERIFICATION_STATEMENT_SYSTEM.md`](file:///home/jeipyyy/Documents/Projects/Municipal-Treasurers-Office-Delinquency-System/Municipal-Treasurers-Office-Delinquency-System/docs/IMPLEMENTATION_PLAN_VERIFICATION_STATEMENT_SYSTEM.md) on branch `feat/delinquency-verification-statement-system`:
+Agents must work within the boundaries defined in [`docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md`](file:///home/jeipyyy/Documents/Projects/Municipal-Treasurers-Office-Delinquency-System/Municipal-Treasurers-Office-Delinquency-System/docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md) on branch `feat/delinquency-verification-statement-system`:
 
-1. **Stage 0–2**: Scope lock, domain vocabulary (`UNVERIFIED`, `VERIFIED_SETTLED_EXTERNALLY`), and 2-role RBAC (`Admin`, `Assessor`).
-2. **Stage 3–4**: Decouple and purge active cashiering/tellering surfaces and maintain durable import review.
-3. **Stage 5–7**: Delinquency verification and completion models (`delinquency_period_verifications`), historical AV provenance, and RA 7160 statutory engine.
-4. **Stage 8–10**: Statement of Account (SOA & CSV export), RA 7160 Sec. 254 Notice of Delinquency, and conditional Tax Clearance Certificate.
-5. **Stage 11–14**: Audit trail integrity, UI simplification, and real-world pilot roll verification.
+1. **Phase 0**: Governance, scope, production datastore/authentication, and architecture lock.
+2. **Phase 1**: Security containment, Supabase Auth, RLS, and trusted authorization.
+3. **Phase 2**: Remove active collection behavior and isolate legacy evidence.
+4. **Phase 3–4**: Atomic audit integrity and canonical migration/deployment convergence.
+5. **Phase 5–7**: Scalability, pilot verification, and evidence-based release sign-off.
 
 ---
 
@@ -166,5 +166,5 @@ npm run build
 When presenting results to the human lead:
 1. **Action Taken**: Explicit list of files created, modified, or deleted with clickable links.
 2. **Verification Evidence**: Output summary of `tsc`, `lint`, `test:unit`, and `build`.
-3. **SSOT / Roadmap Alignment**: Note which section of [`docs/SSOT.md`](file:///home/jeipyyy/Documents/Projects/LGU-Treasury-Connect/lgu-treasury-connect/docs/SSOT.md) or [`docs/ROADMAP_AND_PHASES.md`](file:///home/jeipyyy/Documents/Projects/LGU-Treasury-Connect/lgu-treasury-connect/docs/ROADMAP_AND_PHASES.md) was satisfied.
+3. **SSOT / Plan Alignment**: Note which section of [`docs/SSOT.md`](file:///home/jeipyyy/Documents/Projects/Municipal-Treasurers-Office-Delinquency-System/Municipal-Treasurers-Office-Delinquency-System/docs/SSOT.md) or [`docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md`](file:///home/jeipyyy/Documents/Projects/Municipal-Treasurers-Office-Delinquency-System/Municipal-Treasurers-Office-Delinquency-System/docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md) was satisfied.
 4. **Clear Stop**: Stop immediately and prompt for human approval before taking any further action.

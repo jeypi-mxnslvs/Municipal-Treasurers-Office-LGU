@@ -1,5 +1,7 @@
 # AI PROJECT CONTEXT — LGU Treasury Connect
 
+> **Document status:** Historical forensic snapshot from 2026-09-01. Not current architecture authority. Current decisions are governed by [`docs/SSOT.md`](./SSOT.md) and [`docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md`](./MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md).
+
 > **Use this document to onboard another AI or developer without scanning the codebase.**
 > Last updated: 2026-09-01 from exhaustive code analysis.
 
