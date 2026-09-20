@@ -6,8 +6,8 @@ This tracker follows [`docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md`](../docs/MU
 
 ## Current Phase
 
-- **Phase:** 1 — Security Containment and Authentication Hardening completed; Phase 2 is next.
-- **Status:** Phase 1 implementation and remote migrations verified; human security review and operational checks confirmed by the project lead.
+- **Phase:** 3 — Transactional Data Integrity and Audit Immutability completed; Phase 4 is next.
+- **Status:** Phases 2 and 3 implementation verified. Phase 3 migration was applied to remote Supabase and reviewed without reported problems; human data-integrity approval confirmed by the project lead.
 - **Production datastore:** Supabase Cloud.
 - **Production authentication:** Supabase Auth with trusted session claims and database RLS.
 - **Active roles:** `Admin`, `Assessor`.
@@ -46,17 +46,19 @@ This tracker follows [`docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md`](../docs/MU
   - Add rate limiting, failed-login audit, inactivity timeout, and re-authentication.
   - Gate: security review and human approval confirmed by the project lead.
 
-- [ ] **Phase 2: Domain and Scope Convergence**
+- [x] **Phase 2: Domain and Scope Convergence**
   - Remove active payment mutation methods and cashiering surfaces.
   - Isolate retained legacy evidence behind read-only naming and access.
   - Normalize verification and external-evidence terminology.
-  - Gate: human scope review.
+  - Gate: human scope review completed.
 
-- [ ] **Phase 3: Transactional Data Integrity and Audit Immutability**
+- [x] **Phase 3: Transactional Data Integrity and Audit Immutability**
   - Make sensitive mutations and audit writes atomic.
   - Enforce append-only audit and superseding reversals.
   - Add concurrency protection and retention-safe archival.
-  - Gate: data-integrity review and human approval.
+  - Gate: data-integrity review and human approval completed.
+
+- [ ] **Phase 4: Migration and Deployment Convergence**
 
 - [ ] **Phase 4: Migration and Deployment Convergence**
   - Make canonical migrations reproducible in deployment.
