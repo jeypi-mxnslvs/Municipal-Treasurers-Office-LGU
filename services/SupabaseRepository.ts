@@ -104,8 +104,8 @@ export class SupabaseRepository implements ITreasuryRepository {
     scheduleApplication.penaltyRates = penaltyScheduleOverride;
     scheduleApplication.basicTaxRates = basicTaxScheduleOverride;
     scheduleApplication.sefTaxRates = sefTaxScheduleOverride;
-    const completed = await this.getPropertyCompletedRecords(propertyId, fallbackProp);
-    const completedPeriodLabels = completed.map(r => r.periodLabel).filter(Boolean) as string[];
+const verificationEvidence = await this.getPropertyVerificationEvidence(propertyId, fallbackProp);
+     const completedPeriodLabels = verificationEvidence.map(r => r.periodLabel).filter(Boolean) as string[];
 
     const calcOptions = {
       paymentDate: new Date(),
@@ -133,80 +133,11 @@ export class SupabaseRepository implements ITreasuryRepository {
     return { records: [], grandTotal: 0 };
   }
 
-  async getPropertyCompletedRecords(propertyId: string | number, property?: Property): Promise<TaxYearRecord[]> {
-    const completedRecordsMap = new Map<string, TaxYearRecord>();
+  async getPropertyVerificationEvidence(propertyId: string | number, property?: Property): Promise<TaxYearRecord[]> {
+     const evidenceMap = new Map<string, TaxYearRecord>();
 
-    // 1. Fetch digital payment postings
-    try {
-      const { data: postings } = await supabase
-        .from('payment_postings')
-        .select('*')
-        .eq('property_id', propertyId)
-        .eq('status', 'ISSUED')
-        .order('posted_at', { ascending: false });
-
-      if (postings && postings.length > 0) {
-        for (const post of postings) {
-          const paidRecords = (post.paid_records || []) as TaxYearRecord[];
-          for (const r of paidRecords) {
-            const key = r.periodLabel || String(r.year);
-            if (!completedRecordsMap.has(key)) {
-              completedRecordsMap.set(key, {
-                ...r,
-                status: 'Cleared',
-                receiptNo: post.receipt_no,
-                clearedAt: post.posted_at,
-                clearedBy: post.posted_by,
-                clearanceReference: `Official Receipt ${post.receipt_no}`,
-              });
-            }
-          }
-        }
-      }
-    } catch (e) {
-      console.warn('Failed to fetch payment postings for completed records:', e);
-    }
-
-    // 2. Fetch manual / offline delinquency completions
-    try {
-      const { data: completions } = await supabase
-        .from('delinquency_year_completions')
-        .select('*')
-        .eq('property_id', propertyId)
-        .eq('status', 'COMPLETED')
-        .order('tax_year', { ascending: false });
-
-      if (completions && completions.length > 0) {
-        for (const comp of completions) {
-          const compKey = comp.reference?.includes('Q') ? comp.reference : String(comp.tax_year);
-          if (!completedRecordsMap.has(compKey)) {
-            const baseTax = property ? Math.round(property.assessedValue * 0.02 * 100) / 100 : 0;
-            completedRecordsMap.set(compKey, {
-              year: comp.tax_year,
-              periodLabel: comp.reference?.includes('Q') ? comp.reference : undefined,
-              status: 'Cleared',
-              baseTax,
-              basicTax: baseTax / 2,
-              sefTax: baseTax / 2,
-              monthsDelayed: 0,
-              penaltyRate: 0,
-              penaltyAmount: 0,
-              discountRate: 0,
-              discountAmount: 0,
-              totalDue: baseTax,
-              clearedAt: comp.completed_at || comp.created_at,
-              clearedBy: comp.completed_by,
-              clearanceReference: comp.reference || 'Sequential Arrears Clearance',
-            });
-          }
-        }
-      }
-    } catch (e) {
-      console.warn('Failed to fetch delinquency completions:', e);
-    }
-
-    // 3. Fetch verified external settlements (delinquency_period_verifications)
-    try {
+     // Canonical verification records only. Legacy collection records remain preserved but are not active inputs.
+     try {
       const { data: verifs } = await supabase
         .from('delinquency_period_verifications')
         .select('*')
@@ -217,9 +148,9 @@ export class SupabaseRepository implements ITreasuryRepository {
       if (verifs && verifs.length > 0) {
         for (const v of verifs) {
           const key = v.period_key || v.period_label || String(v.tax_year);
-          if (!completedRecordsMap.has(key)) {
+           if (!evidenceMap.has(key)) {
             const baseTax = property ? Math.round(property.assessedValue * 0.02 * 100) / 100 : 0;
-            completedRecordsMap.set(key, {
+             evidenceMap.set(key, {
               year: v.tax_year,
               periodLabel: v.period_label,
               status: 'Cleared',
@@ -245,10 +176,8 @@ export class SupabaseRepository implements ITreasuryRepository {
       console.warn('Failed to fetch period verifications:', e);
     }
 
-    // 4. Authentic Database Records Only:
-    // Never fabricate synthetic 'Cleared per Masterlist Baseline' records for unverified years.
-    // If no payment postings, completions, or external verifications exist in the database, return authentic empty set.
-    return Array.from(completedRecordsMap.values()).sort((a, b) => (a.year - b.year) || (a.periodLabel || '').localeCompare(b.periodLabel || ''));
+     // External settlement evidence is not a system receipt or collection record.
+     return Array.from(evidenceMap.values()).sort((a, b) => (a.year - b.year) || (a.periodLabel || '').localeCompare(b.periodLabel || ''));
   }
 
   async saveProperty(propertyData: Partial<Property>): Promise<Property> {
@@ -333,20 +262,7 @@ export class SupabaseRepository implements ITreasuryRepository {
     }
     const resultData = data;
 
-    // Log audit
-    try {
-      await supabase.from('rptar_audit_logs').insert({
-        property_id: resultData.id,
-        td_number: resultData.td_number,
-        action_type: isUpdate ? 'UPDATED' : 'CREATED',
-        assessor_name: 'Juan Reyes',
-        station_id: 'Assessor-Desk-02',
-        details: `Saved property ${resultData.td_number} (${resultData.owner_name})`
-      });
-    } catch {
-      // Non-blocking audit log
-    }
-
+    // Phase 1 database trigger records this mutation atomically with the write.
     return mapPropertyRow(resultData);
   }
 
@@ -358,59 +274,15 @@ export class SupabaseRepository implements ITreasuryRepository {
     assessorName: string;
     reason?: string;
   }): Promise<Property> {
-    const { data: prop, error } = await supabase
-      .from('properties')
-      .select('*')
-      .eq('id', payload.propertyId)
-      .single();
-
-    if (error || !prop) {
-      throw new Error(`Property ${payload.propertyId} not found: ${error?.message || 'Unknown error'}`);
-    }
-
-    const currentValues = (prop.historical_assessed_values as Record<string, unknown>) || {};
-    const updatedValues = {
-      ...currentValues,
-      [payload.periodLabel]: {
-        value: Number(payload.value),
-        transcribedBy: payload.assessorName,
-        transcribedAt: new Date().toISOString(),
-        rptarPageReference: payload.rptarPageReference || undefined,
-      },
-    };
-
-    const { data: updated, error: updateError } = await supabase
-      .from('properties')
-      .update({
-        historical_assessed_values: updatedValues,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', payload.propertyId)
-      .select('*')
-      .single();
-
-    if (updateError || !updated) {
-      throw new Error(`Failed to update historical assessed value: ${updateError?.message || 'Unknown error'}`);
-    }
-
-    // Non-blocking audit log
-    try {
-      await supabase.from('rptar_audit_logs').insert({
-        property_id: Number(payload.propertyId),
-        td_number: prop.td_number,
-        action_type: 'TRANSCRIBE_HISTORICAL_AV',
-        assessor_name: payload.assessorName,
-        details: `Transcribed historical AV for ${payload.periodLabel}: ₱${Number(payload.value).toLocaleString()}${payload.rptarPageReference ? ` (Ref: ${payload.rptarPageReference})` : ''}`,
-        field_changed: `historical_assessed_values.${payload.periodLabel}`,
-        new_value: Number(payload.value),
-        reason: payload.reason || 'Physical RPTAR Ledger Transcription',
-        timestamp: new Date().toISOString(),
-      });
-    } catch {
-      // Non-blocking audit log
-    }
-
-    return mapPropertyRow(updated);
+    const { data, error } = await supabase.rpc('transcribe_historical_assessed_value', {
+      p_property_id: Number(payload.propertyId),
+      p_period_label: payload.periodLabel,
+      p_value: Number(payload.value),
+      p_rptar_page_reference: payload.rptarPageReference || null,
+      p_reason: payload.reason || null,
+    });
+    if (error || !data) throw new Error(`Historical assessed value RPC failed: ${error?.message || 'No authoritative result.'}`);
+    return mapPropertyRow(data);
   }
 
   async deleteProperty(propertyId: string): Promise<void> {
@@ -465,10 +337,11 @@ export class SupabaseRepository implements ITreasuryRepository {
     taxYear: number;
     periodLabel: string;
     status: DelinquencyPeriodStatus;
-    verificationType: VerificationType;
-    sourceReference?: string;
-    remarks?: string;
-    verifiedBy: number | string;
+     verificationType: VerificationType;
+     evidenceType?: 'OFFICIAL_RECEIPT' | 'ASSESSMENT_ROLL_AUDIT' | 'COURT_ORDER_AMNESTY' | 'PRIOR_REGISTRY_FOLIO';
+     sourceReference?: string;
+     remarks?: string;
+     verifiedBy: number | string;
     stationId?: string;
     computationSchedule?: {
       versionId?: number;
@@ -476,128 +349,29 @@ export class SupabaseRepository implements ITreasuryRepository {
       sourceFileHash?: string;
     };
   }): Promise<DelinquencyPeriodVerification> {
-    const verifiedByNum = typeof payload.verifiedBy === 'number' ? payload.verifiedBy : parseInt(String(payload.verifiedBy), 10);
-    const verifiedByValid = isNaN(verifiedByNum) ? null : verifiedByNum;
-
-    // 1. Insert into delinquency_period_verifications table
-    const insertPayload: Record<string, unknown> = {
-      property_id: Number(payload.propertyId),
-      td_number_snapshot: payload.tdNumber,
-      period_key: payload.periodKey,
-      tax_year: payload.taxYear,
-      period_label: payload.periodLabel,
-      status: payload.status,
-      verification_type: payload.verificationType,
-      source_reference: payload.sourceReference || null,
-      remarks: payload.remarks || null,
-      verified_by: verifiedByValid,
-      verified_by_name: String(payload.verifiedBy),
-      verified_at: new Date().toISOString(),
-      station_id: payload.stationId || 'Verification-Desk'
-    };
-
-    let result: DelinquencyPeriodVerification | null = null;
-
-    try {
-      const { data, error } = await supabase
-        .from('delinquency_period_verifications')
-        .insert(insertPayload)
-        .select()
-        .single();
-
-      if (error) {
-        // If table doesn't exist yet in Supabase, fallback to delinquency_year_completions
-        if (error.code === '42P01' || error.message?.includes('delinquency_period_verifications')) {
-          console.warn('delinquency_period_verifications table not found, falling back to delinquency_year_completions:', error.message);
-          await supabase.from('delinquency_year_completions').upsert({
-            property_id: Number(payload.propertyId),
-            tax_year: payload.taxYear,
-            status: payload.status === 'VERIFIED_SETTLED_EXTERNALLY' ? 'COMPLETED' : payload.status,
-            completed_by: String(payload.verifiedBy),
-            reference: payload.sourceReference || payload.periodLabel,
-            remarks: payload.remarks
-          }, { onConflict: 'property_id,tax_year' });
-        } else {
-          throw error;
-        }
-      } else if (data) {
-        result = {
-          id: data.id,
-          propertyId: data.property_id,
-          tdNumberSnapshot: data.td_number_snapshot,
-          periodKey: data.period_key,
-          taxYear: data.tax_year,
-          periodLabel: data.period_label,
-          status: data.status as DelinquencyPeriodStatus,
-          verificationType: data.verification_type as VerificationType,
-          sourceReference: data.source_reference,
-          remarks: data.remarks,
-          verifiedBy: data.verified_by,
-          verifiedAt: data.verified_at,
-          stationId: data.station_id,
-          supersedesId: data.supersedes_id,
-          reversalReason: data.reversal_reason,
-          createdAt: data.created_at
-        };
-      }
-    } catch (e) {
-      console.warn('Verification insert fallback execution:', e);
-    }
-
-    // Advance baseline if external settlement verified beyond current last_paid
-    if (payload.status === 'VERIFIED_SETTLED_EXTERNALLY') {
-      try {
-        const { data: prop } = await supabase.from('properties').select('last_paid_year, last_paid_quarter').eq('id', payload.propertyId).single();
-        if (prop) {
-          const currentLastYear = prop.last_paid_year || 0;
-          let quarter = 4;
-          if (payload.periodKey.includes('Q')) {
-            const match = payload.periodKey.match(/(\d+)Q/i) || payload.periodKey.match(/Q(\d+)/i);
-            if (match) quarter = parseInt(match[1], 10);
-          }
-          if (payload.taxYear > currentLastYear || (payload.taxYear === currentLastYear && quarter > (prop.last_paid_quarter || 0))) {
-            await supabase.from('properties').update({
-              last_paid_year: payload.taxYear,
-              last_paid_quarter: quarter,
-              updated_at: new Date().toISOString()
-            }).eq('id', payload.propertyId);
-          }
-        }
-      } catch (err) {
-        console.warn('Could not auto-advance property baseline after external settlement:', err);
-      }
-    }
-
-    // Non-blocking audit log
-    try {
-      await supabase.from('rptar_audit_logs').insert({
-        property_id: Number(payload.propertyId),
-        td_number: payload.tdNumber,
-        action_type: 'VERIFICATION_' + payload.status,
-        assessor_name: String(payload.verifiedBy),
-        station_id: payload.stationId || 'Verification-Desk',
-        details: `Verified period ${payload.periodLabel} (${payload.periodKey}) as ${payload.status} [Ref: ${payload.sourceReference || 'N/A'}]`,
-        tax_year: payload.taxYear
-      });
-    } catch {
-      // Ignore non-blocking audit error
-    }
-
-    return result || {
-      id: Date.now(),
-      propertyId: Number(payload.propertyId),
-      tdNumberSnapshot: payload.tdNumber,
-      periodKey: payload.periodKey,
-      taxYear: payload.taxYear,
-      periodLabel: payload.periodLabel,
-      status: payload.status,
-      verificationType: payload.verificationType,
-      sourceReference: payload.sourceReference,
-      remarks: payload.remarks,
-      verifiedBy: payload.verifiedBy,
-      verifiedAt: new Date().toISOString(),
-      stationId: payload.stationId,
-      createdAt: new Date().toISOString()
+    const { data, error } = await supabase.rpc('verify_delinquency_period', {
+      p_property_id: Number(payload.propertyId),
+      p_td_number: payload.tdNumber,
+      p_period_key: payload.periodKey,
+      p_tax_year: payload.taxYear,
+      p_period_label: payload.periodLabel,
+      p_status: payload.status,
+      p_verification_type: payload.verificationType,
+      p_source_reference: payload.sourceReference || null,
+      p_remarks: payload.remarks || null,
+      p_station_id: payload.stationId || 'Verification-Desk',
+      p_evidence_type: payload.evidenceType || null,
+    });
+    if (error) throw new Error(`Canonical verification RPC failed: ${error.message}`);
+    if (!data || typeof data !== 'object') throw new Error('Canonical verification RPC returned no authoritative result.');
+    const row = data as Record<string, unknown>;
+    return {
+      id: Number(row.id), propertyId: Number(row.propertyId), tdNumberSnapshot: String(row.tdNumberSnapshot),
+      periodKey: String(row.periodKey), taxYear: Number(row.taxYear), periodLabel: String(row.periodLabel),
+      status: row.status as DelinquencyPeriodStatus, verificationType: row.verificationType as VerificationType,
+      sourceReference: row.sourceReference as string | undefined, remarks: row.remarks as string | undefined,
+      verifiedBy: row.verifiedBy as string, verifiedAt: String(row.verifiedAt || new Date().toISOString()),
+      stationId: row.stationId as string | undefined,
     };
   }
 
@@ -677,49 +451,13 @@ export class SupabaseRepository implements ITreasuryRepository {
     reason: string;
     stationId?: string;
   }): Promise<void> {
-    try {
-      if (payload.verificationId) {
-        await supabase
-          .from('delinquency_period_verifications')
-          .update({
-            status: 'SUPERSEDED',
-            reversal_reason: payload.reason,
-            remarks: `Reversed by ${payload.authorizedBy}: ${payload.reason}`
-          })
-          .eq('id', payload.verificationId);
-      } else {
-        await supabase
-          .from('delinquency_period_verifications')
-          .update({
-            status: 'SUPERSEDED',
-            reversal_reason: payload.reason,
-            remarks: `Reversed by ${payload.authorizedBy}: ${payload.reason}`
-          })
-          .eq('property_id', payload.propertyId)
-          .eq('tax_year', payload.taxYear);
-      }
-
-      await supabase
-        .from('delinquency_year_completions')
-        .delete()
-        .eq('property_id', payload.propertyId)
-        .eq('tax_year', payload.taxYear);
-    } catch (e) {
-      console.warn('Revert verification error:', e);
-    }
-
-    try {
-      await supabase.from('rptar_audit_logs').insert({
-        property_id: Number(payload.propertyId),
-        action_type: 'VERIFICATION_REVERSED',
-        assessor_name: payload.authorizedBy,
-        station_id: payload.stationId || 'Verification-Desk',
-        details: `Reversed verification for year/period ${payload.periodKey || payload.taxYear}. Reason: ${payload.reason}`,
-        tax_year: payload.taxYear
-      });
-    } catch {
-      // Non-blocking
-    }
+    if (!payload.verificationId) throw new Error('Authoritative verification ID is required for reversal.');
+    const { error } = await supabase.rpc('revert_delinquency_verification', {
+      p_verification_id: Number(payload.verificationId),
+      p_reason: payload.reason,
+      p_station_id: payload.stationId || 'Verification-Desk',
+    });
+    if (error) throw new Error(`Verification reversal RPC failed: ${error.message}`);
   }
 
   async getPeriodVerifications(propertyId: string | number): Promise<DelinquencyPeriodVerification[]> {
@@ -846,41 +584,6 @@ export class SupabaseRepository implements ITreasuryRepository {
       });
     }
 
-    const { data: payments } = await supabase
-      .from('payment_postings')
-      .select('total_paid, posted_at');
-
-    let totalCollected = 0;
-    let todayCollected = 0;
-    const monthlyCollections = new Map<string, number>();
-    const todayDate = new Date().toDateString();
-
-    if (payments && payments.length > 0) {
-      for (const pay of payments) {
-        const amount = Number(pay.total_paid) || 0;
-        totalCollected += amount;
-
-        const payDate = pay.posted_at ? new Date(pay.posted_at) : new Date();
-        if (payDate.toDateString() === todayDate) {
-          todayCollected += amount;
-        }
-
-        const monthShort = payDate.toLocaleString('en-US', { month: 'short' });
-        monthlyCollections.set(monthShort, (monthlyCollections.get(monthShort) || 0) + amount);
-      }
-    }
-
-    const standardMonths = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const currentMonthIdx = new Date().getMonth();
-    const monthsToShow = standardMonths.slice(0, Math.max(8, currentMonthIdx + 1));
-    const targetSchedule = [150000, 120000, 200000, 100000, 90000, 160000, 80000, 80000, 120000, 100000, 90000, 150000];
-
-    const monthlyTrend = monthsToShow.map((month, idx) => ({
-      month,
-      collections: monthlyCollections.get(month) || 0,
-      target: targetSchedule[idx] || 100000
-    }));
-
     const barangayBreakdown = Array.from(barangayMap.entries()).map(([barangay, data]) => ({
       barangay,
       properties: data.properties,
@@ -893,11 +596,8 @@ export class SupabaseRepository implements ITreasuryRepository {
       delinquentCount,
       partialCount: 0,
       shellRecordsCount,
-      totalCollected: Math.round(totalCollected),
-      todayCollected: Math.round(todayCollected),
       totalDelinquentDebt: Math.round(totalDelinquentDebt),
-      collectionEfficiency: totalProperties > 0 ? Math.round((clearedCount / totalProperties) * 100) : 0,
-      monthlyTrend,
+      monthlyTrend: [],
       barangayBreakdown
     };
   }
