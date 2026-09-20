@@ -16,6 +16,7 @@ import {
   VerificationType
 } from '@/types';
 import { calculateTaxLiability } from '@/utils/taxLogic';
+import { supabase } from './supabase';
 
 /**
  * LocalHttpRepository
@@ -35,7 +36,8 @@ export class LocalHttpRepository implements ITreasuryRepository {
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
-    const token = typeof window !== 'undefined' ? localStorage.getItem('lgu_token') : null;
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
