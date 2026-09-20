@@ -6,8 +6,8 @@ This tracker follows [`docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md`](../docs/MU
 
 ## Current Phase
 
-- **Phase:** 0 — Governance, Scope, and Architecture Lock
-- **Status:** Documentation reconciliation in progress; implementation work is gated until Phase 0 review.
+- **Phase:** 1 — Security Containment and Authentication Hardening completed; Phase 2 is next.
+- **Status:** Phase 1 implementation and remote migrations verified; human security review and operational checks confirmed by the project lead.
 - **Production datastore:** Supabase Cloud.
 - **Production authentication:** Supabase Auth with trusted session claims and database RLS.
 - **Active roles:** `Admin`, `Assessor`.
@@ -37,14 +37,14 @@ This tracker follows [`docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md`](../docs/MU
   - Confirm Supabase Cloud and Supabase Auth authorities.
   - Define Admin, Assessor, and restricted maintenance authority.
   - Mark legacy payment records read-only historical evidence.
-  - Gate: human review before Phase 1. Documentation reconciliation complete; implementation remains gated.
+  - Gate: human review before Phase 1 completed.
 
-- [ ] **Phase 1: Security Containment and Authentication Hardening**
+- [x] **Phase 1: Security Containment and Authentication Hardening**
   - Remove browser password and fallback authentication paths.
   - Implement Supabase Auth session authority and trusted role claims.
   - Enable RLS and remove unsafe anonymous access.
   - Add rate limiting, failed-login audit, inactivity timeout, and re-authentication.
-  - Gate: security review and human approval.
+  - Gate: security review and human approval confirmed by the project lead.
 
 - [ ] **Phase 2: Domain and Scope Convergence**
   - Remove active payment mutation methods and cashiering surfaces.
@@ -96,7 +96,18 @@ This tracker follows [`docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md`](../docs/MU
 
 ## Verification Evidence
 
-Not run yet. Phase 0 standard checks:
+Phase 1 verification:
+
+- `npx tsc --noEmit`: passed.
+- `npm run lint`: passed with no errors or warnings.
+- `npm run test:unit`: 19 files, 163 tests passed.
+- `npm run build`: passed; existing large-chunk warning remains.
+- `git diff --check`: passed.
+- Linked Supabase migration history matches locally through `20261004`; dry run reported no pending migrations.
+- Fresh Admin and Assessor test logins returned trusted roles. Anonymous data access and Assessor access to the legacy user table, schedule activation, and property archiving were denied.
+- The project lead confirmed login rate limiting, failed-login audit, credential rotation, and human security review. These operational settings were not independently inspected by the agent.
+
+Standard checks:
 
 ```bash
 npx tsc --noEmit
@@ -105,7 +116,7 @@ npm run test:unit
 npm run build
 ```
 
-Migration checks are not required for documentation-only Phase 0 edits. They become mandatory for migration phases:
+Migration checks:
 
 ```bash
 npx supabase migration list
@@ -114,7 +125,7 @@ npx supabase db push --include-all --dry-run
 
 ## Residual Risks
 
-- Phase 1 security hardening is not complete; existing authentication and authorization code must not be treated as secure until reviewed and replaced.
+- The linked testing project currently has no property rows; data-bearing RLS checks remain for the Phase 6 pilot.
 - Active source code may still expose collection-era types, reads, or UI despite this documentation scope lock; Phase 2 addresses that convergence.
 - Historical architecture documents below remain stale until explicitly labeled.
 - No phase is considered complete until its gate receives human review.
