@@ -1,0 +1,16 @@
+PHASE 6 PILOT BACKUP/RESTORE DRILL
+Date (UTC): 2026-09-21T08:10:31Z
+Environment: two disposable supabase/postgres:15.8.1.060 containers
+Migration range: 20260911_initial_schema.sql through 20261007_phase5_notice_candidates.sql
+Dataset SHA-256: d448f1711175bf51f1db4671528a66f58ffd921e87df742bd5df1b2398d0d813
+Import: PASS (33 rows; fingerprint 850bdc77cf7c2c1c58de8694fe2b106a)
+Concurrent import and assessor verification: PASS
+Admin negative maintenance permission: PASS
+Assessor negative permission: PASS
+Maintenance negative permission: PASS
+Backup SHA-256: a9ddd87eb7e9b1a1e98f82f257a4d685d27f72c1625f42dd6e6bf67b80eafb57
+Restore into clean migration-built target: PASS (33 rows; fingerprint 850bdc77cf7c2c1c58de8694fe2b106a)
+Anonymous property read: DENIED
+DRILL RESULT: PASS
+Scope: sanitized synthetic pilot data only; no linked or municipal database was accessed.
+Operator: automated Phase 6 drill; municipal operator acknowledgement remains part of human pilot approval.

@@ -1,0 +1,3 @@
+ID,Severity,Status,Area,Summary,Owner,Disposition,Evidence
+P6-001,P3,CLOSED,Restore tooling,Property audit trigger generated duplicate audit IDs during data replay,Engineering,"Disable user-defined triggers only during isolated restore; retain system and foreign-key triggers; re-enable before validation",backup_restore_log.txt
+P6-GATE-001,GATE,PENDING HUMAN REVIEW,Policy approval,Treasurer and Assessor must validate the statutory schedule and report formats,Municipal Treasurer and Municipal Assessor,"Sign the review record before Phase 7; this is a human gate and not a software defect",PHASE6_PILOT_EVIDENCE.md

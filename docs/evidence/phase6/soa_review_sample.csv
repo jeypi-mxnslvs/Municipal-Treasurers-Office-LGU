@@ -1,0 +1,5 @@
+Tax Declaration No.,PIN,Owner,Barangay,Property Class,Period,Assessed Value,Basic Tax,SEF Tax,Base Tax,Months Delayed,Penalty Rate,Penalty Surcharge,Discount Rate,Discount Amount,Total Due,Status,Reference
+17-23001-00001,024-01-001-01-001,Pilot Owner 01,Rizal (Poblacion),Residential,2024,80100.00,801.00,801.00,1602.00,33,66%,1057.32,0%,0.00,2659.32,Delinquent,Statutory Assessment
+17-23001-00001,024-01-001-01-001,Pilot Owner 01,Rizal (Poblacion),Residential,2025,80100.00,801.00,801.00,1602.00,21,42%,672.84,0%,0.00,2274.84,Delinquent,Statutory Assessment
+17-23001-00001,024-01-001-01-001,Pilot Owner 01,Rizal (Poblacion),Residential,2026,80100.00,801.00,801.00,1602.00,0,0%,0.00,10%,160.20,1441.80,Current,Statutory Assessment
+TOTALS,,,,,,,3187.98,3187.98,,,,,,,6375.96,,

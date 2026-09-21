@@ -6,8 +6,8 @@ This tracker follows [`docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md`](../docs/MU
 
 ## Current Phase
 
-- **Phase:** 4 — Migration and Deployment Convergence completed; Phase 5 is next.
-- **Status:** Phase 4 clean-install and Docker deployment defects were corrected. Local migration replay, restore, web health, and authorization checks passed; the compatibility migration was applied to linked Supabase and remote history is current. The project lead authorized the Phase 4 completion and branch push.
+- **Phase:** 6 — Engineering and automated pilot verification completed; human pilot approval pending.
+- **Status:** The sanitized 33-barangay pilot, edge-case imports, statutory calculations, verification lifecycle, clearance states, permission boundaries, concurrent import/verification, SOA and Notice samples, and clean-target backup/restore drill passed. Evidence is recorded in `docs/PHASE6_PILOT_EVIDENCE.md`. The Municipal Treasurer and Municipal Assessor must still approve the statutory schedule and report formats before Phase 6 can receive final acceptance and Phase 7 can begin.
 - **Production datastore:** Supabase Cloud.
 - **Production authentication:** Supabase Auth with trusted session claims and database RLS.
 - **Active roles:** `Admin`, `Assessor`.
@@ -64,17 +64,17 @@ This tracker follows [`docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md`](../docs/MU
   - Validate health checks, TLS/LAN controls, backup, restore, and rollback.
   - Gate: deployment convergence checks and linked migration completed; project lead authorized completion.
 
-- [ ] **Phase 5: Scalability and Frontend Stability**
+- [x] **Phase 5: Scalability and Frontend Stability**
   - Add server-side pagination, search, filters, indexes, and aggregate views.
   - Bound loading/retry/error states and avoid full-table reloads.
   - Measure 25,000-parcel fixture and production bundle.
-  - Gate: performance review.
+  - Gate: performance review and lead authorization completed (`docs/PHASE5_PERFORMANCE_EVIDENCE.md`).
 
-- [ ] **Phase 6: Real-World Pilot and Functional Verification**
-  - Test representative 33-barangay data and all required verification workflows.
-  - Validate statutory calculations, reports, permissions, concurrency, and restore drill.
-  - Record hashes, comparison evidence, samples, defects, and ownership.
-  - Gate: human pilot approval.
+- [ ] **Phase 6: Real-World Pilot and Functional Verification — implementation complete; approval pending**
+  - [x] Test representative sanitized 33-barangay data and all required verification workflows.
+  - [x] Validate statutory calculations, reports, permissions, concurrency, and restore drill.
+  - [x] Record hashes, comparison evidence, samples, defects, and ownership.
+  - [ ] Gate: Municipal Treasurer and Municipal Assessor pilot approval.
 
 - [ ] **Phase 7: Release and Operational Sign-Off**
   - Freeze release candidate and run complete verification checklist.
@@ -115,6 +115,31 @@ Phase 4 verification & operational deployment record:
 - Linked Supabase push of `20260911000000` completed with project lead authorization; dry run confirmed clean up-to-date status.
 - Operational policies documented in `docs/PHASE4_DEPLOYMENT_CHECKS.md` for linked backup retention, off-host logical export, pre-pilot Phase 6 municipal restore drill, TLS 1.3/HTTPS ingress, and database-owner sign-off criteria before production release.
 
+Phase 5 verification & scalability record:
+
+- `npx tsc --noEmit`: passed with 0 errors.
+- `npm run lint`: passed with 0 errors, 0 warnings.
+- `npm run test:unit`: 20 test files, 170 tests passed.
+- `npm run build`: passed in 11.27s; main JS bundle reduced to 475.27 kB (147.13 kB gzip), resolving chunk size warning.
+- Server-side bounded reads (`list_properties_page`), GIN trigram indexes, SQL counts (`dashboard_property_counts`), and batch notice candidate navigation verified.
+- Synthetic 25,000-parcel and 100,000-verification-row fixtures benchmarked in `docs/PHASE5_PERFORMANCE_EVIDENCE.md`.
+- Merge simulation (`git merge-tree`) across `main` and Phase 1 through Phase 5 verified cleanly with 0 merge conflicts.
+- Code committed and pushed to `phase-5-scalability` (`ba7bd5e`).
+
+Phase 6 verification & pilot record:
+
+- Sanitized synthetic masterlist covers all 33 canonical barangays; SHA-256 `d448f1711175bf51f1db4671528a66f58ffd921e87df742bd5df1b2398d0d813`.
+- Duplicate TD, conflicting record, invalid numeric value, invalid property class, missing AV, shell record, and idempotent re-import cases passed.
+- Historical RPTAR provenance, approved-code schedule boundaries, arrears-first sequencing, quarter splits, external settlement evidence, disputes, supersession, and conditional-clearance states passed automated verification.
+- Admin, Assessor, maintenance, concurrent import/verification, clean-target restore, fingerprint comparison, and anonymous-access denial passed in disposable Supabase Postgres containers.
+- SOA sample totals: Basic `3187.98`, SEF `3187.98`, total `6375.96`.
+- Section 254 Notice sample totals: Basic `3340.17`, SEF `3340.17`, total `6680.34`.
+- `npx tsc --noEmit`: passed with 0 errors.
+- `npm run lint`: passed with 0 errors and 0 warnings.
+- `npm run test:unit`: 21 test files, 178 tests passed.
+- `npm run build`: passed; main JS bundle remains 475.27 kB (147.13 kB gzip).
+- Required evidence and unsigned human approval record are in `docs/PHASE6_PILOT_EVIDENCE.md`.
+
 Standard checks:
 
 ```bash
@@ -133,7 +158,7 @@ npx supabase db push --include-all --dry-run
 
 ## Residual Risks
 
-- The linked testing project currently has no property rows; data-bearing RLS checks remain for the Phase 6 pilot.
-- Active source code may still expose collection-era types, reads, or UI despite this documentation scope lock; Phase 2 addresses that convergence.
-- Historical architecture documents below remain stale until explicitly labeled.
+- Municipal Treasurer and Municipal Assessor approval of the statutory schedule and official SOA/Notice formats remains pending.
+- The pilot dataset is sanitized and synthetic; municipal reviewers must confirm that it is representative of operational records before signing the gate.
+- The restore drill used disposable pilot infrastructure; the database owner acknowledgement remains unsigned.
 - No phase is considered complete until its gate receives human review.
