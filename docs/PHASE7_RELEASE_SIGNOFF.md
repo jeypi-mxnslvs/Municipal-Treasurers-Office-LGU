@@ -76,9 +76,9 @@ The release remains on hold until all required reviewers record an explicit deci
 | Review | Reviewer / evidence | Date | Decision and remarks |
 |---|---|---|---|
 | Project lead — Phase 7 evidence and handoff | Interactive project session (`It's approve`; confirmed with `proceed`) | 2026-09-21 | Accepted for handoff; does not substitute for the four specialist decisions below |
-| Technical — build, migrations, deployment and rollback |  |  |  |
-| Security — authorization, secrets, dependency risk and incident plan |  |  |  |
-| Financial — statutory calculations, schedules, statements and audit evidence |  |  |  |
-| Operational — backup/restore, support, training and cutover readiness |  |  |  |
+| Technical — build, migrations, deployment and rollback | Project/technical lead — named reviewer evidence pending |  | Pending individual decision |
+| Security — authorization, secrets, dependency risk and incident plan | Designated security or IT reviewer — named reviewer evidence pending |  | Pending individual decision |
+| Financial — statutory calculations, schedules, statements and audit evidence | Municipal Treasurer — named reviewer evidence pending |  | Pending individual decision |
+| Operational — backup/restore, support, training and cutover readiness | Database owner or municipal system operator — named reviewer evidence pending |  | Pending individual decision |
 
 Only the named human reviewers may authorize production release. The agent does not provide that authorization.
