@@ -66,14 +66,25 @@ export class LocalHttpRepository implements ITreasuryRepository {
   // 1. Properties & Assessment
   async getProperties(query: PropertyQuery = {}): Promise<PropertyPage> {
     const params = new URLSearchParams();
-    params.set('page', String(query.page || 1));
-    params.set('pageSize', String(Math.min(100, Math.max(1, query.pageSize || 25))));
+    if (Object.keys(query).length > 0) {
+      params.set('page', String(query.page || 1));
+      params.set('pageSize', String(Math.min(100, Math.max(1, query.pageSize || 25))));
+    }
     if (query.search) params.set('search', query.search);
     if (query.barangay && query.barangay !== 'All') params.set('barangay', query.barangay);
     if (query.disposition) params.set('disposition', query.disposition);
     if (query.sort) params.set('sort', query.sort);
     if (query.direction) params.set('direction', query.direction);
     return this.request<PropertyPage>(`/properties?${params.toString()}`, { signal: query.signal });
+  }
+
+  async getNoticeCandidates(_page: number): Promise<PropertyPage> {
+    throw new Error('Batch notices require the production Supabase driver.');
+  }
+
+  async lookupPropertiesByTd(tdNumbers: string[]): Promise<Property[]> {
+    if (tdNumbers.length === 0) return [];
+    throw new Error('Local development driver does not support bounded import review. Use the Supabase driver.');
   }
 
   async getPropertyAssessment(propertyId: string, fallbackProp?: Property, customSettings?: MunicipalTaxSettings): Promise<CalculationResult> {
@@ -89,10 +100,11 @@ export class LocalHttpRepository implements ITreasuryRepository {
     }
   }
 
-  async getPropertyVerificationEvidence(propertyId: string | number, _property?: Property): Promise<TaxYearRecord[]> {
+  async getPropertyVerificationEvidence(propertyId: string | number, _property?: Property, strict = false): Promise<TaxYearRecord[]> {
     try {
       return await this.request<TaxYearRecord[]>(`/properties/${propertyId}/legacy-evidence`);
-    } catch {
+    } catch (error) {
+      if (strict) throw error;
       return [];
     }
   }

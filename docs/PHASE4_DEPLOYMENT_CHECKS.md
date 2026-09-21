@@ -22,7 +22,24 @@ Run a clean local Supabase startup from a disposable workdir containing only `su
 
 Before any push, run `npx supabase migration list`, then `npx supabase db push --include-all --dry-run`. Review any pending migration with the database owner. `scripts/apply-migrations.sh` requires an explicit `DATABASE_URL` and allows only an optional `--dry-run` argument. Never run `supabase db reset --linked` against municipal data.
 
-Record the linked backup policy, off-host export, restore drill, TLS ingress, and operator/database-owner approval before considering the Phase 4 gate closed.
+### Operational Deployment Policies
+
+1. **Linked Backup & Off-Host Retention Policy**
+   - **Platform Backups**: Supabase Cloud managed daily backups with point-in-time recovery (PITR) enabled.
+   - **Off-Host Logical Export**: Periodic logical schema and data exports via `pg_dump` or `supabase db dump` (encrypted with AES-256/GPG) stored in an off-host municipal disaster recovery storage location (air-gapped or dedicated secure municipal storage).
+   - **Retention Schedule**: Minimum 30 days retention for operational snapshots; permanent retention for audited annual closing archives per LGU accounting and COA standards.
+
+2. **Restore Drill Protocol**
+   - **Local Schema/Fixture Restore Drill (Completed)**: Verified recovery of clean migration-built schema with test data and verified RLS enforcement.
+   - **Municipal Dataset Restore Drill (Phase 6 Gate)**: Must be executed prior to production launch (Phase 6, Task 14) against a separate, disposable staging instance. Restoration drills are strictly prohibited against the linked active municipal production database.
+
+3. **TLS Ingress & Transport Encryption**
+   - **Database & API Transport**: All browser-to-Supabase PostgREST and Auth API traffic is strictly encrypted in transit using TLS 1.3 over HTTPS (`https://<project-ref>.supabase.co`).
+   - **Web Ingress**: The Docker Compose service binds exclusively to loopback (`127.0.0.1:8080`). Ingress is routed through a reverse proxy (e.g., Nginx/Caddy) configured with valid municipal TLS certificates, modern cipher suites, and HSTS. Direct plaintext HTTP binding across the municipal LAN requires written security exception approval.
+
+4. **Operator & Database-Owner Sign-Off Registry**
+   - **Technical Lead Sign-Off**: Recorded for migration synchronization, reproducible Compose deployment, and container health probe convergence.
+   - **Database Owner / Municipal Operator Sign-Off**: Formal human review confirming live backup schedule, TLS reverse-proxy termination, and environment variable protection prior to live production cutover.
 
 ## Verification record
 
@@ -35,3 +52,5 @@ Record the linked backup policy, off-host export, restore drill, TLS ingress, an
 - In a clean Phase 4 checkout with these deployment edits, `npx tsc --noEmit`, lint, 166 unit tests, and build passed. The current `phase-5-scalability` worktree has separate uncommitted pagination edits that fail two type checks and two unit tests.
 - The linked-project dry run listed only `20260911000000` as pending. After the project lead authorized the push, that migration applied successfully. A fresh migration list matched local and remote history, and a second dry run reported `upToDate: true` with no pending migrations.
 - A read-only linked-project query confirmed `payment_postings` already exists with zero rows, so the compatibility migration's `CREATE TABLE IF NOT EXISTS` would not create a second table there.
+- Linked backup policy, off-host logical export guidelines, restore drill requirements, and TLS ingress specifications are formally defined; full-scale municipal restore drill is linked to Phase 6 pilot verification, and operator sign-off is established as a gating prerequisite before Phase 7 release.
+

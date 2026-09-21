@@ -33,8 +33,8 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ stats }) => {
             </div>
             <div>
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Delinquent Arrears</p>
-              <p className="text-xl font-bold text-rose-600">₱{stats.totalDelinquentDebt.toLocaleString()}</p>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">Across {stats.delinquentCount} accounts</p>
+              <p className="text-xl font-bold text-rose-600">{stats.totalDelinquentDebt === null ? '—' : `₱${stats.totalDelinquentDebt.toLocaleString()}`}</p>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">{stats.delinquentCount === null ? 'Exact statutory aggregate pending' : `Across ${stats.delinquentCount} accounts`}</p>
             </div>
           </CardContent>
         </Card>
@@ -46,7 +46,7 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ stats }) => {
             </div>
             <div>
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Clearance Eligible</p>
-              <p className="text-xl font-bold text-slate-800">{stats.clearedCount.toLocaleString()}</p>
+              <p className="text-xl font-bold text-slate-800">{stats.clearedCount === null ? '—' : stats.clearedCount.toLocaleString()}</p>
               <p className="text-xs text-emerald-700 font-medium mt-0.5">Based on verified records</p>
             </div>
           </CardContent>

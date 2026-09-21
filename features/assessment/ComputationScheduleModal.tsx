@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle2, FileSpreadsheet, ShieldCheck, Upload } from 'lucide-react';
 import { api } from '@/services/api';
 import type { ComputationScheduleVersion, User } from '@/types';
-import { parseComputationWorkbook } from '@/utils/computationWorkbook';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import PasswordConfirmationModal from '@/features/auth/PasswordConfirmationModal';
@@ -61,6 +60,7 @@ export default function ComputationScheduleModal({ isOpen, onClose, currentUser 
     if (!selected) return;
     try {
       const bytes = await selected.arrayBuffer();
+      const { parseComputationWorkbook } = await import('@/utils/computationWorkbook');
       const workbook = parseComputationWorkbook(bytes, selected.name);
       const rows = workbook.sheets.flatMap((sheet) => sheet.rows.map((row) => ({
         periodLabel: row.periodLabel,

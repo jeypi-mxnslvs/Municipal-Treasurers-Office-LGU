@@ -1,21 +1,15 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { User as SupabaseAuthUser } from '@supabase/supabase-js';
-import { Property, TaxYearRecord, User, DashboardStatsData, TaxSummary } from './types';
+import { Property, PropertyQuery, PropertyPage, TaxYearRecord, User, DashboardStatsData, TaxSummary } from './types';
 import { api } from './services/api';
 import Header from './components/Header';
 import { BreakdownAlertModal } from '@/components/common/BreakdownAlertModal';
 import type { AlertSeverity, FieldFailureDetail } from '@/components/common/BreakdownAlertModal';
 import { useToast } from '@/components/common/Toast';
-import { LoginPage, UserManagementModal, PasswordConfirmationModal } from '@/features/auth';
-import SystemMaintenanceModal from '@/features/auth/SystemMaintenanceModal';
+import { LoginPage, PasswordConfirmationModal } from '@/features/auth';
 import { DashboardStats } from '@/features/dashboard';
-import { DashboardTable, PropertyCard, RptarModal, BulkImportModal } from '@/features/properties';
-import { DelinquencyTable } from '@/features/assessment';
-import ComputationScheduleModal from '@/features/assessment/ComputationScheduleModal';
-import VerifyPeriodModal from '@/features/assessment/VerifyPeriodModal';
+import { DashboardTable, PropertyCard } from '@/features/properties';
 import type { VerificationModalValue } from '@/features/assessment/VerifyPeriodModal';
-import { AuditLogModal } from '@/features/audit';
-import { NoticeOfDelinquencyModal, TaxClearanceModal } from '@/features/reports';
 import { Printer, ArrowLeft, CheckCircle2, ShieldCheck, CheckCircle, RefreshCw, FileText, AlertTriangle } from 'lucide-react';
 import { supabase } from './services/supabase';
 import { mapSupabaseUser, MAX_SESSION_AGE_MS, sessionWithinMaximumAge } from './services/supabaseSession';
@@ -25,6 +19,16 @@ import type { PropertyPeriodProjection } from './utils/periodProjection';
 import { auditPropertyForVerification } from './utils/validationPipeline';
 
 const DEFAULT_SESSION_TIMEOUT_MS = 15 * 60 * 1000;
+const DelinquencyTable = React.lazy(() => import('@/features/assessment/DelinquencyTable'));
+const RptarModal = React.lazy(() => import('@/features/properties/RptarModal'));
+const BulkImportModal = React.lazy(() => import('@/features/properties/BulkImportModal'));
+const ComputationScheduleModal = React.lazy(() => import('@/features/assessment/ComputationScheduleModal'));
+const VerifyPeriodModal = React.lazy(() => import('@/features/assessment/VerifyPeriodModal'));
+const UserManagementModal = React.lazy(() => import('@/features/auth/UserManagementModal'));
+const SystemMaintenanceModal = React.lazy(() => import('@/features/auth/SystemMaintenanceModal'));
+const AuditLogModal = React.lazy(() => import('@/features/audit/AuditLogModal'));
+const NoticeOfDelinquencyModal = React.lazy(() => import('@/features/reports/NoticeOfDelinquencyModal').then(m => ({ default: m.NoticeOfDelinquencyModal })));
+const TaxClearanceModal = React.lazy(() => import('@/features/reports/TaxClearanceModal').then(m => ({ default: m.TaxClearanceModal })));
 
 const App: React.FC = () => {
   // Authentication State
@@ -35,7 +39,13 @@ const App: React.FC = () => {
   const [view, setView] = useState<'dashboard' | 'posting'>('dashboard');
   const [properties, setProperties] = useState<Property[]>([]);
   const [stats, setStats] = useState<DashboardStatsData | null>(null);
-  const [, setIsLoading] = useState(false);
+  const [statsError, setStatsError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [listError, setListError] = useState<string | null>(null);
+  const [propertyQuery, setPropertyQuery] = useState<PropertyQuery>({ page: 1, pageSize: 25 });
+  const [propertyPage, setPropertyPage] = useState<PropertyPage>({ items: [], total: 0, page: 1, pageSize: 25, hasNextPage: false });
+  const [revision, setRevision] = useState(0);
+  const [statsRevision, setStatsRevision] = useState(0);
 
   // Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -60,6 +70,11 @@ const App: React.FC = () => {
   const [periodProjection, setPeriodProjection] = useState<PropertyPeriodProjection>();
   const [isVerifyPeriodModalOpen, setIsVerifyPeriodModalOpen] = useState(false);
   const [noticeProperties, setNoticeProperties] = useState<Property[]>([]);
+  const [noticeBatchPage, setNoticeBatchPage] = useState<number | null>(null);
+  const [noticeBatchTotal, setNoticeBatchTotal] = useState(0);
+  const [noticeBatchHasNext, setNoticeBatchHasNext] = useState(false);
+  const [noticePageLoading, setNoticePageLoading] = useState(false);
+  const [noticeInitialIndex, setNoticeInitialIndex] = useState(0);
   const [activeComputationSchedule, setActiveComputationSchedule] = useState<{
     versionId?: number;
     authorityReference?: string;
@@ -106,35 +121,58 @@ const App: React.FC = () => {
   const [isProcessingClearance, setIsProcessingClearance] = useState(false);
 
   // Load properties and dashboard stats from API
-  const loadData = useCallback(async (silent = false) => {
-    if (!currentUser) return;
-    if (!silent) setIsLoading(true);
-    try {
-      const [propsData, statsData] = await Promise.all([
-        api.getProperties(),
-        api.getDashboardStats()
-      ]);
-      setProperties(propsData);
-      setStats(statsData);
-    } catch (err) {
-      console.error('Error loading data:', err);
-    } finally {
-      if (!silent) setIsLoading(false);
-    }
-  }, [currentUser]);
+  const loadData = useCallback((_silent = false) => {
+    setRevision(value => value + 1);
+    setStatsRevision(value => value + 1);
+  }, []);
 
   useEffect(() => {
-    if (currentUser) {
-      loadData();
-    }
-  }, [currentUser, loadData]);
+    if (!currentUser) return;
+    const controller = new AbortController();
+    setIsLoading(true);
+    setListError(null);
+    void api.getProperties({ ...propertyQuery, signal: controller.signal }).then(result => {
+      if (!controller.signal.aborted) {
+        setPropertyPage(result);
+        setProperties(result.items);
+      }
+    }).catch(error => {
+      if (!controller.signal.aborted) setListError(error instanceof Error ? error.message : 'Request failed');
+    }).finally(() => {
+      if (!controller.signal.aborted) setIsLoading(false);
+    });
+    return () => controller.abort();
+  }, [currentUser, propertyQuery, revision]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    let active = true;
+    void api.getDashboardStats().then(result => {
+      if (active) { setStats(result); setStatsError(null); }
+    }).catch(error => {
+      if (active) setStatsError(error instanceof Error ? error.message : 'Dashboard counts unavailable.');
+    });
+    return () => { active = false; };
+  }, [currentUser, statsRevision]);
 
   // Live Multi-Assessor Background Synchronization via Realtime WebSockets
   useEffect(() => {
     if (!currentUser) return;
 
+    let timer: ReturnType<typeof setTimeout>;
+    let statsTimer: ReturnType<typeof setTimeout>;
     const unsubscribe = api.subscribeToMutations((mutation) => {
-      loadData(true);
+      const propertyChange = /^(CREATED|UPDATED|ARCHIVED|DELETED|IMPORTED|PROPERTY_|BULK_|VALUATION_)/.test(mutation.action);
+      const visible = properties.some(property => property.tdNumber === mutation.tdNumber);
+      const unknown = !mutation.tdNumber || mutation.tdNumber === 'Masterlist' || mutation.action === 'MUTATION';
+      if (propertyChange || visible || unknown) {
+        clearTimeout(timer);
+        timer = setTimeout(() => setRevision(value => value + 1), 400);
+      }
+      if (propertyChange || unknown) {
+        clearTimeout(statsTimer);
+        statsTimer = setTimeout(() => setStatsRevision(value => value + 1), 400);
+      }
       showToast({
         type: 'sync',
         title: `RPTAR record (${mutation.tdNumber || 'Masterlist'}) was updated [${mutation.action}]`,
@@ -144,9 +182,11 @@ const App: React.FC = () => {
     });
 
     return () => {
+      clearTimeout(timer);
+      clearTimeout(statsTimer);
       unsubscribe();
     };
-  }, [currentUser, loadData, showToast]);
+  }, [currentUser, properties, showToast]);
 
   const initialRestoredRef = useRef(false);
 
@@ -240,12 +280,13 @@ const App: React.FC = () => {
     }
     setSelectedProperty(null);
     setView('dashboard');
-    loadData();
-  }, [loadData]);
+    // The current page remains cached until a mutation or filter change.
+  }, []);
 
-  // Restore Statement of Account on page reload / refresh if explicitly viewing a property via URL query
+  // Restore the requested TD even when it is not on the current masterlist page.
   useEffect(() => {
-    if (!currentUser || properties.length === 0 || initialRestoredRef.current) return;
+    if (!currentUser || initialRestoredRef.current) return;
+    initialRestoredRef.current = true;
 
     try {
       const searchParams = new URLSearchParams(window.location.search);
@@ -254,20 +295,15 @@ const App: React.FC = () => {
 
       // Only restore property statement if the URL explicitly specifies a property
       if (urlTd && (urlView === 'posting' || urlView === 'soa' || !urlView)) {
-        const targetProperty = properties.find(
-          (p) => p.tdNumber === urlTd || String(p.id) === urlTd
-        );
-        if (targetProperty) {
-          initialRestoredRef.current = true;
-          handlePostPaymentView(targetProperty);
-          return;
-        }
+        void api.getProperties({ search: urlTd, pageSize: 25 }).then(result => {
+          const target = result.items.find(p => p.tdNumber === urlTd || String(p.id) === urlTd);
+          if (target) void handlePostPaymentView(target);
+        }).catch(error => console.error('Could not restore property:', error));
       }
-      initialRestoredRef.current = true;
     } catch {
       // Non-blocking
     }
-  }, [currentUser, properties, handlePostPaymentView]);
+  }, [currentUser, handlePostPaymentView]);
 
   const handleOpenAddModal = () => {
     setModalInitialData(null);
@@ -282,6 +318,27 @@ const App: React.FC = () => {
   const handleOpenAuditModal = (property: Property | null) => {
     setAuditTargetProperty(property);
     setIsAuditModalOpen(true);
+  };
+
+  const loadNoticePage = async (page: number, backward = false) => {
+    setNoticePageLoading(true);
+    try {
+      const result = await api.getNoticeCandidates(page);
+      if (result.total === 0) {
+        showToast({ type: 'warning', title: 'No notice candidates', message: 'No eligible delinquency records were found.' });
+        return;
+      }
+      setNoticeProperties(result.items);
+      setNoticeInitialIndex(backward ? result.items.length - 1 : 0);
+      setNoticeBatchPage(page);
+      setNoticeBatchTotal(result.total);
+      setNoticeBatchHasNext(result.hasNextPage);
+      setIsNoticeModalOpen(true);
+    } catch (error) {
+      showToast({ type: 'warning', title: 'Notice list unavailable', message: error instanceof Error ? error.message : 'Please retry.' });
+    } finally {
+      setNoticePageLoading(false);
+    }
   };
 
   const handleDelete = (id: string) => {
@@ -617,11 +674,7 @@ const App: React.FC = () => {
         onOpenUserManagement={() => setIsUserManagementModalOpen(true)}
         onOpenComputationSchedules={() => setIsComputationScheduleModalOpen(true)}
         onOpenSystemMaintenance={() => setIsSystemMaintenanceModalOpen(true)}
-        onOpenBatchNotices={() => {
-          const delinquents = properties.filter(p => p.lastPaidYear < 2026 && !p.isShellRecord);
-          setNoticeProperties(delinquents);
-          setIsNoticeModalOpen(true);
-        }}
+        onOpenBatchNotices={() => void loadNoticePage(1)}
       />
 
       {/* Breakdown Alert Modal — replaces all window.alert() calls */}
@@ -641,11 +694,21 @@ const App: React.FC = () => {
         {view === 'dashboard' ? (
           <div>
             {/* Dashboard KPI Summary */}
+            {statsError && <p role="alert" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+              {stats ? 'Showing last loaded counts. ' : ''}Dashboard counts unavailable: {statsError}{' '}
+              <button type="button" className="underline font-semibold" onClick={() => setStatsRevision(value => value + 1)}>Retry</button>
+            </p>}
             <DashboardStats stats={stats} />
 
             {/* Masterlist Table */}
             <DashboardTable 
               properties={properties} 
+              page={propertyPage}
+              query={propertyQuery}
+              onQueryChange={setPropertyQuery}
+              isLoading={isLoading}
+              error={listError}
+              onRetry={() => loadData()}
               currentUser={currentUser}
               onSelectProperty={handlePostPaymentView}
               onAddProperty={handleOpenAddModal}
@@ -687,6 +750,8 @@ const App: React.FC = () => {
 
                 <button 
                   onClick={() => {
+                    setNoticeBatchPage(null);
+                    setNoticeInitialIndex(0);
                     setNoticeProperties(selectedProperty ? [selectedProperty] : []);
                     setIsNoticeModalOpen(true);
                   }}
@@ -818,7 +883,7 @@ const App: React.FC = () => {
 
                 {/* Full-Width Statement of Account (SOA) Table */}
                 <div className="w-full">
-                  <DelinquencyTable 
+                  <React.Suspense fallback={<p role="status">Loading statement…</p>}><DelinquencyTable
                     records={taxRecords} 
                     completedRecords={completedTaxRecords}
                     summary={taxSummary} 
@@ -827,7 +892,7 @@ const App: React.FC = () => {
                     property={selectedProperty}
                     currentUser={currentUser}
                     onSelectionChange={handleSelectionChange}
-                  />
+                  /></React.Suspense>
                 </div>
               </div>
             )}
@@ -835,7 +900,9 @@ const App: React.FC = () => {
         )}
       </main>
 
+      <React.Suspense fallback={<p role="status" className="sr-only">Loading dialog…</p>}>
       {/* RPTAR Property Form Modal */}
+      {isModalOpen && (
       <RptarModal 
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
@@ -843,53 +910,53 @@ const App: React.FC = () => {
         initialData={modalInitialData}
         currentUser={currentUser || undefined}
       />
+      )}
 
       {/* Official Tax Clearance Certificate Modal */}
-      <TaxClearanceModal
+      {isTaxClearanceModalOpen && <TaxClearanceModal
         isOpen={isTaxClearanceModalOpen}
         onClose={() => setIsTaxClearanceModalOpen(false)}
         property={selectedProperty}
         currentUser={currentUser}
         eligibility={clearanceEligibility}
-      />
+      />}
 
-      <VerifyPeriodModal
+      {isVerifyPeriodModalOpen && <VerifyPeriodModal
         isOpen={isVerifyPeriodModalOpen}
         records={selectedRecords}
         onClose={() => setIsVerifyPeriodModalOpen(false)}
         onSubmit={handleSubmitVerification}
         isSubmitting={isProcessingClearance}
-      />
+      />}
 
       {/* Admin User Management Modal */}
-      <UserManagementModal
+      {isUserManagementModalOpen && <UserManagementModal
         isOpen={isUserManagementModalOpen}
         onClose={() => setIsUserManagementModalOpen(false)}
         currentUser={currentUser}
-      />
-      <SystemMaintenanceModal isOpen={isSystemMaintenanceModalOpen} onClose={() => setIsSystemMaintenanceModalOpen(false)} currentUser={currentUser} />
+      />}
+      {isSystemMaintenanceModalOpen && <SystemMaintenanceModal isOpen={isSystemMaintenanceModalOpen} onClose={() => setIsSystemMaintenanceModalOpen(false)} currentUser={currentUser} />}
 
-      <ComputationScheduleModal
+      {isComputationScheduleModalOpen && <ComputationScheduleModal
         isOpen={isComputationScheduleModalOpen}
         onClose={() => setIsComputationScheduleModalOpen(false)}
         currentUser={currentUser}
-      />
+      />}
 
       {/* RPTAR Audit Trail Modal */}
-      <AuditLogModal
+      {isAuditModalOpen && <AuditLogModal
         isOpen={isAuditModalOpen}
         onClose={() => { setIsAuditModalOpen(false); setAuditTargetProperty(null); }}
         property={auditTargetProperty}
-      />
+      />}
 
       {/* Bulk CSV Masterlist Importer & Exporter Modal */}
-      <BulkImportModal
+      {isBulkModalOpen && <BulkImportModal
         isOpen={isBulkModalOpen}
         onClose={() => setIsBulkModalOpen(false)}
         onImportComplete={() => loadData()}
-        properties={properties}
         currentUser={currentUser}
-      />
+      />}
 
       {/* Destructive Action Password Re-authentication Modal */}
       <PasswordConfirmationModal
@@ -903,15 +970,25 @@ const App: React.FC = () => {
       />
 
       {/* Notice of Delinquency Demand Modal (RA 7160 Sec. 254) */}
-      <NoticeOfDelinquencyModal
+      {isNoticeModalOpen && <NoticeOfDelinquencyModal
+        key={noticeBatchPage ?? 'single'}
         isOpen={isNoticeModalOpen}
         onClose={() => {
           setIsNoticeModalOpen(false);
           setNoticeProperties([]);
+          setNoticeBatchPage(null);
         }}
         properties={noticeProperties.length > 0 ? noticeProperties : (selectedProperty ? [selectedProperty] : [])}
         periodProjection={noticeProperties.length === 0 ? periodProjection : undefined}
-      />
+        initialIndex={noticeInitialIndex}
+        page={noticeBatchPage || 1}
+        total={noticeBatchPage ? noticeBatchTotal : undefined}
+        hasNextPage={noticeBatchHasNext}
+        isLoadingPage={noticePageLoading}
+        onNextPage={() => void loadNoticePage((noticeBatchPage || 1) + 1)}
+        onPreviousPage={() => void loadNoticePage((noticeBatchPage || 1) - 1, true)}
+      />}
+      </React.Suspense>
     </div>
   );
 };

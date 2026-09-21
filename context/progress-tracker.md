@@ -107,6 +107,14 @@ Phase 1 verification:
 - Fresh Admin and Assessor test logins returned trusted roles. Anonymous data access and Assessor access to the legacy user table, schedule activation, and property archiving were denied.
 - The project lead confirmed login rate limiting, failed-login audit, credential rotation, and human security review. These operational settings were not independently inspected by the agent.
 
+Phase 4 verification & operational deployment record:
+
+- Clean disposable Supabase test applied all 23 migrations through `20261005` (including `20260911000000`).
+- Local backup SHA-256 `1a3281b046cb727a3f9874ee5139d1bf35d84a139db831c9d904bfea9941bd71` restored into clean migration-built schema with RLS enforcement verified.
+- Web-only Docker Compose service verified on loopback (`127.0.0.1:8080`) with IPv4 health checks and zero source-controlled secrets.
+- Linked Supabase push of `20260911000000` completed with project lead authorization; dry run confirmed clean up-to-date status.
+- Operational policies documented in `docs/PHASE4_DEPLOYMENT_CHECKS.md` for linked backup retention, off-host logical export, pre-pilot Phase 6 municipal restore drill, TLS 1.3/HTTPS ingress, and database-owner sign-off criteria before production release.
+
 Standard checks:
 
 ```bash

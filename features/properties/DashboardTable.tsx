@@ -1,13 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Property, User } from '@/types';
+import React, { useState, useEffect } from 'react';
+import { Property, PropertyQuery, PropertyPage, User } from '@/types';
 import { BARANGAYS, CURRENT_YEAR } from '@/constants';
 import { calculateTaxLiability } from '@/utils/taxLogic';
 import { getPropertyCompleteness } from '@/utils/propertyCompleteness';
 import {
-  sortPropertiesWithManualFirst,
   isManualProperty,
   PropertySortField,
-  PropertySortDirection,
 } from '@/utils/encoderAttribution';
 import {
   Table,
@@ -46,6 +44,12 @@ import {
 
 interface DashboardTableProps {
   properties: Property[];
+  page: PropertyPage;
+  query: PropertyQuery;
+  onQueryChange: (query: PropertyQuery) => void;
+  isLoading: boolean;
+  error: string | null;
+  onRetry: () => void;
   currentUser: User;
   onSelectProperty: (property: Property) => void;
   onAddProperty: () => void;
@@ -54,8 +58,6 @@ interface DashboardTableProps {
   onViewAudit?: (property: Property) => void;
   onOpenBulkModal?: () => void;
 }
-
-const DEFAULT_PAGE_SIZE = 25;
 
 const getPropertyStatus = (property: Property): 'CLEARED' | 'PARTIAL' | 'DELINQUENT' => {
   if (getPropertyCompleteness(property).isShellRecord) return 'DELINQUENT';
@@ -78,6 +80,12 @@ const getPropertyStatus = (property: Property): 'CLEARED' | 'PARTIAL' | 'DELINQU
 
 const DashboardTable: React.FC<DashboardTableProps> = ({
   properties,
+  page,
+  query,
+  onQueryChange,
+  isLoading,
+  error,
+  onRetry,
   currentUser,
   onSelectProperty,
   onAddProperty,
@@ -87,23 +95,20 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
   onOpenBulkModal,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [selectedBarangay, setSelectedBarangay] = useState<string>('All');
-  const [selectedStatus, setSelectedStatus] = useState<string>('All');
-  const [showArchived, setShowArchived] = useState(false);
-  const [sortField, setSortField] = useState<PropertySortField>('ownerName');
-  const [sortDirection, setSortDirection] = useState<PropertySortDirection>('asc');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const sortField = query.sort || 'ownerName';
+  const sortDirection = query.direction || 'asc';
+  const currentPage = query.page || 1;
+  const pageSize = query.pageSize || 25;
+  const showArchived = query.disposition === 'ARCHIVED';
+  const totalPages = Math.max(1, Math.ceil(page.total / pageSize));
+  const startIndex = (currentPage - 1) * pageSize;
 
   const handleSort = (field: PropertySortField) => {
     if (sortField === field) {
-      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+      onQueryChange({ ...query, direction: sortDirection === 'asc' ? 'desc' : 'asc', page: 1 });
     } else {
-      setSortField(field);
-      setSortDirection('asc');
+      onQueryChange({ ...query, sort: field, direction: 'asc', page: 1 });
     }
-    setCurrentPage(1);
   };
 
   const renderSortIcon = (field: PropertySortField) => {
@@ -119,61 +124,17 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
     );
   };
 
-  // 300ms search input debounce to prevent UI freezes on large parcel masterlists
+  // Debounce server search, not local filtering.
   useEffect(() => {
     const timer = setTimeout(() => {
-      setDebouncedSearch(searchTerm);
-      setCurrentPage(1);
+      if (searchTerm !== (query.search || '')) onQueryChange({ ...query, search: searchTerm, page: 1 });
     }, 300);
     return () => clearTimeout(timer);
-  }, [searchTerm]);
-
-  const filteredProperties = useMemo(() => {
-    const term = debouncedSearch.trim().toLowerCase();
-    const matched = properties.filter((p) => {
-      const isArchived = p.disposition === 'ARCHIVED' || p.disposition === 'CANCELLED' || p.disposition === 'VOIDED' || p.disposition === 'SUPERSEDED';
-      if (isArchived !== showArchived) return false;
-      const matchesSearch =
-        !term ||
-        p.ownerName.toLowerCase().includes(term) ||
-        p.tdNumber.toLowerCase().includes(term) ||
-        p.address.toLowerCase().includes(term) ||
-        p.barangay.toLowerCase().includes(term) ||
-        p.propertyClass.toLowerCase().includes(term) ||
-        (p.previousTdNumber && p.previousTdNumber.toLowerCase().includes(term)) ||
-        (p.pin && p.pin.toLowerCase().includes(term)) ||
-        (p.encoderLabel && p.encoderLabel.toLowerCase().includes(term));
-
-      const matchesBarangay =
-        selectedBarangay === 'All' || p.barangay === selectedBarangay;
-
-      const propertyStatus = getPropertyStatus(p);
-      const matchesStatus =
-        selectedStatus === 'All' || propertyStatus === selectedStatus;
-
-      return matchesSearch && matchesBarangay && matchesStatus;
-    });
-
-    return sortPropertiesWithManualFirst(matched, {
-      field: sortField,
-      direction: sortDirection,
-    });
-  }, [properties, debouncedSearch, selectedBarangay, selectedStatus, sortField, sortDirection, showArchived]);
-
-  // Pagination Math
-  const totalPages = Math.ceil(filteredProperties.length / pageSize) || 1;
-  const startIndex = (currentPage - 1) * pageSize;
-  const paginatedProperties = useMemo(() => {
-    return filteredProperties.slice(startIndex, startIndex + pageSize);
-  }, [filteredProperties, startIndex, pageSize]);
-
-  useEffect(() => {
-    if (currentPage > totalPages) setCurrentPage(totalPages);
-  }, [currentPage, totalPages]);
+  }, [searchTerm, query, onQueryChange]);
 
   const handlePageChange = (page: number) => {
     if (page >= 1 && page <= totalPages) {
-      setCurrentPage(page);
+      onQueryChange({ ...query, page });
     }
   };
 
@@ -189,9 +150,9 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-lg font-bold text-slate-800">RPTAR Property Masterlist</h2>
             <Badge variant="secondary" className="font-semibold text-xs text-emerald-800 bg-emerald-100/90 border border-emerald-200/70">
-              {filteredProperties.length} of {properties.length} Accounts
+              {page.total} Accounts
             </Badge>
-            <button type="button" onClick={() => { setShowArchived((value) => !value); setCurrentPage(1); }} className={`text-[11px] rounded-md border px-2 py-1 font-semibold ${showArchived ? 'bg-slate-700 text-white border-slate-700' : 'bg-white text-slate-600 border-slate-300'}`}>
+            <button type="button" onClick={() => onQueryChange({ ...query, disposition: showArchived ? 'ACTIVE' : 'ARCHIVED', page: 1 })} className={`text-[11px] rounded-md border px-2 py-1 font-semibold ${showArchived ? 'bg-slate-700 text-white border-slate-700' : 'bg-white text-slate-600 border-slate-300'}`}>
               {showArchived ? 'Showing Archived' : 'Show Archived'}
             </button>
             <Badge
@@ -223,10 +184,9 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
               <Filter className="h-3.5 w-3.5 text-slate-400" />
             </div>
             <select
-              value={selectedBarangay}
+              value={query.barangay || 'All'}
               onChange={(e) => {
-                setSelectedBarangay(e.target.value);
-                setCurrentPage(1);
+                onQueryChange({ ...query, barangay: e.target.value, page: 1 });
               }}
               className="flex h-9 w-full sm:w-48 rounded-md border border-input bg-white pl-8 pr-4 py-1 text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring font-medium text-slate-800"
             >
@@ -238,21 +198,6 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
               ))}
             </select>
           </div>
-
-          {/* Status Filter */}
-          <select
-            value={selectedStatus}
-            onChange={(e) => {
-              setSelectedStatus(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="flex h-9 w-full sm:w-32 rounded-md border border-input bg-white px-3 py-1 text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring font-medium text-slate-800"
-          >
-            <option value="All">All Statuses</option>
-            <option value="CLEARED">Cleared</option>
-            <option value="PARTIAL">Partial (Current)</option>
-            <option value="DELINQUENT">Delinquent</option>
-          </select>
 
           {/* Search Bar */}
           <div className="relative flex-1 sm:w-56">
@@ -266,7 +211,6 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
               value={searchTerm}
               onChange={(e) => {
                 setSearchTerm(e.target.value);
-                setCurrentPage(1);
               }}
             />
           </div>
@@ -298,6 +242,12 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
           )}
         </div>
       </div>
+
+      {(isLoading || error) && (
+        <div role="status" className="px-5 py-2 text-xs bg-amber-50 text-amber-900 border-b border-amber-200">
+          {isLoading ? 'Loading current masterlist page…' : <>Showing last loaded page; refresh failed: {error} <button type="button" onClick={onRetry} className="underline font-bold">Retry</button></>}
+        </div>
+      )}
 
       {/* Table Body */}
       <div className="overflow-x-auto overflow-y-visible flex-1">
@@ -339,13 +289,13 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
                 Assessed Value
               </TableHead>
               <TableHead className="w-[18%] min-w-[150px] text-right pr-6 py-3 font-semibold">
-                Payment Status
+                Tax Baseline
               </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody className="bg-white text-xs">
-            {paginatedProperties.length > 0 ? (
-              paginatedProperties.map((property) => {
+            {properties.length > 0 ? (
+              properties.map((property) => {
                 const debt =
                   property.totalDebt !== undefined
                     ? property.totalDebt
@@ -421,9 +371,9 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
                           <Badge
                             variant="outline"
                             className="text-[9px] px-1.5 py-0 bg-emerald-50 text-emerald-800 border-emerald-300 font-bold"
-                            title="Manually Encoded Record — Priority #1 in Masterlist"
+                            title="Manually Encoded Record"
                           >
-                            Manual #1
+                            Manual
                           </Badge>
                         )}
                         {property.isShellRecord && (
@@ -458,24 +408,24 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
                     <TableCell className="text-right pr-6 py-3.5">
                       {status === 'CLEARED' ? (
                         <Badge variant="success" className="text-[11px] font-bold">
-                          Cleared (2026)
+                          Recorded paid through 2026
                         </Badge>
                       ) : status === 'PARTIAL' ? (
                         <div className="inline-flex flex-col items-end gap-0.5">
                           <span className="text-xs font-bold text-amber-600 font-mono">
-                            ₱{debt.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            Est. ₱{debt.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </span>
                           <Badge variant="warning" className="text-[10px] py-0">
-                            Current Year Partial
+                            Current-Year Baseline
                           </Badge>
                         </div>
                       ) : (
                         <div className="inline-flex flex-col items-end gap-0.5">
                           <span className="text-xs font-bold text-rose-600 font-mono">
-                            ₱{debt.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            Est. ₱{debt.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </span>
                           <Badge variant="destructive" className="text-[10px] py-0">
-                            Delinquent
+                            Review Arrears
                           </Badge>
                         </div>
                       )}
@@ -486,7 +436,7 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
             ) : (
               <TableRow>
                 <TableCell colSpan={6} className="py-12 text-center text-slate-400 text-xs italic">
-                  No property records found matching your filters.
+                  {isLoading ? 'Loading properties…' : error ? <>Unable to load properties: {error} <button type="button" onClick={onRetry} className="underline">Retry</button></> : 'No property records found matching your filters.'}
                 </TableCell>
               </TableRow>
             )}
@@ -500,13 +450,13 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
           <div>
             Showing{' '}
             <span className="font-bold text-slate-800">
-              {filteredProperties.length > 0 ? startIndex + 1 : 0}
+              {page.total > 0 ? startIndex + 1 : 0}
             </span>{' '}
             to{' '}
             <span className="font-bold text-slate-800">
-              {Math.min(startIndex + pageSize, filteredProperties.length)}
+              {Math.min(startIndex + pageSize, page.total)}
             </span>{' '}
-            of <span className="font-bold text-slate-800">{filteredProperties.length}</span> properties
+            of <span className="font-bold text-slate-800">{page.total}</span> properties
           </div>
 
           <div className="flex items-center gap-1.5 text-xs text-slate-500">
@@ -514,8 +464,7 @@ const DashboardTable: React.FC<DashboardTableProps> = ({
             <select
               value={pageSize}
               onChange={(e) => {
-                setPageSize(Number(e.target.value));
-                setCurrentPage(1);
+                onQueryChange({ ...query, pageSize: Number(e.target.value), page: 1 });
               }}
               className="bg-white border border-slate-200 rounded px-1.5 py-0.5 text-xs font-semibold text-slate-700 cursor-pointer focus:outline-none focus:ring-1 focus:ring-emerald-600"
             >

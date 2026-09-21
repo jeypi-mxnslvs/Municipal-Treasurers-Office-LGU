@@ -1,6 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { Property, TaxYearRecord } from '@/types';
+import type { CalculationResult } from '@/types';
+import { api } from '@/services/api';
 import { calculateTaxLiability } from '@/utils/taxLogic';
+import { projectPropertyPeriods } from '@/utils/periodProjection';
 import type { PropertyPeriodProjection } from '@/utils/periodProjection';
 import {
   Dialog,
@@ -23,6 +26,12 @@ interface NoticeOfDelinquencyModalProps {
   properties: Property[];
   initialIndex?: number;
   periodProjection?: PropertyPeriodProjection;
+  page?: number;
+  total?: number;
+  hasNextPage?: boolean;
+  onNextPage?: () => void;
+  onPreviousPage?: () => void;
+  isLoadingPage?: boolean;
 }
 
 const formatCurrency = (val: number | undefined): string => {
@@ -36,8 +45,21 @@ export const NoticeOfDelinquencyModal: React.FC<NoticeOfDelinquencyModalProps> =
   properties,
   initialIndex = 0,
   periodProjection,
+  page = 1,
+  total,
+  hasNextPage = false,
+  onNextPage,
+  onPreviousPage,
+  isLoadingPage = false,
 }) => {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const [loadedNotice, setLoadedNotice] = useState<{
+    propertyId: string;
+    assessment: CalculationResult;
+    projection: PropertyPeriodProjection;
+  } | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
 
   // Sync index if initialIndex changes
   React.useEffect(() => {
@@ -46,15 +68,46 @@ export const NoticeOfDelinquencyModal: React.FC<NoticeOfDelinquencyModalProps> =
 
   const activeProperty = properties[currentIndex] || null;
 
+  React.useEffect(() => {
+    if (!isOpen || !activeProperty || periodProjection) return;
+    let current = true;
+    void Promise.all([
+      api.getPropertyAssessment(activeProperty.id, activeProperty),
+      api.getPropertyVerificationEvidence(activeProperty.id, activeProperty, true),
+      api.getPeriodVerifications(activeProperty.id, true),
+    ]).then(([assessment, completed, verifications]) => {
+      if (!current) return;
+      if (!assessment.computationSchedule?.versionId || assessment.computationSchedule.unavailable) {
+        throw new Error('No active approved computation schedule is available for this notice.');
+      }
+      const projection = projectPropertyPeriods(activeProperty, verifications, {
+        splitCurrentYearQuarters: true,
+        completedPeriodLabels: completed.map(record => record.periodLabel).filter(Boolean) as string[],
+        computationSchedule: assessment.computationSchedule,
+        penaltyScheduleOverride: assessment.computationSchedule?.penaltyRates,
+        basicTaxScheduleOverride: assessment.computationSchedule?.basicTaxRates,
+        sefTaxScheduleOverride: assessment.computationSchedule?.sefTaxRates,
+      });
+      setLoadedNotice({ propertyId: activeProperty.id, assessment, projection });
+      setLoadError(null);
+    }).catch(error => {
+      if (current) setLoadError(error instanceof Error ? error.message : 'Unable to load verification evidence.');
+    });
+    return () => { current = false; };
+  }, [isOpen, activeProperty, periodProjection, retry]);
+
+  const readyNotice = loadedNotice?.propertyId === activeProperty?.id ? loadedNotice : null;
+  const effectiveProjection = periodProjection || readyNotice?.projection;
+
   // Calculate delinquent rolls for active property
   const assessmentResult = useMemo(() => {
     if (!activeProperty) return null;
-    return calculateTaxLiability(activeProperty);
-  }, [activeProperty]);
+    return periodProjection ? calculateTaxLiability(activeProperty) : readyNotice?.assessment || null;
+  }, [activeProperty, periodProjection, readyNotice]);
 
   const projectedByKey = useMemo(
-    () => new Map((periodProjection?.periods || []).map(period => [period.periodKey, period])),
-    [periodProjection]
+    () => new Map((effectiveProjection?.periods || []).map(period => [period.periodKey, period])),
+    [effectiveProjection]
   );
 
   // Aggregate itemized table records (Single Fund 1% base per SSOT Section 2.9)
@@ -149,6 +202,23 @@ export const NoticeOfDelinquencyModal: React.FC<NoticeOfDelinquencyModalProps> =
 
   if (!isOpen || !activeProperty) return null;
 
+  if (!assessmentResult || !effectiveProjection) return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-md bg-white p-6 text-sm text-slate-800">
+        {loadError ? <div role="alert">Notice unavailable: {loadError} <Button type="button" onClick={() => { setLoadError(null); setRetry(value => value + 1); }}>Retry</Button></div>
+          : <p role="status">Loading the selected property’s verified periods and approved assessment…</p>}
+      </DialogContent>
+    </Dialog>
+  );
+
+  if (effectiveProjection.isShellRecord) return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-md bg-white p-6 text-sm text-amber-900" role="alert">
+        Notice unavailable: this parcel requires assessor verification of its PIN and assessed valuation.
+      </DialogContent>
+    </Dialog>
+  );
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto p-0 border border-slate-300 shadow-2xl bg-white text-slate-900">
@@ -162,27 +232,35 @@ export const NoticeOfDelinquencyModal: React.FC<NoticeOfDelinquencyModalProps> =
           </div>
 
           <div className="flex items-center gap-2">
-            {properties.length > 1 && (
+            {(properties.length > 1 || total !== undefined) && (
               <div className="flex items-center gap-1 mr-2 text-xs text-slate-400">
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  disabled={currentIndex === 0}
-                  onClick={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
+                  disabled={isLoadingPage || (currentIndex === 0 && page === 1)}
+                  onClick={() => {
+                    setLoadedNotice(null);
+                    if (currentIndex === 0) onPreviousPage?.();
+                    else setCurrentIndex(prev => prev - 1);
+                  }}
                   className="h-8 px-2 bg-slate-800 border-slate-700 text-white hover:bg-slate-700"
                 >
                   <ChevronLeft size={14} />
                 </Button>
                 <span className="px-2">
-                  {currentIndex + 1} of {properties.length}
+                  {total === undefined ? currentIndex + 1 : (page - 1) * 25 + currentIndex + 1} of {total ?? properties.length}
                 </span>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  disabled={currentIndex === properties.length - 1}
-                  onClick={() => setCurrentIndex((prev) => Math.min(properties.length - 1, prev + 1))}
+                  disabled={isLoadingPage || (currentIndex === properties.length - 1 && !hasNextPage)}
+                  onClick={() => {
+                    setLoadedNotice(null);
+                    if (currentIndex === properties.length - 1) onNextPage?.();
+                    else setCurrentIndex(prev => prev + 1);
+                  }}
                   className="h-8 px-2 bg-slate-800 border-slate-700 text-white hover:bg-slate-700"
                 >
                   <ChevronRight size={14} />

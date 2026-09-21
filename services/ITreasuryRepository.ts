@@ -33,8 +33,10 @@ import {
 export interface ITreasuryRepository {
   // 1. Properties & Assessment
   getProperties(query?: PropertyQuery): Promise<PropertyPage>;
+  getNoticeCandidates(page: number): Promise<PropertyPage>;
+  lookupPropertiesByTd(tdNumbers: string[]): Promise<Property[]>;
   getPropertyAssessment(propertyId: string, fallbackProp?: Property, customSettings?: MunicipalTaxSettings): Promise<CalculationResult>;
-  getPropertyVerificationEvidence(propertyId: string | number, property?: Property): Promise<TaxYearRecord[]>;
+  getPropertyVerificationEvidence(propertyId: string | number, property?: Property, strict?: boolean): Promise<TaxYearRecord[]>;
   saveProperty(propertyData: Partial<Property>): Promise<Property>;
   saveHistoricalAssessedValue(payload: {
     propertyId: string | number;
@@ -103,7 +105,7 @@ export interface ITreasuryRepository {
     stationId?: string;
   }): Promise<void>;
 
-  getPeriodVerifications(propertyId: string | number): Promise<DelinquencyPeriodVerification[]>;
+  getPeriodVerifications(propertyId: string | number, strict?: boolean): Promise<DelinquencyPeriodVerification[]>;
 
   // 3. Reporting, Analytics & Live Multi-Assessor Sync
   getDashboardStats(): Promise<DashboardStatsData>;

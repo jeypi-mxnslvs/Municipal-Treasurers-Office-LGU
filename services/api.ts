@@ -52,12 +52,20 @@ export const api = {
     return treasuryRepository.getProperties(query);
   },
 
+  getNoticeCandidates(page: number): Promise<PropertyPage> {
+    return treasuryRepository.getNoticeCandidates(page);
+  },
+
+  lookupPropertiesByTd(tdNumbers: string[]): Promise<Property[]> {
+    return treasuryRepository.lookupPropertiesByTd(tdNumbers);
+  },
+
   getPropertyAssessment(propertyId: string, fallbackProp?: Property, customSettings?: MunicipalTaxSettings): Promise<CalculationResult> {
     return treasuryRepository.getPropertyAssessment(propertyId, fallbackProp, customSettings);
   },
 
-  getPropertyVerificationEvidence(propertyId: string | number, property?: Property): Promise<TaxYearRecord[]> {
-    return treasuryRepository.getPropertyVerificationEvidence(propertyId, property);
+  getPropertyVerificationEvidence(propertyId: string | number, property?: Property, strict?: boolean): Promise<TaxYearRecord[]> {
+    return treasuryRepository.getPropertyVerificationEvidence(propertyId, property, strict);
   },
 
   saveProperty(propertyData: Partial<Property>): Promise<Property> {
@@ -148,8 +156,8 @@ export const api = {
     return treasuryRepository.revertDelinquencyVerification(payload);
   },
 
-  getPeriodVerifications(propertyId: string | number): Promise<DelinquencyPeriodVerification[]> {
-    return treasuryRepository.getPeriodVerifications(propertyId);
+  getPeriodVerifications(propertyId: string | number, strict?: boolean): Promise<DelinquencyPeriodVerification[]> {
+    return treasuryRepository.getPeriodVerifications(propertyId, strict);
   },
 
   // 4. Dashboard Statistics & Live Multi-Assessor Sync

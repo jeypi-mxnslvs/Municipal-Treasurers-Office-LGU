@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Property, User, CsvImportRowState, CsvImportBatch } from '@/types';
-import { parsePropertyWorkbook } from '@/utils/propertyWorkbookParser';
 import { BARANGAYS, PROPERTY_CLASSES, HISTORICAL_BASELINE_YEAR } from '@/constants';
 import { api } from '@/services/api';
 import { mergeEncoderLabel } from '@/utils/encoderAttribution';
@@ -43,7 +42,6 @@ interface BulkImportModalProps {
   isOpen: boolean;
   onClose: () => void;
   onImportComplete: () => void;
-  properties: Property[];
   currentUser: User;
 }
 
@@ -180,7 +178,6 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
   isOpen,
   onClose,
   onImportComplete,
-  properties,
   currentUser,
 }) => {
   const [tab, setTab] = useState<'import' | 'history' | 'export'>('import');
@@ -199,6 +196,7 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
   const [stateFilter, setStateFilter] = useState<string>('ALL');
   const [importBatches, setImportBatches] = useState<CsvImportBatch[]>([]);
   const [isLoadingBatches, setIsLoadingBatches] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [workbookSheets, setWorkbookSheets] = useState<Array<{ name: string; index: number; kind: string; rowCount: number }>>([]);
 
@@ -230,7 +228,7 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
   }, [tab]);
 
   // Parse CSV with "Last Import Wins" Smart Upsert & Row Classification
-  const handleParseCsv = (rawText: string, fileName = 'Import.csv') => {
+  const handleParseCsv = async (rawText: string, fileName = 'Import.csv') => {
     setImportResult(null);
     setUploadedFileName(fileName);
     setWorkbookSheets([]);
@@ -347,6 +345,16 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
       }
     }
 
+    // Review against exact TD matches across the whole roll, never the visible page.
+    let existingByTd: Map<string, Property>;
+    try {
+      const matches = await api.lookupPropertiesByTd(rawParsed.map(row => row.tdNumber).filter(Boolean));
+      existingByTd = new Map(matches.map(property => [property.tdNumber.toUpperCase(), property]));
+    } catch (error) {
+      setParsedRows([]);
+      setImportError(error instanceof Error ? error.message : 'Could not review existing TD records.');
+      return;
+    }
     // Step 2: Classify each row with strict validation and smart upsert logic
     const rows: ParsedRow[] = [];
 
@@ -415,7 +423,7 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
       // Match against existing database properties for Smart Upsert
       let existingProperty: Property | undefined;
       if (!error && state !== 'DUPLICATE_IN_FILE' && upperTd) {
-        existingProperty = properties.find((p) => p.tdNumber.toUpperCase() === upperTd);
+        existingProperty = existingByTd.get(upperTd);
 
         if (existingProperty) {
           // Compare fields to detect diffs
@@ -616,22 +624,27 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
       const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
       setUploadedFileHash(Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join(''));
       try {
+        const { parsePropertyWorkbook } = await import('@/utils/propertyWorkbookParser');
         const parsedWorkbook = parsePropertyWorkbook(await file.arrayBuffer(), file.name, selectedBarangayFilter);
         const blockingIssues = parsedWorkbook.issues.filter((issue) => issue.severity === 'ERROR');
         if (blockingIssues.length > 0) {
           setImportError(`${blockingIssues.length} workbook issue(s) block import. Review source Barangay, headers, and duplicate TD rows.`);
           return;
         }
+        const existing = await api.lookupPropertiesByTd(parsedWorkbook.candidates.map(candidate => candidate.tdNumber));
+        const existingByTd = new Map(existing.map(property => [property.tdNumber.toUpperCase(), property]));
         const rows = parsedWorkbook.candidates.map((candidate) => {
           const missingRequiredField = !candidate.ownerName || !candidate.address || !candidate.propertyClass;
+          const previous = existingByTd.get(candidate.tdNumber.toUpperCase());
           return {
           line: candidate.sourceRow, tdNumber: candidate.tdNumber, previousTdNumber: candidate.previousTdNumber, pin: candidate.pin,
           ownerName: candidate.ownerName, address: candidate.address, barangay: candidate.barangay,
           propertyClass: candidate.propertyClass, lotAreaSqm: Number(candidate.lotAreaSqm.replace(/[,₱$\s]/g, '')) || 0,
           marketValue: Number(candidate.marketValue.replace(/[,₱$\s]/g, '')) || 0, assessedValue: Number(candidate.assessedValue.replace(/[,₱$\s]/g, '')) || 0,
-          lastPaidYear: candidate.lastPaidYear ? Number(candidate.lastPaidYear) : HISTORICAL_BASELINE_YEAR, state: missingRequiredField ? 'ERROR' as CsvImportRowState : 'VALID_NEW' as CsvImportRowState,
+          lastPaidYear: candidate.lastPaidYear ? Number(candidate.lastPaidYear) : HISTORICAL_BASELINE_YEAR, state: missingRequiredField ? 'ERROR' as CsvImportRowState : previous ? 'VALID_UPDATE' as CsvImportRowState : 'VALID_NEW' as CsvImportRowState,
           isShell: !candidate.assessedValue || Number(candidate.assessedValue) <= 0, diffs: [],
-          encoderLabel: currentUser.name, entryType: 'CSV_IMPORT' as const,
+          encoderLabel: mergeEncoderLabel(previous?.encoderLabel, currentUser.name, false), entryType: previous?.entryType || 'CSV_IMPORT' as const,
+          existingProperty: previous,
           error: missingRequiredField ? 'Missing required owner, address, or property class.' : undefined,
           sourceSheet: candidate.sourceSheet,
           sourceSheetIndex: candidate.sourceSheetIndex,
@@ -654,7 +667,7 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
     setUploadedFileHash(Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join(''));
     reader.onload = (event) => {
       const text = event.target?.result as string;
-      handleParseCsv(text, file.name);
+      void handleParseCsv(text, file.name);
     };
     reader.readAsText(file);
   };
@@ -682,10 +695,20 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
     URL.revokeObjectURL(url);
   };
 
-  const handleExportMasterlist = () => {
+  const handleExportMasterlist = async () => {
+    setIsExporting(true);
+    try {
+    const allProperties: Property[] = [];
+    let nextPage = 1;
+    let hasNextPage = true;
+    while (hasNextPage) {
+      const result = await api.getProperties({ page: nextPage++, pageSize: 100 });
+      allProperties.push(...result.items);
+      hasNextPage = result.hasNextPage;
+    }
     const header =
-      'TD_Number,Previous_TD,PIN,Owner_Name,Address,Barangay,Property_Class,Lot_Area_Sqm,Market_Value,Assessed_Value,Last_Paid_Year,Status,Outstanding_Debt,Encoded_By,Entry_Type\n';
-    const rows = properties
+      'TD_Number,Previous_TD,PIN,Owner_Name,Address,Barangay,Property_Class,Lot_Area_Sqm,Market_Value,Assessed_Value,Last_Paid_Year,Encoded_By,Entry_Type\n';
+    const rows = allProperties
       .map((p) => {
         return [
           p.tdNumber,
@@ -699,8 +722,6 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
           p.marketValue || 0,
           p.assessedValue,
           p.lastPaidYear,
-          p.status || 'CLEARED',
-          p.totalDebt || 0,
           p.encoderLabel || '',
           p.entryType || 'CSV_IMPORT',
         ].map(csvEscape).join(',');
@@ -714,6 +735,11 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
     link.download = `Santa_Rosa_RPTAR_Masterlist_${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
     URL.revokeObjectURL(url);
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : 'Masterlist export failed.');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const handleCommitImport = async () => {
@@ -1360,18 +1386,19 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({
               <div className="max-w-md mx-auto space-y-1">
                 <h3 className="font-bold text-slate-900 text-sm">Export Santa Rosa RPTAR Masterlist</h3>
                 <p className="text-slate-500 text-xs">
-                  Generate a complete municipal spreadsheet of all <strong>{properties.length} active parcels</strong>, assessed valuations, last paid years, and delinquent liabilities.
+                  Export active parcels and assessed valuations in bounded pages. Tax liabilities require individual statutory assessment.
                 </p>
               </div>
 
               <div className="pt-3">
                 <Button
                   type="button"
-                  onClick={handleExportMasterlist}
+                  onClick={() => void handleExportMasterlist()}
+                  disabled={isExporting}
                   className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold gap-2 mx-auto shadow-sm"
                 >
                   <Download size={16} />
-                  Download Complete Masterlist (.csv)
+                  {isExporting ? 'Exporting…' : 'Download Complete Masterlist (.csv)'}
                 </Button>
               </div>
             </div>

@@ -21,8 +21,7 @@ import {
 } from '@/types';
 import { calculateTaxLiability as localCalculateTaxLiability } from '@/utils/taxLogic';
 import { mergeEncoderLabel } from '@/utils/encoderAttribution';
-import { getPropertyCompleteness } from '@/utils/propertyCompleteness';
-import { projectPropertyPeriods } from '@/utils/periodProjection';
+import { CURRENT_YEAR } from '@/constants';
 
 const mapPropertyRow = (row: Record<string, unknown>): Property => ({
   id: String(row.id),
@@ -64,21 +63,53 @@ export class SupabaseRepository implements ITreasuryRepository {
 
   // 1. Properties & Assessment
   async getProperties(queryOptions: PropertyQuery = {}): Promise<PropertyPage> {
-    const page = Math.max(1, Math.floor(queryOptions.page || 1));
-    const pageSize = Math.min(100, Math.max(1, Math.floor(queryOptions.pageSize || 25)));
-    const sortColumns = { ownerName: 'owner_name', tdNumber: 'td_number', barangay: 'barangay' } as const;
-    const sortColumn = sortColumns[queryOptions.sort || 'ownerName'];
-    const ascending = queryOptions.direction !== 'desc';
-    const disposition = queryOptions.disposition || 'ACTIVE';
-    let query = supabase.from('properties').select('*', { count: 'exact' }).eq('disposition', disposition);
-    const search = queryOptions.search?.trim().replace(/[%,_]/g, '\\$&');
-    if (queryOptions.barangay && queryOptions.barangay !== 'All') query = query.eq('barangay', queryOptions.barangay);
-    if (search) query = query.or(`owner_name.ilike.%${search}%,td_number.ilike.%${search}%,previous_td_number.ilike.%${search}%`);
-    const from = (page - 1) * pageSize;
-    const { data, error, count } = await query.order(sortColumn, { ascending }).order('id', { ascending: true }).range(from, from + pageSize - 1);
+    if (queryOptions.signal?.aborted) throw new DOMException('Request aborted', 'AbortError');
+    const { data, error } = await supabase.rpc('list_properties_page', {
+      p_page: queryOptions.page ?? 1,
+      p_page_size: queryOptions.pageSize ?? 25,
+      p_search: queryOptions.search ?? '',
+      p_barangay: queryOptions.barangay === 'All' ? null : queryOptions.barangay ?? null,
+      p_disposition: queryOptions.disposition ?? 'ACTIVE',
+      p_sort: queryOptions.sort ?? 'ownerName',
+      p_direction: queryOptions.direction ?? 'asc',
+    }).abortSignal(queryOptions.signal ?? new AbortController().signal);
+    if (error) throw error;
+    const result = data as { items: Record<string, unknown>[]; total: number; page: number; pageSize: number; hasNextPage: boolean };
+    return { ...result, items: result.items.map(mapPropertyRow) };
+  }
+
+  async getNoticeCandidates(page: number): Promise<PropertyPage> {
+    const safePage = Math.max(1, Math.floor(page));
+    const pageSize = 25;
+    const from = (safePage - 1) * pageSize;
+    const { data, count, error } = await supabase.from('properties')
+      .select('*', { count: 'exact' })
+      .eq('disposition', 'ACTIVE')
+      .eq('is_shell_record', false)
+      .not('pin', 'is', null)
+      .neq('pin', '')
+      .gt('assessed_value', 0)
+      .lt('last_paid_year', CURRENT_YEAR)
+      .order('id', { ascending: true })
+      .range(from, from + pageSize - 1);
     if (error) throw error;
     const total = count || 0;
-    return { items: (data || []).map(row => mapPropertyRow(row)), total, page, pageSize, hasNextPage: from + pageSize < total };
+    return { items: (data || []).map(mapPropertyRow), total, page: safePage, pageSize, hasNextPage: from + pageSize < total };
+  }
+
+  private async lookupPropertyRowsByTd(tdNumbers: string[]): Promise<Record<string, unknown>[]> {
+    const matches: Record<string, unknown>[] = [];
+    const normalized = [...new Set(tdNumbers.map(td => td.trim().toUpperCase()).filter(Boolean))];
+    for (let i = 0; i < normalized.length; i += 500) {
+      const { data, error } = await supabase.rpc('lookup_properties_by_td', { p_td_numbers: normalized.slice(i, i + 500) });
+      if (error) throw error;
+      matches.push(...(data || []));
+    }
+    return matches;
+  }
+
+  async lookupPropertiesByTd(tdNumbers: string[]): Promise<Property[]> {
+    return (await this.lookupPropertyRowsByTd(tdNumbers)).map(mapPropertyRow);
   }
 
   async getPropertyAssessment(propertyId: string, fallbackProp?: Property, customSettings?: MunicipalTaxSettings): Promise<CalculationResult> {
@@ -137,17 +168,18 @@ const verificationEvidence = await this.getPropertyVerificationEvidence(property
     return { records: [], grandTotal: 0 };
   }
 
-  async getPropertyVerificationEvidence(propertyId: string | number, property?: Property): Promise<TaxYearRecord[]> {
+  async getPropertyVerificationEvidence(propertyId: string | number, property?: Property, strict = false): Promise<TaxYearRecord[]> {
      const evidenceMap = new Map<string, TaxYearRecord>();
 
      // Canonical verification records only. Legacy collection records remain preserved but are not active inputs.
      try {
-      const { data: verifs } = await supabase
+      const { data: verifs, error } = await supabase
         .from('delinquency_period_verifications')
         .select('*')
         .eq('property_id', propertyId)
         .eq('status', 'VERIFIED_SETTLED_EXTERNALLY')
         .order('tax_year', { ascending: false });
+      if (error) throw error;
 
       if (verifs && verifs.length > 0) {
         for (const v of verifs) {
@@ -177,6 +209,7 @@ const verificationEvidence = await this.getPropertyVerificationEvidence(property
         }
       }
     } catch (e) {
+      if (strict) throw e;
       console.warn('Failed to fetch period verifications:', e);
     }
 
@@ -464,7 +497,7 @@ const verificationEvidence = await this.getPropertyVerificationEvidence(property
     if (error) throw new Error(`Verification reversal RPC failed: ${error.message}`);
   }
 
-  async getPeriodVerifications(propertyId: string | number): Promise<DelinquencyPeriodVerification[]> {
+  async getPeriodVerifications(propertyId: string | number, strict = false): Promise<DelinquencyPeriodVerification[]> {
     try {
       const { data, error } = await supabase
         .from('delinquency_period_verifications')
@@ -473,6 +506,7 @@ const verificationEvidence = await this.getPropertyVerificationEvidence(property
         .order('tax_year', { ascending: true });
 
       if (error || !data) {
+        if (strict) throw error || new Error('Verification response unavailable.');
         return [];
       }
 
@@ -494,115 +528,20 @@ const verificationEvidence = await this.getPropertyVerificationEvidence(property
         reversalReason: d.reversal_reason,
         createdAt: d.created_at
       }));
-    } catch {
+    } catch (error) {
+      if (strict) throw error;
       return [];
     }
   }
 
   // 4. Reporting, Analytics & Live Multi-Assessor Sync
   async getDashboardStats(): Promise<DashboardStatsData> {
-    const { data: props } = await supabase.from('properties').select('*').eq('disposition', 'ACTIVE');
-    const list = props || [];
-    const { data: verificationRows } = await supabase
-      .from('delinquency_period_verifications')
-      .select('*')
-      .order('verified_at', { ascending: true });
-    const verificationsByProperty = new Map<string, DelinquencyPeriodVerification[]>();
-    for (const row of verificationRows || []) {
-      const key = String(row.property_id);
-      const entries = verificationsByProperty.get(key) || [];
-      entries.push({
-        id: row.id,
-        propertyId: row.property_id,
-        tdNumberSnapshot: row.td_number_snapshot,
-        periodKey: row.period_key,
-        taxYear: row.tax_year,
-        periodLabel: row.period_label,
-        status: row.status as DelinquencyPeriodStatus,
-        verificationType: row.verification_type as VerificationType,
-        sourceReference: row.source_reference,
-        remarks: row.remarks,
-        verifiedBy: row.verified_by,
-        verifierName: row.verified_by_name,
-        verifiedAt: row.verified_at,
-        stationId: row.station_id,
-        supersedesId: row.supersedes_id,
-        reversalReason: row.reversal_reason,
-        createdAt: row.created_at,
-      });
-      verificationsByProperty.set(key, entries);
-    }
-
-    const totalProperties = list.length;
-    const mappedProperties = list.map((p): Property => ({
-      id: String(p.id),
-      tdNumber: String(p.td_number || ''),
-      previousTdNumber: String(p.previous_td_number || ''),
-      pin: p.pin as string | undefined,
-      ownerName: String(p.owner_name || ''),
-      address: String(p.address || ''),
-      barangay: String(p.barangay || ''),
-      propertyClass: String(p.property_class || 'Residential'),
-      assessedValue: Number(p.assessed_value) || 0,
-      marketValue: Number(p.market_value) || 0,
-      lastPaidYear: Number(p.last_paid_year) || 0,
-      lastPaidQuarter: p.last_paid_quarter == null ? 4 : Number(p.last_paid_quarter),
-      isShellRecord: Boolean(p.is_shell_record),
-      delinquencyStartYear: p.delinquency_start_year == null ? undefined : Number(p.delinquency_start_year),
-      parcelOriginYear: p.parcel_origin_year == null ? null : Number(p.parcel_origin_year),
-      historicalAssessedValues: (p.historical_assessed_values as Property['historicalAssessedValues']) || {},
-    }));
-    const completeness = mappedProperties.map(property => getPropertyCompleteness(property));
-    const shellRecordsCount = completeness.filter(result => result.isShellRecord).length;
-    const projections = mappedProperties.map(property => projectPropertyPeriods(
-      property,
-      verificationsByProperty.get(property.id) || [],
-      { splitCurrentYearQuarters: true }
-    ));
-    const clearedCount = projections.filter(projection => projection.isClearanceEligible).length;
-    const delinquentCount = projections.filter(projection => !projection.isClearanceEligible).length;
-
-    let totalDelinquentDebt = 0;
-    const barangayMap = new Map<string, { properties: number; outstandingDebt: number }>();
-
-    for (const p of list) {
-      const bgy = p.barangay || 'Unassigned';
-      const propertyIndex = list.indexOf(p);
-      const isShell = completeness[propertyIndex].isShellRecord;
-      const projection = projections[propertyIndex];
-      const isDelinquent = !projection.isClearanceEligible;
-      let debt = 0;
-
-      if (!isShell) {
-        debt = projection.outstandingTotal;
-      }
-
-      if (isDelinquent) {
-        totalDelinquentDebt += debt;
-      }
-
-      const existing = barangayMap.get(bgy) || { properties: 0, outstandingDebt: 0 };
-      barangayMap.set(bgy, {
-        properties: existing.properties + 1,
-        outstandingDebt: existing.outstandingDebt + (isDelinquent ? debt : 0)
-      });
-    }
-
-    const barangayBreakdown = Array.from(barangayMap.entries()).map(([barangay, data]) => ({
-      barangay,
-      properties: data.properties,
-      outstandingDebt: Math.round(data.outstandingDebt)
-    }));
-
+    const { data, error } = await supabase.rpc('dashboard_property_counts');
+    if (error) throw error;
+    const result = data as Pick<DashboardStatsData, 'totalProperties' | 'shellRecordsCount' | 'barangayBreakdown'>;
     return {
-      totalProperties,
-      clearedCount,
-      delinquentCount,
-      partialCount: 0,
-      shellRecordsCount,
-      totalDelinquentDebt: Math.round(totalDelinquentDebt),
-      monthlyTrend: [],
-      barangayBreakdown
+      ...result, clearedCount: null, delinquentCount: null, partialCount: null,
+      totalDelinquentDebt: null, monthlyTrend: [],
     };
   }
 
@@ -1163,17 +1102,10 @@ const verificationEvidence = await this.getPropertyVerificationEvidence(property
     }
 
     const tdNumbers = validRows.map(p => String(p.tdNumber).trim());
-    const { data: existingData, error: existingError } = await supabase
-      .from('properties')
-      .select('*')
-      .in('td_number', tdNumbers);
-
-    if (existingError) {
-      throw new Error(`Import preflight failed while loading existing TD records: ${existingError.message}`);
-    }
+    const existingData = await this.lookupPropertyRowsByTd(tdNumbers);
 
     const existingMap = new Map<string, Record<string, unknown>>();
-    (existingData || []).forEach(p => existingMap.set(p.td_number, p));
+    existingData.forEach(p => existingMap.set(String(p.td_number), p));
 
     let insertedCount = 0;
     let updatedCount = 0;

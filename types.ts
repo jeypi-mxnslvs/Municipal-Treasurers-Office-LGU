@@ -212,13 +212,13 @@ export interface PropertyPage {
 
 export interface DashboardStatsData {
   totalProperties: number;
-  clearedCount: number;
-  delinquentCount: number;
-  partialCount: number;
+  clearedCount: number | null;
+  delinquentCount: number | null;
+  partialCount: number | null;
   shellRecordsCount: number;
-  totalDelinquentDebt: number;
+  totalDelinquentDebt: number | null;
   monthlyTrend: Array<{ month: string; collections: number; target: number }>;
-  barangayBreakdown: Array<{ barangay: string; properties: number; outstandingDebt: number }>;
+  barangayBreakdown: Array<{ barangay: string; properties: number; outstandingDebt: number | null }>;
 }
 
 export interface TestMasterlistPurgePreview {
