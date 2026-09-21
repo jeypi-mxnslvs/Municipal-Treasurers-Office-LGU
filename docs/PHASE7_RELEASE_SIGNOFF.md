@@ -18,7 +18,7 @@ Pre-Phase-7 baseline: `e2eb484` (`phase-6-pilot-verification`)
 | Database / auth / financial-data change | No / no / no |
 | Rollback required | No product rollback; documentation can be reverted with Git |
 | Live access | Read-only linked migration inspection only |
-| Execution status | Engineering execution complete; human release decision pending |
+| Execution status | Engineering execution complete; project-lead acceptance recorded; specialist release decisions pending |
 
 Change budget: maximum two documentation files. Schema, API, UI, and business-logic changes are forbidden. Permitted files are this record and `docs/ON_PREMISE_DEPLOYMENT.md`; all other files are forbidden to change.
 
@@ -75,6 +75,7 @@ The release remains on hold until all required reviewers record an explicit deci
 
 | Review | Reviewer / evidence | Date | Decision and remarks |
 |---|---|---|---|
+| Project lead — Phase 7 evidence and handoff | Interactive project session (`It's approve`; confirmed with `proceed`) | 2026-09-21 | Accepted for handoff; does not substitute for the four specialist decisions below |
 | Technical — build, migrations, deployment and rollback |  |  |  |
 | Security — authorization, secrets, dependency risk and incident plan |  |  |  |
 | Financial — statutory calculations, schedules, statements and audit evidence |  |  |  |
