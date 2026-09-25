@@ -44,10 +44,10 @@ All styling adheres to semantic CSS custom properties and Tailwind tokens. No ar
 
 ## Layout Patterns
 
-- **Login Screen**: Split-viewport layout. Left pane contains login form with demo personnel quick-select; right pane showcases the official Santa Rosa Municipal Seal on deep emerald (`#04261f`).
+- **Login Screen**: Split-viewport layout. Left pane contains login form for workstation account credentials with Supabase Auth session authority; right pane showcases the official Santa Rosa Municipal Seal on deep emerald (`#04261f`).
 - **Masterlist Dashboard**: 4-card KPI summary header followed by the full-width Masterlist Table with inline search, barangay filter, and pagination.
 - **Statement of Account (SOA)**: Split desktop layout:
-  - *Left Column (Col 1)*: Property Master Card + Sequential Dues Clearance Action Box (counter clearance button with dynamic subtotal).
+  - *Left Column (Col 1)*: Property Master Card + Delinquency Verification & Clearance Status Box (shows conditional tax-clearance eligibility and verification controls).
   - *Right Column (Col 2-3)*: Sequential Statement of Account Table with Arrears-First selection checkboxes and dark scope summary footer.
 
 ## Icons

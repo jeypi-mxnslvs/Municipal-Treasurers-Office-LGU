@@ -6,8 +6,8 @@ This tracker follows [`docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md`](../docs/MU
 
 ## Current Phase
 
-- **Phase:** 6 — Engineering and automated pilot verification completed; human pilot approval pending.
-- **Status:** The sanitized 33-barangay pilot, edge-case imports, statutory calculations, verification lifecycle, clearance states, permission boundaries, concurrent import/verification, SOA and Notice samples, and clean-target backup/restore drill passed. Evidence is recorded in `docs/PHASE6_PILOT_EVIDENCE.md`. The Municipal Treasurer and Municipal Assessor must still approve the statutory schedule and report formats before Phase 6 can receive final acceptance and Phase 7 can begin.
+- **Phase:** 7 — Release Candidate frozen (`phase7-rc-20260921`); Project Lead acceptance recorded; specialist sign-offs pending.
+- **Status:** Engineering execution across all Phases 1 through 7 is complete and verified. Baseline checks (`tsc`, `lint`, `test:unit`, `build`), database migration parity (all 25 migrations through `20261007`), reproducible Docker web deployment, and operational procedures are published in [`docs/PHASE7_RELEASE_SIGNOFF.md`](../docs/PHASE7_RELEASE_SIGNOFF.md) and [`docs/ON_PREMISE_DEPLOYMENT.md`](../docs/ON_PREMISE_DEPLOYMENT.md). The release candidate is in human specialist review (Technical, Security, Financial/Treasurer, Operational/Database Owner).
 - **Production datastore:** Supabase Cloud.
 - **Production authentication:** Supabase Auth with trusted session claims and database RLS.
 - **Active roles:** `Admin`, `Assessor`.
@@ -76,11 +76,13 @@ This tracker follows [`docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md`](../docs/MU
   - [x] Record hashes, comparison evidence, samples, defects, and ownership.
   - [ ] Gate: Municipal Treasurer and Municipal Assessor pilot approval.
 
-- [ ] **Phase 7: Release and Operational Sign-Off**
-  - Freeze release candidate and run complete verification checklist.
-  - Review migrations, dependencies, secrets, obsolete collection paths, and artifacts.
-  - Publish deployment, backup, restore, rollback, support, and incident procedures.
-  - Obtain technical, security, financial, and operational human sign-off.
+- [ ] **Phase 7: Release and Operational Sign-Off — RC frozen; specialist sign-offs pending**
+  - [x] Freeze release candidate (`phase7-rc-20260921`) and run complete verification checklist.
+  - [x] Review migrations, dependencies, secrets, obsolete collection paths, and artifacts.
+  - [x] Publish deployment, backup, restore, rollback, support, and incident procedures (`docs/ON_PREMISE_DEPLOYMENT.md`).
+  - [x] Record known residual risks in `docs/PHASE7_RELEASE_SIGNOFF.md`.
+  - [x] Project Lead acceptance recorded (`docs/PHASE7_RELEASE_SIGNOFF.md`).
+  - [ ] Human specialist sign-offs (Technical, Security, Financial/Treasurer, Operational/Database Owner).
 
 ## Phase 0 Documentation Reconciliation
 
@@ -139,6 +141,18 @@ Phase 6 verification & pilot record:
 - `npm run test:unit`: 21 test files, 178 tests passed.
 - `npm run build`: passed; main JS bundle remains 475.27 kB (147.13 kB gzip).
 - Required evidence and unsigned human approval record are in `docs/PHASE6_PILOT_EVIDENCE.md`.
+
+Phase 7 verification & release record:
+
+- `npx tsc --noEmit`: passed with 0 errors.
+- `npm run lint`: passed with 0 errors, 0 warnings.
+- `npm run test:unit`: 21 test files, 178 tests passed.
+- `npm run build`: passed; largest application chunk 475.27 kB (147.13 kB gzip), XLSX 332.97 kB, Supabase 220.34 kB; no Vite chunk warning.
+- `npx supabase migration list`: all 25 migrations through `20261007` match remote.
+- `npx supabase db push --include-all --dry-run`: up to date, 0 pending migrations.
+- Release candidate tag `phase7-rc-20260921` frozen; Project Lead acceptance recorded in [`docs/PHASE7_RELEASE_SIGNOFF.md`](../docs/PHASE7_RELEASE_SIGNOFF.md).
+- Operational and disaster recovery procedures published in [`docs/ON_PREMISE_DEPLOYMENT.md`](../docs/ON_PREMISE_DEPLOYMENT.md).
+- Specialist review roles assigned for Technical, Security, Financial (Municipal Treasurer), and Operational (Database Owner) sign-offs.
 
 Standard checks:
 

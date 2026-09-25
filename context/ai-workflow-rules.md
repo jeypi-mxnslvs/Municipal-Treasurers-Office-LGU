@@ -3,8 +3,8 @@
 ## Approach
 
 Development follows a strict, spec-driven engineering workflow governed by the **Canonical Hierarchy of Truth**:
-1. [`docs/SSOT.md`](file:///home/jeipyyy/Documents/Projects/Municipal-Treasurers-Office-LGU/docs/SSOT.md) *(Highest Authority)*: Governs all database schemas, statutory formulas, AF-51 rules, and role permissions.
-2. [`docs/ROADMAP_AND_PHASES.md`](file:///home/jeipyyy/Documents/Projects/Municipal-Treasurers-Office-LGU/docs/ROADMAP_AND_PHASES.md): Defines phased delivery plans and branch boundaries.
+1. [`docs/SSOT.md`](../docs/SSOT.md) *(Highest Authority)*: Governs all database schemas, statutory formulas, verification rules, and role permissions.
+2. [`docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md`](../docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md): Defines phased delivery plans, gates, and acceptance criteria.
 3. `context/` & `.agents/rules/`: Operational standards and task change budgets.
 4. Active Source Code: The working tree. When code diverges from the SSOT, the SSOT governs.
 
@@ -33,23 +33,22 @@ If a change cannot be verified end-to-end within 5 minutes, the scope is too bro
 
 ## Handling Missing Requirements
 
-- Do not invent product behavior or financial rules not defined in [`docs/SSOT.md`](file:///home/jeipyyy/Documents/Projects/Municipal-Treasurers-Office-LGU/docs/SSOT.md).
-- If a statutory requirement is ambiguous, consult RA 7160 Title II or request clarification in [`context/progress-tracker.md`](file:///home/jeipyyy/Documents/Projects/Municipal-Treasurers-Office-LGU/context/progress-tracker.md).
-- Never introduce random numbers (`Math.random()`) for financial identifiers or receipt numbers.
+- Do not invent product behavior or financial rules not defined in [`docs/SSOT.md`](../docs/SSOT.md).
+- If a statutory requirement is ambiguous, consult RA 7160 Title II or request clarification in [`context/progress-tracker.md`](progress-tracker.md).
+- Never introduce random numbers (`Math.random()`) for financial identifiers or verification references.
 
 ## Protected Files
 
 Do not modify the following without explicit human instruction:
 - `utils/taxLogic.ts`: Pure RA 7160 calculation formulas (must pass all unit tests).
-- `server/`: Dead legacy code (do not use or import).
 - `components/ui/*`: Pre-built headless primitives.
 
 ## Keeping Docs in Sync
 
 Update the relevant documentation whenever:
 - Schema or repository interfaces change (`docs/SSOT.md`).
-- A roadmap phase or milestone is reached (`docs/ROADMAP_AND_PHASES.md`, `context/progress-tracker.md`).
-- A user workflow or layout pattern changes (`context/ui-context.md`, `walkthrough.md`).
+- An implementation phase or milestone is reached (`docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md`, `context/progress-tracker.md`).
+- A user workflow or layout pattern changes (`context/ui-context.md`).
 
 ## Definition of Done & 4 Statutory Verification Gates
 

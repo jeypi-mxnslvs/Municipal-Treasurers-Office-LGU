@@ -1,6 +1,6 @@
 # Municipal Treasury System Implementation Plan
 
-> **Agent prompt:** Execute this plan phase by phase. Do not skip gates, widen scope, rewrite applied migrations, or claim production readiness. Read `AGENTS.md`, `docs/SSOT.md`, `docs/IMPLEMENTATION_PLAN_VERIFICATION_STATEMENT_SYSTEM.md`, and this file before changing code.
+> **Agent prompt:** Execute this plan phase by phase. Do not skip gates, widen scope, rewrite applied migrations, or claim production readiness. Read `AGENTS.md`, `docs/SSOT.md`, and this file before changing code.
 
 ## Mission
 

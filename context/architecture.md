@@ -30,8 +30,7 @@
 - `utils/` — Pure statutory calculation engines:
   - `taxLogic.ts`: Pure RA 7160 tax calculation, discounts, and penalties.
   - `taxLogic.test.ts`: Vitest statutory assertion test suite.
-- `docs/` — Canonical Single Source of Truth (`SSOT.md`), Roadmaps (`ROADMAP_AND_PHASES.md`), and Threat Models.
-- `server/` — **DEAD CODE**: Inactive legacy Express/SQLite server. Do not touch or import.
+- `docs/` — Canonical Single Source of Truth (`SSOT.md`), Phased Implementation Plan (`MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md`), and Deployment Guides.
 
 ## Storage Model
 
@@ -58,7 +57,7 @@
 
 1. **Exact Statutory Tax Rate**: Base rate is exactly `2.00%` (`0.02`) of Assessed Value (`1.00%` Basic + `1.00%` SEF).
 2. **Statutory Penalty Surcharge**: Exactly `2.00%` per month of delay, strictly capped at `36 months` (`72%` maximum statutory cap under RA 7160 Sec. 255).
-3. **Arrears-First Sequential Settlement**: Taxpayers cannot settle current-year dues while prior-year delinquent liabilities exist. Dues must be settled chronologically starting from oldest unpaid year.
-4. **Zero Deletion Invariant**: Financial records, payment postings, and delinquency milestones are never deleted. Reversals log immutable audit reasons.
+3. **Arrears-First Sequential Verification**: Taxpayers cannot have current-year (2026) dues cleared or verified while prior-year delinquent liabilities exist. Dues must be reviewed and verified chronologically starting from oldest unpaid year.
+4. **Zero Deletion Invariant**: Financial assessment records, verification decisions, and audit history are never deleted. Reversals create immutable superseding audit records.
 5. **Shell Record Prohibition**: Properties with `is_shell_record = true` cannot have delinquency verified or clearance eligibility issued until certified by the Municipal Assessor.
-6. **No Random Numbers**: Official receipt numbers or tracking references must never use `Math.random()`.
+6. **No Random Numbers**: Official references, tracking numbers, or verification IDs must never use `Math.random()`.

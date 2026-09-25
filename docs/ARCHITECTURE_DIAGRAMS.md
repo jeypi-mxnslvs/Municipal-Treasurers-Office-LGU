@@ -1,5 +1,6 @@
 # ARCHITECTURE DIAGRAMS — LGU Treasury Connect
 
+> **Document status:** Historical forensic snapshot from 2026-09-01. Not current architecture authority. Current decisions are governed by [`docs/SSOT.md`](./SSOT.md) and [`docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md`](./MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md).
 > Generated from code-level analysis, 2026-09-01
 
 ---

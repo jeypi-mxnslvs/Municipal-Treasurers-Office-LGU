@@ -13,13 +13,13 @@
 | **Jurisdiction** | Municipality of Santa Rosa, Province of Nueva Ecija, Region III, Philippines |
 | **Statutory Framework** | Republic Act No. 7160 (Local Government Code of 1991, Title II), Provincial Tax Ordinance of Nueva Ecija, Municipal Revenue Code of Santa Rosa |
 | **Current Baseline** | v1.0.0 (Vite + React 18 + TypeScript + Local Tailwind CSS + shadcn/ui + Vitest) |
-| **Plan Companion** | [`MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md`](file:///home/jeipyyy/Documents/Projects/Municipal-Treasurers-Office-Delinquency-System/Municipal-Treasurers-Office-Delinquency-System/docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md) |
+| **Plan Companion** | [`MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md`](MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md) |
 
 ---
 
 ## 2. Statutory Business & Tax Calculation Rules
 
-All tax calculations in the system must strictly adhere to RA 7160 Title II. These rules are verified by unit tests in [`utils/taxLogic.test.ts`](file:///home/jeipyyy/Documents/Projects/LGU-Treasury-Connect/lgu-treasury-connect/utils/taxLogic.test.ts).
+All tax calculations in the system must strictly adhere to RA 7160 Title II. These rules are verified by unit tests in [`utils/taxLogic.test.ts`](../utils/taxLogic.test.ts).
 
 ### 2.1 Tax Rates & Allocation
 - **Current Operational Year**: `2026` (`CURRENT_YEAR = 2026`).
@@ -583,7 +583,7 @@ The Tax Assessment modal distinctly displays system-calculated defaults alongsid
 ## 7. Santa Rosa Geographical & Administrative Constants
 
 ### 7.1 Santa Rosa Barangays (33 Canonical Barangays)
-The 33 official barangays of Santa Rosa, Nueva Ecija defined in [`constants.ts`](file:///home/jeipyyy/Documents/Projects/Municipal-Treasurers-Office-Delinquency-System/Municipal-Treasurers-Office-Delinquency-System/constants.ts):
+The 33 official barangays of Santa Rosa, Nueva Ecija defined in [`constants.ts`](../constants.ts):
 1. `Aguinaldo`
 2. `Berang`
 3. `Burgos`
@@ -627,7 +627,7 @@ The canonical administrative officers and signatories for the Municipality of Sa
 
 ## 8. Alignment with Verification & Statement System Implementation Plan
 
-Every system component aligns with the implementation plan defined in [`MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md`](file:///home/jeipyyy/Documents/Projects/Municipal-Treasurers-Office-Delinquency-System/Municipal-Treasurers-Office-Delinquency-System/docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md):
+Every system component aligns with the implementation plan defined in [`MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md`](MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md):
 
 | Implementation Phase | SSOT Governing Section | Key Deliverable |
 |---|---|---|
