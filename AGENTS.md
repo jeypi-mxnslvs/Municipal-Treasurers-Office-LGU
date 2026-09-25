@@ -19,13 +19,13 @@ When making architectural, mathematical, or implementation decisions, agents mus
 ```mermaid
 graph TD
     SSOT["1. SSOT.md (Highest Authority)<br/>Canonical schemas, statutory formulas, verification rules, RBAC"] --> Plan["2. MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md<br/>Phases 0-7 boundaries, gates, acceptance criteria"]
-    Plan --> ClaudeArch["3. Claude Architectures/ & .agents/rules/<br/>Detailed forensic analysis, threat model, task standards"]
-    ClaudeArch --> ExistingCode["4. Active Source Code<br/>services/api.ts, types.ts, utils/taxLogic.ts, supabase/migrations/*.sql"]
+    Plan --> Rules["3. .agents/rules/task_standards.md<br/>Forensic task standards, threat model, change budgets"]
+    Rules --> ExistingCode["4. Active Source Code<br/>services/api.ts, types.ts, utils/taxLogic.ts, supabase/migrations/*.sql"]
 ```
 
-1. **[`docs/SSOT.md`](file:///home/jeipyyy/Documents/Projects/Municipal-Treasurers-Office-Delinquency-System/Municipal-Treasurers-Office-Delinquency-System/docs/SSOT.md)** *(Highest Authority)*: The definitive Single Source of Truth for database schemas, statutory tax math, verification rules, role permissions, and interface contracts.
-2. **[`docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md`](file:///home/jeipyyy/Documents/Projects/Municipal-Treasurers-Office-Delinquency-System/Municipal-Treasurers-Office-Delinquency-System/docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md)**: Defines the phased delivery plan, gates, acceptance criteria, and change budgets.
-3. **[`docs/Claude Architectures/`](file:///home/jeipyyy/Documents/Projects/LGU-Treasury-Connect/lgu-treasury-connect/docs/Claude%20Architectures)** & **[`.agents/rules/task_standards.md`](file:///home/jeipyyy/Documents/Projects/LGU-Treasury-Connect/lgu-treasury-connect/.agents/rules/task_standards.md)**: Deep forensic architectural documentation, security risk registries, and operational task constraints.
+1. **[`docs/SSOT.md`](docs/SSOT.md)** *(Highest Authority)*: The definitive Single Source of Truth for database schemas, statutory tax math, verification rules, role permissions, and interface contracts.
+2. **[`docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md`](docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md)**: Defines the phased delivery plan, gates, acceptance criteria, and change budgets.
+3. **[`.agents/rules/task_standards.md`](.agents/rules/task_standards.md)**: Deep forensic architectural documentation, security risk registries, and operational task constraints.
 4. **Active Source Code**: Ground reality of the working tree. When code diverges from the SSOT, the SSOT governs and the code must be refactored toward the SSOT.
 
 ---
@@ -65,7 +65,7 @@ The following statutory rules are non-negotiable and legally binding under Phili
   - `10%` prompt discount on current year if paid on or before quarterly deadline.
   - `20%` advance discount if paid prior to January 1 of the tax year.
   - Discounts apply **only** to the current/advance year, never to delinquent years.
-- **Unit Test Protection**: All changes to `utils/taxLogic.ts` must pass [`utils/taxLogic.test.ts`](file:///home/jeipyyy/Documents/Projects/LGU-Treasury-Connect/lgu-treasury-connect/utils/taxLogic.test.ts).
+- **Unit Test Protection**: All changes to `utils/taxLogic.ts` must pass [`utils/taxLogic.test.ts`](utils/taxLogic.test.ts).
 
 ### 4.2 "Arrears-First" Sequential Verification Rule
 - Taxpayers **cannot** have current year (2026) dues cleared or verified while prior-year delinquent liabilities exist.
@@ -109,10 +109,8 @@ lgu-treasury-connect/
 │   └── taxLogic.test.ts # Vitest unit test suite
 ├── docs/                # Project Documentation & Single Source of Truth
 │   ├── SSOT.md          # Canonical Single Source of Truth
-│   ├── MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md # Authoritative Scope & Execution Plan
-│   └── Claude Architectures/# Historical deep-dive documentation (REFERENCE ONLY)
+│   └── MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md # Authoritative Scope & Execution Plan
 ├── supabase/migrations/ # Canonical, ordered database migration history
-├── server/              # DEAD CODE: Legacy Express/SQLite server (DO NOT USE)
 └── AGENTS.md            # This agent operating guideline
 ```
 
@@ -127,14 +125,13 @@ lgu-treasury-connect/
 
 > [!WARNING]
 > **Dead Code Warning**:
-> 1. `server/` directory contains an inactive Express + SQLite server. Do not touch or import from it.
-> 2. `features/collections/` and `services/offline/` have been permanently purged per the Delinquency Verification & Statement System scope lock.
+> 1. Legacy collection behavior (`features/collections/`), `services/offline/`, and inactive SQLite `server/` have been permanently purged per the Delinquency Verification & Statement System scope lock.
 
 ---
 
 ## 6. Implementation Plan & Branching Protocol
 
-Agents must work within the boundaries defined in [`docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md`](file:///home/jeipyyy/Documents/Projects/Municipal-Treasurers-Office-Delinquency-System/Municipal-Treasurers-Office-Delinquency-System/docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md) on branch `feat/delinquency-verification-statement-system`:
+Agents must work within the boundaries defined in [`docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md`](docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md):
 
 1. **Phase 0**: Governance, scope, production datastore/authentication, and architecture lock.
 2. **Phase 1**: Security containment, Supabase Auth, RLS, and trusted authorization.
@@ -166,5 +163,5 @@ npm run build
 When presenting results to the human lead:
 1. **Action Taken**: Explicit list of files created, modified, or deleted with clickable links.
 2. **Verification Evidence**: Output summary of `tsc`, `lint`, `test:unit`, and `build`.
-3. **SSOT / Plan Alignment**: Note which section of [`docs/SSOT.md`](file:///home/jeipyyy/Documents/Projects/Municipal-Treasurers-Office-Delinquency-System/Municipal-Treasurers-Office-Delinquency-System/docs/SSOT.md) or [`docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md`](file:///home/jeipyyy/Documents/Projects/Municipal-Treasurers-Office-Delinquency-System/Municipal-Treasurers-Office-Delinquency-System/docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md) was satisfied.
+3. **SSOT / Plan Alignment**: Note which section of [`docs/SSOT.md`](docs/SSOT.md) or [`docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md`](docs/MUNICIPAL_SYSTEM_IMPLEMENTATION_PLAN.md) was satisfied.
 4. **Clear Stop**: Stop immediately and prompt for human approval before taking any further action.
